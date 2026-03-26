@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  agent-db:
+    image: postgres:15-alpine  # alpine 버전: 용량이 매우 작고 가벼움
+    container_name: mlops_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mlops_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # 컨테이너가 꺼져도 데이터 유지
+    restart: unless-stopped
+
+volumes:
+  pgdata:
