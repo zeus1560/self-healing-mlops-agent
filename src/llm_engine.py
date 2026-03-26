@@ -3,6 +3,7 @@ import time
 import logging
 import multiprocessing as mp
 import chromadb
+import textwrap  # [추가됨] 프롬프트 템플릿 정렬을 위한 내장 라이브러리
 
 # src.schemas 모듈이 있다고 가정 (AgentResponse, ActionType 정의)
 from src.schemas import AgentResponse, ActionType
@@ -13,6 +14,48 @@ from src.schemas import AgentResponse, ActionType
 # 100% 데드락이 발생하므로, 완전히 깨끗한 프로세스를 생성하는 spawn 사용.
 # =====================================================================
 mp_ctx = mp.get_context("spawn")
+
+
+# =====================================================================
+# [추가됨] Llama 3 8B 제어용 Few-Shot 프롬프트 생성기
+# =====================================================================
+def build_few_shot_prompt(error_log: str) -> str:
+    prompt = textwrap.dedent(f"""
+    <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+    You are a ruthless, highly efficient Linux MLOps Agent operating directly on the host OS. 
+    Your ONLY purpose is to analyze system/application errors and output a SINGLE, raw shell or python command to resolve it.
+    
+    STRICT RULES:
+    1. DO NOT output any explanations, apologies, or markdown formatting (no ```bash).
+    2. Output ONLY the raw command string.
+    3. Use safe commands like `systemctl`, `pkill`, `rm -rf /tmp/`, or inline python scripts.
+    <|eot_id|>
+
+    <|start_header_id|>user<|end_header_id|>
+    Error: torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB.
+    <|eot_id|>
+    <|start_header_id|>assistant<|end_header_id|>
+    python3 -c "import torch; torch.cuda.empty_cache()"<|eot_id|>
+
+    <|start_header_id|>user<|end_header_id|>
+    Error: [CRITICAL] AI worker process (PID 1402) has become a zombie and is consuming 100% CPU.
+    <|eot_id|>
+    <|start_header_id|>assistant<|end_header_id|>
+    pkill -9 -f "zombie_worker"<|eot_id|>
+
+    <|start_header_id|>user<|end_header_id|>
+    Error: Connection refused: ai-backend-service is down on port 8080.
+    <|eot_id|>
+    <|start_header_id|>assistant<|end_header_id|>
+    systemctl restart ai-backend-service<|eot_id|>
+
+    <|start_header_id|>user<|end_header_id|>
+    Error: {error_log}
+    <|eot_id|>
+    <|start_header_id|>assistant<|end_header_id|>
+    """).strip()
+
+    return prompt
 
 
 def _fallback_inference_worker(conn, error_log, model_path):
@@ -32,7 +75,8 @@ def _fallback_inference_worker(conn, error_log, model_path):
         model = model.to("xpu")
 
         # 2. 프롬프트 구성 (해결 커맨드만 뱉도록 유도)
-        prompt = f"System: You are an MLOps AI. Analyze this error and provide a single safe shell/python command to fix it. No explanation.\nError: {error_log}\nCommand:"
+        # [수정됨] 기존의 단순 문자열 대신 build_few_shot_prompt 함수 사용
+        prompt = build_few_shot_prompt(error_log)
         inputs = tokenizer(prompt, return_tensors="pt").to("xpu")
 
         # 3. 추론 (VRAM 무한 점유 방지를 위해 max_new_tokens 128 고정)
