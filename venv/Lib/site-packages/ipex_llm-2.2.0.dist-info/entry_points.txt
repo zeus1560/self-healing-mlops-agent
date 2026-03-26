@@ -1,0 +1,3 @@
+[console_scripts]
+llm-convert = ipex_llm.convert_model:main
+
