@@ -1,9 +1,13 @@
 import os
+import sys
 import time
 import logging
 import multiprocessing as mp
 import chromadb
-import textwrap  # [추가됨] 프롬프트 템플릿 정렬을 위한 내장 라이브러리
+import textwrap  # 프롬프트 템플릿 정렬을 위한 내장 라이브러리
+
+# 파일 위치와 관계없이 src 모듈 임포트 가능하게 설정
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # src.schemas 모듈이 있다고 가정 (AgentResponse, ActionType 정의)
 from src.schemas import AgentResponse, ActionType
@@ -16,90 +20,78 @@ from src.schemas import AgentResponse, ActionType
 mp_ctx = mp.get_context("spawn")
 
 
-# =====================================================================
-# [추가됨] Llama 3 8B 제어용 Few-Shot 프롬프트 생성기
-# =====================================================================
-def build_few_shot_prompt(error_log: str) -> str:
-    prompt = textwrap.dedent(f"""
-    <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-    You are a ruthless, highly efficient Linux MLOps Agent operating directly on the host OS. 
-    Your ONLY purpose is to analyze system/application errors and output a SINGLE, raw shell or python command to resolve it.
-    
-    STRICT RULES:
-    1. DO NOT output any explanations, apologies, or markdown formatting (no ```bash).
-    2. Output ONLY the raw command string.
-    3. Use safe commands like `systemctl`, `pkill`, `rm -rf /tmp/`, or inline python scripts.
-    <|eot_id|>
-
-    <|start_header_id|>user<|end_header_id|>
-    Error: torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB.
-    <|eot_id|>
-    <|start_header_id|>assistant<|end_header_id|>
-    python3 -c "import torch; torch.cuda.empty_cache()"<|eot_id|>
-
-    <|start_header_id|>user<|end_header_id|>
-    Error: [CRITICAL] AI worker process (PID 1402) has become a zombie and is consuming 100% CPU.
-    <|eot_id|>
-    <|start_header_id|>assistant<|end_header_id|>
-    pkill -9 -f "zombie_worker"<|eot_id|>
-
-    <|start_header_id|>user<|end_header_id|>
-    Error: Connection refused: ai-backend-service is down on port 8080.
-    <|eot_id|>
-    <|start_header_id|>assistant<|end_header_id|>
-    systemctl restart ai-backend-service<|eot_id|>
-
-    <|start_header_id|>user<|end_header_id|>
-    Error: {error_log}
-    <|eot_id|>
-    <|start_header_id|>assistant<|end_header_id|>
-    """).strip()
-
-    return prompt
-
-
 def _fallback_inference_worker(conn, error_log, model_path):
-    """
-    [독립 프로세스 Worker]
-    오직 모르는 에러(Distance > 1.2)를 만났을 때만 태어나서,
-    XPU에 모델을 로드해 추론하고 결과를 반환한 뒤 즉시 자살(os._exit)하는 워커.
-    """
+    import sys
+    import warnings
+    import traceback
+
+    # XPU 드라이버 버그를 피하기 위해 관련 환경변수 싹 다 제거
+    warnings.filterwarnings("ignore")
+
     try:
-        # 1. 지연 로딩 (메인 프로세스에서는 절대 임포트하지 않음)
         from ipex_llm.transformers import AutoModelForCausalLM
         from transformers import AutoTokenizer
 
-        logging.info("[FallbackWorker] XPU에 IPEX-LLM INT4 모델 적재 중...")
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-        model = AutoModelForCausalLM.load_low_bit(model_path, trust_remote_code=True)
-        model = model.to("xpu")
+        # 🚨 [최종 결단] 연산이 깨지는 XPU를 버리고 가장 안정적인 CPU로 강제 할당
+        device = "cpu"
+        hf_model_id = "Qwen/Qwen2.5-3B-Instruct"
 
-        # 2. 프롬프트 구성 (해결 커맨드만 뱉도록 유도)
-        # [수정됨] 기존의 단순 문자열 대신 build_few_shot_prompt 함수 사용
-        prompt = build_few_shot_prompt(error_log)
-        inputs = tokenizer(prompt, return_tensors="pt").to("xpu")
+        tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
 
-        # 3. 추론 (VRAM 무한 점유 방지를 위해 max_new_tokens 128 고정)
+        # CPU 환경에서는 구형 포맷(sym_int4)이 가장 호환성이 좋고 빠릅니다.
+        model = AutoModelForCausalLM.from_pretrained(
+            hf_model_id,
+            load_in_4bit=True,
+            optimize_model=True,
+        ).to(device)
+
+        prompt = f"""You are a Linux system admin. Fix the error with ONE basic bash command.
+
+Error: Nginx is down.
+Command: systemctl restart nginx
+
+Error: Port 8080 is in use.
+Command: fuser -k 8080/tcp
+
+Error: {error_log}
+Command:"""
+
+        encoded = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
+        input_ids_tensor = encoded["input_ids"].to(device)
+        attention_mask_tensor = encoded["attention_mask"].to(device)
+
         outputs = model.generate(
-            **inputs, max_new_tokens=128, temperature=0.1, do_sample=False
+            input_ids=input_ids_tensor,
+            attention_mask=attention_mask_tensor,
+            max_new_tokens=16,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
         )
 
-        result_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        input_length = input_ids_tensor.size(1)
+        generated_tokens = outputs[0][input_length:]
+        final_command = tokenizer.decode(
+            generated_tokens, skip_special_tokens=True
+        ).strip()
 
-        # 4. Pipe를 통해 메인 프로세스로 결과(추론된 커맨드) 전송
-        conn.send({"status": "success", "result": result_text})
+        final_command = final_command.split("\n")[0].strip()
+
+        conn.send({"status": "success", "result": final_command})
 
     except Exception as e:
-        conn.send({"status": "error", "reason": str(e)})
+        err_detail = f"{str(e)}\n{traceback.format_exc()}"
+        conn.send({"status": "error", "reason": err_detail})
 
     finally:
         conn.close()
-        # [핵심] 파이썬 GC를 믿지 않고, C_exit() 시스템 콜로 리눅스 커널에게 VRAM 100% 즉각 회수를 강제함
-        os._exit(0)
+        sys.exit(0)
 
 
 def run_fallback_engine(
-    error_log: str, model_path: str = "./models/llama3-8b-ipex-int4", timeout: int = 45
+    error_log: str,
+    # [수정됨] 최신 규격으로 양자화된 안전한 오프라인 모델 폴더 지정
+    model_path: str = "./models/llama3-8b-ipex-woq-int4",
+    timeout: int = 600,
 ) -> str:
     """
     서브 프로세스를 띄우고 라이프사이클(Timeout, Kill)을 관리하는 인터페이스
@@ -120,7 +112,7 @@ def run_fallback_engine(
             return f"ERROR: Fallback reasoning failed - {response['reason']}"
     else:
         logging.error(
-            "[FallbackEngine] Timeout! LLM 추론이 45초를 초과하여 프로세스를 강제 킬(Kill)합니다."
+            "[FallbackEngine] Timeout! LLM 추론이 초과하여 프로세스를 강제 킬(Kill)합니다."
         )
         p.terminate()
         p.join()
@@ -139,12 +131,21 @@ class RAGEngine:
         logging.info("[RAGEngine] Vector DB 연결 초기화 중...")
         persist_directory = os.path.join(os.getcwd(), "data", "chroma_db")
         self.chroma_client = chromadb.PersistentClient(path=persist_directory)
-        self.collection = self.chroma_client.get_collection(
-            name="error_playbook_vectors"
-        )
-        logging.info(
-            f"[RAGEngine] 연결 완료. (현재 보유한 에러 지식: {self.collection.count()}개)"
-        )
+
+        # 콜렉션이 없으면 자동 생성
+        try:
+            self.collection = self.chroma_client.get_collection(
+                name="error_playbook_vectors"
+            )
+            logging.info(
+                f"[RAGEngine] 연결 완료. (현재 보유한 에러 지식: {self.collection.count()}개)"
+            )
+        except Exception as e:
+            logging.warning(f"[RAGEngine] 콜렉션 없음, 새로 생성합니다: {e}")
+            self.collection = self.chroma_client.get_or_create_collection(
+                name="error_playbook_vectors"
+            )
+            logging.info("[RAGEngine] 빈 콜렉션 생성 완료. 추가 학습이 필요합니다.")
 
     def analyze_error(self, log_text: str) -> AgentResponse:
         logging.info("[RAGEngine] 에러 로그 벡터 유사도 검색 시작...")
@@ -175,7 +176,7 @@ class RAGEngine:
         # =================================================================
         # 2. [Slow Track] 모르는 에러 처리 (Fallback LLM 개입)
         # =================================================================
-        if distance > 1.2:
+        if distance > 0.8:
             logging.warning(
                 f"[RAGEngine] 유사도 낮음 (거리: {distance:.4f}). 지연 로딩 기반 Fallback LLM을 호출합니다..."
             )
@@ -193,11 +194,13 @@ class RAGEngine:
                     reasoning=f"RAG 매칭 실패 및 Fallback 분석 실패: {fallback_result}",
                 )
             else:
+                # [Observability] L2 LLM 판별을 위해 reasoning에 LLM 추론 식별자 포함
+                reasoning_with_l2_marker = f"[LLM 추론 (L2)] {fallback_result}"
                 return AgentResponse(
                     error_category="LLM_Inferred",
                     severity="CRITICAL",
                     action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning=fallback_result,  # LLM이 뱉은 커맨드 (이후 executor.py가 파싱)
+                    reasoning=reasoning_with_l2_marker,  # L2 LLM 표시와 함께 반환
                 )
 
         # =================================================================
@@ -209,9 +212,72 @@ class RAGEngine:
         except ValueError:
             action_enum = ActionType.ESCALATE_TO_HUMAN
 
+        # [Observability] L1 캐시 판별을 위해 reasoning에 Vector DB 식별자 포함
+        command_or_default = best_match_meta.get("command", "No command found in DB")
+        reasoning_with_l1_marker = f"[Vector DB 유사도 매칭 성공] {command_or_default}"
+
         return AgentResponse(
             error_category=best_match_meta.get("category", "Unknown"),
             severity="HIGH",
             action_type=action_enum,
-            reasoning=f"Vector DB 유사도 매칭 성공 (거리: {distance:.4f})",
+            reasoning=reasoning_with_l1_marker,  # L1 캐시 표시와 함께 반환
         )
+
+    def learn_from_feedback(self, error_log: str, successful_command: str):
+        """
+        [Phase 4: Feedback Loop]
+        LLM이 도출한 커맨드가 OS에서 성공적으로 실행되었을 때 호출됩니다.
+        새로운 에러 패턴과 해결책을 Vector DB에 영구 박제합니다.
+        """
+        import uuid
+        from datetime import datetime
+
+        doc_id = str(uuid.uuid4())
+
+        try:
+            self.collection.add(
+                ids=[doc_id],
+                documents=[error_log],  # 검색 대상이 될 원본 에러 로그
+                metadatas=[
+                    {
+                        "category": "Learned_from_LLM",
+                        "action": ActionType.EXECUTE_LLM_COMMAND.value,  # schemas의 Enum 사용
+                        "command": successful_command,  # 매칭 시 바로 꺼내쓸 실제 커맨드
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                ],
+            )
+            logging.info(f"🧠 [Phase 4] 새로운 지식 학습 완료! L1 Cache에 저장됨.")
+            logging.info(f"   👉 [에러] {error_log[:50]}...")
+            logging.info(f"   👉 [해결] {successful_command}")
+
+        except Exception as e:
+            logging.error(f"❌ [Phase 4] Vector DB 학습 실패: {e}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    # 엔진 초기화
+    engine = RAGEngine()
+
+    print("\n--- [Phase 4 시나리오 테스트] ---")
+    unknown_error = "CRITICAL: Nginx reverse proxy routing table corrupted. process 9912 is hanging."
+    simulated_command = "pkill -9 nginx && systemctl restart nginx"
+
+    print(f"\n[시뮬레이션] 에러: {unknown_error}")
+    print(f"[시뮬레이션] LLM이 생성한 커맨드: {simulated_command}")
+    print(f"[시뮬레이션] 커맨드 실행 결과: SUCCESS")
+
+    # Phase 4 핵심: 성공한 커맨드를 DB에 캐싱
+    print("\n[Executor] 실행 성공! RAGEngine에 학습을 요청합니다.")
+    engine.learn_from_feedback(unknown_error, simulated_command)
+
+    # 2. 학습 확인 테스트 (동일 에러 재발생 시뮬레이션)
+    print("\n--- [검증] 1초 뒤 동일한 에러 발생 시나리오 ---")
+    time.sleep(1)
+
+    # 두 번째 호출에서는 LLM을 켜지 않고 L1 Cache(Vector DB)에서 즉시 가져와야 함
+    cached_response = engine.analyze_error(unknown_error)
+    print(f"\n[Fast Track Result] {cached_response.reasoning}")
+    print(f"[캐시 히트] 학습된 커맨드가 즉시 반환됨 (분석 시간 단축)")

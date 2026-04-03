@@ -11,6 +11,7 @@ class ActionType(str, Enum):
     KILL_PROCESS = "kill_process"
     ALERT_ONLY = "alert_only"
     ESCALATE_TO_HUMAN = "escalate_to_human"
+    EXECUTE_LLM_COMMAND = "execute_llm_command"
 
 
 # LLM이 뱉어낼 정형화된 응답 포맷
