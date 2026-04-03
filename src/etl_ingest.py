@@ -1,6 +1,9 @@
 import psycopg2
 from psycopg2.extras import execute_values
 import logging
+import json
+import os
+from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -73,10 +76,14 @@ def load_data_to_pg(data: list[tuple]):
     [Load 단계]
     수집된 데이터를 PostgreSQL에 벌크(Bulk)로 밀어 넣습니다.
     ON CONFLICT를 통해 이미 수집된 로그(log_text)는 무시하여 멱등성(Idempotency)을 보장합니다.
+    DB 연결 실패 시 로컬 JSON 파일로 백업합니다.
     """
     conn = None
+    cursor = None
+
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        logging.info(f"총 {len(data)}건의 데이터를 DB에 적재합니다.")
+        conn = psycopg2.connect(**DB_CONFIG, connect_timeout=5)
         cursor = conn.cursor()
 
         # 1. 테이블 셋업
@@ -95,18 +102,53 @@ def load_data_to_pg(data: list[tuple]):
 
         inserted_count = cursor.rowcount
         logging.info(
-            f"🚀 총 {len(data)}개의 데이터 중, {inserted_count}개의 새로운 에러 로그가 DB에 적재되었습니다."
+            f"[Success] 총 {len(data)}개의 데이터 중, {inserted_count}개의 새로운 에러 로그가 DB에 적재되었습니다."
         )
 
-    except Exception as e:
+    except (psycopg2.OperationalError, psycopg2.DatabaseError, Exception) as e:
+        logging.warning(
+            f"[Warning] DB 연결 실패 ({type(e).__name__}): PostgreSQL 서버를 확인하세요"
+        )
+        logging.info("[Fallback] 로컬 JSON 파일로 백업합니다...")
+
+        # 로컬 백업 저장
+        backup_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_file = os.path.join(backup_dir, "etl_backup.json")
+
+        backup_data = {
+            "timestamp": datetime.now().isoformat(),
+            "db_error": str(e),
+            "backup_count": len(data),
+            "data": [
+                {
+                    "log_text": row[0],
+                    "error_category": row[1],
+                    "severity": row[2],
+                    "action_type": row[3],
+                    "target_process": row[4],
+                    "reasoning": row[5],
+                }
+                for row in data
+            ],
+        }
+
+        with open(backup_file, "w", encoding="utf-8") as f:
+            json.dump(backup_data, f, indent=2, ensure_ascii=False)
+
+        logging.info(f"[Success] {len(data)}개 데이터를 {backup_file}에 백업했습니다.")
+        logging.info("[Note] PostgreSQL을 실행하려면:")
+        logging.info("       Option 1 (Docker):   docker-compose up -d")
+        logging.info("       Option 2 (로컬):     PostgreSQL을 포트 5432에서 실행")
+
         if conn:
             conn.rollback()
-        logging.error(f"❌ DB 적재 중 에러 발생: {e}")
     finally:
-        if conn:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
-            logging.info("🔌 DB 커넥션 종료.")
+            logging.info("[Info] DB 커넥션 종료.")
 
 
 if __name__ == "__main__":

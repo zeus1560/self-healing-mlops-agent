@@ -30,7 +30,12 @@ def build_ipex_int4_model():
     # 2. IPEX-LLM을 이용해 다운로드와 동시에 INT4 양자화 (RAM 활용)
     # load_in_low_bit="sym_int4" 옵션이 핵심. 여기서 16GB -> 5.5GB로 다이어트됨.
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, load_in_low_bit="sym_int4", trust_remote_code=True, use_cache=True
+        model_id,
+        load_in_low_bit="sym_int4",
+        trust_remote_code=True,
+        use_cache=True,
+        resume_download=True,
+        low_cpu_mem_usage=True,
     )
 
     # 3. 양자화된 바이너리를 로컬 디스크에 영구 저장
