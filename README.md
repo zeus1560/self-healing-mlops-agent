@@ -27,7 +27,7 @@ Git이 처음이시라면 아래 5단계 순서만 그대로 따라 하시면 �
 Step 1. 최신 코드 가져오기 (작업 시작 전)
 
 git checkout dev # 일단 dev 브랜치로 이동
-git fetch orgin dev # dev 최신화
+git fetch origin dev # dev 최신화
 git pull origin dev # 팀원이 짠 최신 코드를 내 컴퓨터로 다운로드
 
 Step 2. 내 작업 공간(브랜치) 만들기
