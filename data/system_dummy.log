@@ -1,1 +1,2 @@
-[ERROR] RuntimeError: CUDA out of memory. Tried to allocate 1.50 GiB.
+ULTRA_EMERGENCY: System thermal throttling detected!
+FATAL: Redis connection timeout on port 6379 after 3000ms.
