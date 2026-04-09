@@ -4,6 +4,7 @@ import time
 import logging
 import multiprocessing as mp
 import chromadb
+from chromadb.config import Settings  # 💡 Settings 임포트 추가
 import textwrap  # 프롬프트 템플릿 정렬을 위한 내장 라이브러리
 
 # 파일 위치와 관계없이 src 모듈 임포트 가능하게 설정
@@ -130,7 +131,11 @@ class RAGEngine:
     def __init__(self):
         logging.info("[RAGEngine] Vector DB 연결 초기화 중...")
         persist_directory = os.path.join(os.getcwd(), "data", "chroma_db")
-        self.chroma_client = chromadb.PersistentClient(path=persist_directory)
+        # 💡 settings 속성을 추가하여 Telemetry 발송을 원천 차단합니다.
+        self.chroma_client = chromadb.PersistentClient(
+            path=persist_directory,
+            settings=Settings(anonymized_telemetry=False)
+        )
 
         # 콜렉션이 없으면 자동 생성
         try:

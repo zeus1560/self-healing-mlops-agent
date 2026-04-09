@@ -1,41 +1,44 @@
-﻿# Python virtual environment
-venv/
-
-# Python cache
+﻿# =========================
+# 1. Python & 가상환경
+# =========================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
 
-# Environment variables (secret)
+# =========================
+# 2. 보안 & 환경변수 (매우 중요)
+# =========================
 .env
+*.pem
+secrets.json
 
-# Data and logs
-data/
-
-# AI model weights
-*.bin
-*.pt
-*.safetensors
-*.gguf
-*.onnx
-
-# Logs
+# =========================
+# 3. Database & MLOps Log
+# =========================
+# 네 프로젝트의 핵심인 SQLite와 ChromaDB가 올라가는 걸 막아줌
+*.sqlite
+*.sqlite3
+*.db
+/chroma_db/
+logs/
 *.log
 
-# OS files
-.DS_Store
-Thumbs.db
+# =========================
+# 4. AI/ML 모델 가중치 (용량 폭탄 방지)
+# =========================
+*.safetensors
+*.bin
+*.h5
+*.ckpt
+/models/
 
-# IDE / Editor
+# =========================
+# 5. OS & IDE (에디터 설정 파일)
+# =========================
 .vscode/
 .idea/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Build files
-dist/
-build/
-*.egg-info/
-
+.DS_Store
+Thumbs.db
