@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-04-09T23:12:31.165915",
+  "db_error": "connection to server at \"localhost\" (127.0.0.1), port 5432 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?\n",
+  "backup_count": 3,
+  "data": [
+    {
+      "log_text": "[ERROR] psycopg2.OperationalError: server closed the connection unexpectedly",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "DB 커넥션이 예기치 않게 끊어짐. 커넥션 풀을 관리하는 서비스 재시작 필요."
+    },
+    {
+      "log_text": "RuntimeError: CUDA out of memory. Tried to allocate 1.50 GiB.",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "GPU VRAM 고갈. 즉각적인 캐시 클리어(torch.cuda.empty_cache) 및 OS 메모리 확보 필요."
+    },
+    {
+      "log_text": "django.core.exceptions.ImproperlyConfigured: Set the SECRET_KEY environment variable.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "환경 변수 누락. 시스템이 자동으로 해결할 수 없으므로 관리자에게 즉시 알림."
+    }
+  ]
+}

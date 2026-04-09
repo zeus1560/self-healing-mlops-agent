@@ -1,18 +1,22 @@
 import sqlite3
 import os
 import logging
+import json
+import urllib.request
 from datetime import datetime
 
 
 class AgentObserver:
     """
     Self-Healing Agent의 활동 메트릭을 수집하고 통계를 내는 Observability 모듈.
-    별도의 서버 없이 로컬 SQLite 파일 하나로 동작합니다.
+    별도의 서버 없이 로컬 SQLite 파일 하나로 동작하며, 실패 시 Slack 알람을 발송합니다.
     """
 
-    def __init__(self, db_path="./data/agent_metrics.db"):
+    def __init__(self, db_path="./data/agent_metrics.db", slack_webhook_url=None):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db_path = db_path
+        # 환경 변수나 파라미터로 Slack Webhook URL을 받습니다.
+        self.slack_webhook_url = slack_webhook_url or os.getenv("SLACK_WEBHOOK_URL")
         self._init_db()
 
     def _init_db(self):
@@ -43,7 +47,8 @@ class AgentObserver:
         latency_sec: float,
         success: bool,
     ):
-        """에이전트의 단일 조치 결과를 DB에 기록(Load)합니다."""
+        """에이전트의 단일 조치 결과를 DB에 기록하고, 필요시 Slack 알람을 보냅니다."""
+        # 1. SQLite에 조용히 기록 (Load)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -64,6 +69,37 @@ class AgentObserver:
         logging.info(
             f"📝 [Observer] 이벤트 기록 - 소스: {source}, 성공: {success}, 소요시간: {latency_sec:.4f}초"
         )
+
+        # 2. 실패했거나, 인간 에스컬레이션이 필요할 때만 시끄럽게 알림
+        if not success or action_type == "ESCALATE_TO_HUMAN":
+            message = (
+                f"🚨 *[Self-Healing Agent: 조치 실패/위험 감지]*\n"
+                f"• *판단 소스*: `{source}`\n"
+                f"• *시도한 액션*: `{action_type}`\n"
+                f"• *에러 내용*:"
+                f"⚠️ *관리자의 즉각적인 확인이 필요합니다!*"
+            )
+            self._send_slack_alert(message)
+
+    def _send_slack_alert(self, message: str):
+        """내장 모듈(urllib)을 이용해 의존성 없이 가볍게 웹훅을 전송합니다."""
+        if not self.slack_webhook_url:
+            logging.warning(
+                "🔔 [Slack Alert] 전송을 시도했으나 SLACK_WEBHOOK_URL이 설정되지 않았습니다."
+            )
+            return
+
+        try:
+            req = urllib.request.Request(
+                self.slack_webhook_url,
+                data=json.dumps({"text": message}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    logging.info("🔔 [Slack Alert] 경보 전송 완료.")
+        except Exception as e:
+            logging.error(f"❌ [Slack Alert] 전송 실패: {e}")
 
     def print_performance_report(self):
         """
