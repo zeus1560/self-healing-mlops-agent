@@ -1,6 +1,6 @@
 import os
 import logging
-from src.utils.debouncer import LogDebouncer
+from src.log_watcher import LogDebouncer
 
 class LogMonitor:
     def __init__(self, log_file_path="data/system_dummy.log"):
@@ -32,7 +32,7 @@ class LogMonitor:
                 f.seek(self.last_position)
                 for line in f.readlines():
                     line = line.strip()
-                    if line and self.debouncer.is_new_error(line):
+                    if line and self.debouncer.should_process(line):
                         new_errors.append(line)
                 
                 self.last_position = f.tell()
