@@ -90,7 +90,7 @@ Command:"""
 def run_fallback_engine(
     error_log: str,
     # [수정됨] 최신 규격으로 양자화된 안전한 오프라인 모델 폴더 지정
-    model_path: str = "./models/llama3-8b-ipex-woq-int4",
+    model_path: str = "./models/qwen2.5-3b-ipex-woq-int4",
     timeout: int = 600,
 ) -> str:
     """
