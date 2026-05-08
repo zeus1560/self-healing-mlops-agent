@@ -12,6 +12,7 @@ env/
 # 2. 보안 & 환경변수 (매우 중요)
 # =========================
 .env
+.env.example
 *.pem
 secrets.json
 
@@ -40,5 +41,6 @@ logs/
 # =========================
 .vscode/
 .idea/
+.claude/
 .DS_Store
 Thumbs.db
