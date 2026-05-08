@@ -101,6 +101,22 @@ class ActionExecutor:
                 "error_type": "EscalatedToHuman",
                 "error_detail": decision.reasoning[:300],
             }
+        elif decision.action_type == ActionType.KILL_PROCESS:
+            ok = self._kill_process(decision.target_process)
+            result = {
+                "success": ok,
+                "result_category": "SUCCESS" if ok else "FAILURE",
+                "error_type": None,
+                "error_detail": None,
+            }
+        elif decision.action_type == ActionType.ALERT_ONLY:
+            logging.warning(f"[ALERT_ONLY] 조치 없음, 관찰만 기록: {decision.reasoning[:200]}")
+            result = {
+                "success": True,
+                "result_category": "SUCCESS",
+                "error_type": None,
+                "error_detail": None,
+            }
         elif decision.action_type in (ActionType.EXECUTE_LLM_COMMAND,
                                        ActionType.EXECUTE_RULE_COMMAND):
             result = self._execute_llm_command(decision.command or "", original_error_log)
@@ -314,6 +330,27 @@ class ActionExecutor:
             logging.error(f"  VRAM 초기화 중 오류:\n{traceback.format_exc()}")
         logging.warning("메모리 최적화 완료")
         return True
+
+    def _kill_process(self, target: str) -> bool:
+        target_name = target if target else "Unknown_Process"
+        logging.warning(f"[조치] '{target_name}' 프로세스 종료 시도...")
+        try:
+            proc = subprocess.run(
+                ["pkill", target_name],   # -f 없이 프로세스명 정확 매칭 (자기 자신 kill 방지)
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            # pkill 반환코드: 0=종료됨, 1=매칭 없음(이미 죽었을 수 있음)
+            if proc.returncode == 0:
+                logging.info(f"  '{target_name}' 프로세스 종료 완료.")
+                return True
+            logging.warning(f"  '{target_name}' 매칭 프로세스 없음 (이미 종료됐을 수 있음).")
+            return False
+        except subprocess.TimeoutExpired:
+            logging.error(f"  '{target_name}' 종료 타임아웃.")
+            return False
+        except Exception:
+            logging.error(f"  '{target_name}' 종료 오류:\n{traceback.format_exc()}")
+            return False
 
     def _restart_service(self, target: str) -> bool:
         target_name = target if target else "Unknown_Service"
