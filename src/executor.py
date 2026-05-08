@@ -1,17 +1,13 @@
 import gc
-import hashlib
 import logging
 import os
-import re
 import shlex
 import subprocess
-import time
+import sys
 import traceback
 from typing import Optional
 
-import chromadb
 import requests
-from chromadb.config import Settings
 
 from src.schemas import ActionType, AgentResponse
 from src.slack_bot import SlackChatOps
@@ -42,20 +38,7 @@ class ActionExecutor:
     def __init__(self, slack_webhook_url: Optional[str] = None):
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
-
-        try:
-            persist_directory = os.path.join(os.getcwd(), "data", "chroma_db")
-            self.chroma_client = chromadb.PersistentClient(
-                path=persist_directory,
-                settings=Settings(anonymized_telemetry=False),
-            )
-            self.l1_collection = self.chroma_client.get_or_create_collection(
-                name="error_playbook_vectors"
-            )
-            logging.info("[ActionExecutor] L1 Cache DB 연결 완료.")
-        except Exception:
-            logging.error(f"[ActionExecutor] L1 Cache DB 연결 실패:\n{traceback.format_exc()}")
-            self.l1_collection = None
+        # L1 캐시 학습은 log_watcher 파이프라인에서 RAGEngine.learn_from_feedback()로 일원화.
 
         # 허용 명령어 화이트리스트. 빈 set = 어떤 인자도 허용.
         # python/perl/node 등 인터프리터는 의도적으로 제외 (arbitrary code exec 위험).
@@ -114,7 +97,7 @@ class ActionExecutor:
                 "error_detail": decision.reasoning[:300],
             }
         elif decision.action_type == ActionType.EXECUTE_LLM_COMMAND:
-            result = self._execute_llm_command(decision.reasoning, original_error_log)
+            result = self._execute_llm_command(decision.command or "", original_error_log)
         else:
             logging.warning(f"수행 불가 액션: {decision.action_type}")
             result = {
@@ -202,23 +185,24 @@ class ActionExecutor:
 
         return tokens, None
 
-    def _execute_llm_command(self, reasoning: str, error_log: str) -> dict:
-        command = re.sub(r"^\[.*?\]\s*", "", reasoning).strip()
-
+    def _execute_llm_command(self, command: str, error_log: str) -> dict:
         if not command:
             logging.warning("  [실행거부] 실행할 명령어가 없습니다.")
             return {"success": False, "result_category": "FAILURE",
-                    "error_type": "EmptyCommand", "error_detail": "reasoning에서 커맨드 파싱 실패"}
+                    "error_type": "EmptyCommand", "error_detail": "AgentResponse.command가 비어있음"}
 
         tokens, err = self._validate_command(command)
         if err:
             return err
 
-        auto_approve = os.getenv("AUTO_APPROVE", "false").lower() == "true"
+        auto_approve  = os.getenv("AUTO_APPROVE", "false").lower() == "true"
+        is_interactive = sys.stdin.isatty()
 
         if auto_approve:
             logging.info(f"  [AUTO_APPROVE] 자동 승인 모드. 커맨드: {command}")
-        else:
+
+        elif is_interactive:
+            # 터미널 인터랙티브 모드 — 개발/테스트 환경
             chatops = SlackChatOps()
             chatops.send_approval_request(
                 error_log="실시간 감지된 시스템 장애", command=command, reason=reasoning
@@ -233,6 +217,28 @@ class ActionExecutor:
                         "error_type": "HumanRejected", "error_detail": "관리자가 실행을 거절했습니다."}
             print("=" * 50 + "\n")
 
+        else:
+            # 데몬 모드 — stdin 없음. input()은 영구 블로킹이므로 Slack 알림 후 에스컬레이션.
+            # 실행하려면 .env에서 AUTO_APPROVE=true로 설정하거나 인터랙티브 터미널로 재실행.
+            logging.warning(
+                f"  [데몬 모드] stdin 없음 — 승인 대기 불가. Slack 알림 발송 후 에스컬레이션: {command}"
+            )
+            chatops = SlackChatOps()
+            chatops.send_approval_request(
+                error_log="실시간 감지된 시스템 장애 (데몬 모드 — 수동 승인 필요)",
+                command=command,
+                reason=reasoning,
+            )
+            return {
+                "success": False,
+                "result_category": "IMPOSSIBLE",
+                "error_type": "PendingHumanApproval",
+                "error_detail": (
+                    f"데몬 모드에서 승인 대기 불가. Slack 알림 발송됨. "
+                    f"실행하려면 AUTO_APPROVE=true 설정 후 재시작: {command}"
+                ),
+            }
+
         logging.info(f"  [조치 승인됨] 커맨드 실행: {command}")
         try:
             proc = subprocess.run(
@@ -244,7 +250,6 @@ class ActionExecutor:
             )
             if proc.returncode == 0:
                 logging.info(f"  [실행성공] 결과: {proc.stdout.strip()}")
-                self._save_to_l1_cache(error_log, command)
                 return {"success": True, "result_category": "SUCCESS",
                         "error_type": None, "error_detail": None}
             detail = proc.stderr.strip() or f"returncode={proc.returncode}"
@@ -272,29 +277,6 @@ class ActionExecutor:
             logging.error(f"  [실행실패]\n{traceback.format_exc()}")
             return {"success": False, "result_category": "FAILURE",
                     "error_type": type(e).__name__, "error_detail": traceback.format_exc()}
-
-    def _save_to_l1_cache(self, error_log: str, successful_command: str) -> None:
-        if not self.l1_collection:
-            return
-        if not error_log:
-            logging.warning("  원본 에러 로그가 없어 L1 학습을 건너뜁니다.")
-            return
-        try:
-            error_hash = hashlib.md5(error_log.encode("utf-8")).hexdigest()
-            self.l1_collection.upsert(
-                documents=[error_log],
-                metadatas=[{
-                    "error_category": "Learned_from_LLM",
-                    "action_type": "EXECUTE_LLM_COMMAND",
-                    "reasoning": successful_command,
-                    "target_process": "unknown",
-                    "learned_at": int(time.time()),
-                }],
-                ids=[f"learned_{error_hash}"],
-            )
-            logging.info(f"  [FeedbackLoop] L1 Cache 적재 완료 (ID: {error_hash[:8]})")
-        except Exception:
-            logging.error(f"  [FeedbackLoop] L1 Cache 업데이트 실패:\n{traceback.format_exc()}")
 
     def _clear_memory(self) -> bool:
         logging.warning("[조치] 시스템 메모리 최적화 시작...")
@@ -342,10 +324,9 @@ class ActionExecutor:
             return False
 
     def _escalate_to_human(self, reasoning: str) -> None:
-        logging.error(f"[경보 발송] 관리자 개입 필요. 사유: {reasoning}")
-        self._send_slack_alert(
-            f"*[CRITICAL] 관리자 개입 필요*\n*사유:* {reasoning}", "CRITICAL"
-        )
+        # Slack 알림은 AgentObserver.log_event()에서 일원화해서 발송.
+        # 여기서 중복 발송하지 않는다.
+        logging.error(f"[에스컬레이션] 관리자 개입 필요. 사유: {reasoning}")
 
     def _send_slack_alert(self, message: str, severity: str = "INFO") -> None:
         if not self.slack_webhook_url:

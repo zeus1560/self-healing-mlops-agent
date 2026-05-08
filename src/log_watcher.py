@@ -91,12 +91,7 @@ class LogTailHandler(FileSystemEventHandler):
             logging.error(f"[파이프라인] RAGEngine 분석 실패:\n{traceback.format_exc()}")
             return
 
-        if "[LLM 추론 (L2)]" in decision.reasoning or "[Ollama 추론 (L2)]" in decision.reasoning:
-            source = "L2_LLM"
-        elif "[규칙 기반 추론]" in decision.reasoning:
-            source = "RULE"
-        else:
-            source = "L1_CACHE"
+        source = decision.resolution_source
 
         try:
             exec_result = self.executor.execute(decision, original_error_log=error_log)
@@ -111,15 +106,10 @@ class LogTailHandler(FileSystemEventHandler):
         error_type      = exec_result["error_type"]
         error_detail    = exec_result["error_detail"]
 
-        if success and source == "L2_LLM":
-            clean_command = (
-                decision.reasoning
-                .replace("[LLM 추론 (L2)]", "")
-                .replace("[Ollama 추론 (L2)]", "")
-                .strip()
-            )
+        # L2 LLM과 Rule 기반 성공 모두 L1 캐시에 학습 (책임 일원화)
+        if success and source in ("L2_LLM", "RULE") and decision.command:
             try:
-                self.engine.learn_from_feedback(error_log, clean_command)
+                self.engine.learn_from_feedback(error_log, decision.command)
             except Exception:
                 logging.error(f"[파이프라인] Feedback 학습 실패:\n{traceback.format_exc()}")
 

@@ -18,8 +18,26 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.schemas import AgentResponse, ActionType
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+# ── ChromaDB Singleton ────────────────────────────────────────────────────────
+# 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
+_chroma_client = None
+
+def _get_chroma_client():
+    global _chroma_client
+    if _chroma_client is None:
+        persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
+        _chroma_client = chromadb.PersistentClient(
+            path=persist_dir,
+            settings=Settings(anonymized_telemetry=False),
+        )
+        logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
+    return _chroma_client
+
+# ─────────────────────────────────────────────────────────────────────────────
+OLLAMA_BASE_URL     = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL        = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+_OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
+_OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))  # 지수 백오프 밑수
 
 # =====================================================================
 # [Rule-based Heuristic Fallback]
@@ -92,7 +110,9 @@ def _clean_llm_output(raw: str) -> str:
 
 
 # =====================================================================
-# [Step 1] Ollama (로컬 HTTP API — CPU/GPU 무관, 설치만 하면 동작)
+# [Step 1] Ollama (로컬/원격 HTTP API — CPU/GPU 무관)
+# 중앙 Ollama 서버 사용 시 .env에 OLLAMA_BASE_URL=http://<서버IP>:11434 설정.
+# 네트워크 순단 등 연결 오류에 한해 지수 백오프로 최대 OLLAMA_MAX_RETRIES 재시도.
 # =====================================================================
 def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
     """Ollama API를 호출해 명령어를 추론한다. 실패 시 'ERROR:...' 반환."""
@@ -104,22 +124,36 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
         "options": {"temperature": 0, "num_predict": 24},
     }).encode()
 
-    try:
-        req = urllib.request.Request(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            result = json.loads(resp.read())
-            command = _clean_llm_output(result.get("response", ""))
-            if command:
-                return command
-            return "ERROR: Ollama returned empty response"
-    except urllib.error.URLError as e:
-        return f"ERROR: Ollama not reachable - {e}"
-    except Exception as e:
-        return f"ERROR: Ollama call failed - {e}"
+    last_error = ""
+    for attempt in range(1, _OLLAMA_MAX_RETRIES + 1):
+        try:
+            req = urllib.request.Request(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                result = json.loads(resp.read())
+                command = _clean_llm_output(result.get("response", ""))
+                if attempt > 1:
+                    logging.info(f"[Ollama] {attempt}번째 시도에서 성공")
+                return command if command else "ERROR: Ollama returned empty response"
+
+        except urllib.error.URLError as e:
+            # 연결 오류 → 재시도 가능
+            last_error = str(e)
+            if attempt < _OLLAMA_MAX_RETRIES:
+                wait = _OLLAMA_RETRY_BASE ** attempt  # 2s, 4s, 8s ...
+                logging.warning(
+                    f"[Ollama] 연결 실패 ({attempt}/{_OLLAMA_MAX_RETRIES}), "
+                    f"{wait:.0f}초 후 재시도: {e}"
+                )
+                time.sleep(wait)
+        except Exception as e:
+            # 추론 오류(모델 없음, JSON 파싱 등)는 재시도해도 동일하므로 즉시 반환
+            return f"ERROR: Ollama call failed - {e}"
+
+    return f"ERROR: Ollama not reachable after {_OLLAMA_MAX_RETRIES} attempts - {last_error}"
 
 
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
@@ -163,11 +197,14 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
 
 
 def _is_ollama_available() -> bool:
-    try:
-        urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        return True
-    except Exception:
-        return False
+    """헬스체크 2회 시도 — 순단(transient failure)으로 인한 오탐 방지."""
+    for _ in range(2):
+        try:
+            urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+            return True
+        except Exception:
+            pass
+    return False
 
 
 # =====================================================================
@@ -233,18 +270,14 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
 class RAGEngine:
     def __init__(self):
         logging.info("[RAGEngine] Vector DB 연결 초기화 중...")
-        persist_directory = os.path.join(os.getcwd(), "data", "chroma_db")
-        self.chroma_client = chromadb.PersistentClient(
-            path=persist_directory,
-            settings=Settings(anonymized_telemetry=False)
-        )
+        client = _get_chroma_client()  # Singleton — 프로세스당 하나의 클라이언트 공유
 
         try:
-            self.collection = self.chroma_client.get_collection(name="error_playbook_vectors")
+            self.collection = client.get_collection(name="error_playbook_vectors")
             logging.info(f"[RAGEngine] 연결 완료. (현재 보유한 에러 지식: {self.collection.count()}개)")
         except Exception as e:
             logging.warning(f"[RAGEngine] 콜렉션 없음, 새로 생성합니다: {e}")
-            self.collection = self.chroma_client.get_or_create_collection(name="error_playbook_vectors")
+            self.collection = client.get_or_create_collection(name="error_playbook_vectors")
             logging.info("[RAGEngine] 빈 콜렉션 생성 완료. 추가 학습이 필요합니다.")
 
     def analyze_error(self, log_text: str) -> AgentResponse:
@@ -262,6 +295,7 @@ class RAGEngine:
                 severity="MEDIUM",
                 action_type=ActionType.ESCALATE_TO_HUMAN,
                 reasoning="Vector DB가 비어있거나 검색에 실패했습니다.",
+                resolution_source="L1_CACHE",
             )
 
         best_match_doc = results["documents"][0][0]
@@ -273,7 +307,7 @@ class RAGEngine:
         # =================================================================
         # 2. [Slow Track] 모르는 에러 처리 (Fallback LLM 개입 + 사전 진단)
         # =================================================================
-        if distance > 0.8:
+        if distance > 1.2:
             logging.warning(f"[RAGEngine] 유사도 낮음 (거리: {distance:.4f}). Fallback 체인 시작...")
 
             logging.info("🔍 [Observation] 시스템 상태 사전 진단을 시작합니다...")
@@ -293,13 +327,16 @@ class RAGEngine:
                             error_category="Unknown",
                             severity="HIGH",
                             action_type=ActionType.ESCALATE_TO_HUMAN,
-                            reasoning=f"[자가 반성 거부] Ollama 제안 명령어 위험 판정: {llm_result}",
+                            reasoning=f"자가 반성 거부 — Ollama 제안 명령어 위험 판정: {llm_result}",
+                            resolution_source="L2_LLM",
                         )
                     return AgentResponse(
                         error_category="LLM_Inferred",
                         severity="CRITICAL",
                         action_type=ActionType.EXECUTE_LLM_COMMAND,
-                        reasoning=f"[Ollama 추론 (L2)] {llm_result}",
+                        reasoning="Ollama 추론 성공",
+                        resolution_source="L2_LLM",
+                        command=llm_result,
                     )
                 logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
             else:
@@ -315,13 +352,16 @@ class RAGEngine:
                         error_category="Unknown",
                         severity="HIGH",
                         action_type=ActionType.ESCALATE_TO_HUMAN,
-                        reasoning=f"[자가 반성 거부] ipex 제안 명령어 위험 판정: {ipex_result}",
+                        reasoning=f"자가 반성 거부 — ipex 제안 명령어 위험 판정: {ipex_result}",
+                        resolution_source="L2_LLM",
                     )
                 return AgentResponse(
                     error_category="LLM_Inferred",
                     severity="CRITICAL",
                     action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning=f"[LLM 추론 (L2)] {ipex_result}",
+                    reasoning="ipex_llm 추론 성공",
+                    resolution_source="L2_LLM",
+                    command=ipex_result,
                 )
             logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
 
@@ -333,7 +373,9 @@ class RAGEngine:
                     error_category="Rule_Inferred",
                     severity="HIGH",
                     action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning=f"[규칙 기반 추론] {rule_cmd}",
+                    reasoning="규칙 기반 키워드 매칭",
+                    resolution_source="RULE",
+                    command=rule_cmd,
                 )
 
             # --- Step 4: 완전 실패 → 인간 에스컬레이션 ---
@@ -342,6 +384,7 @@ class RAGEngine:
                 severity="HIGH",
                 action_type=ActionType.ESCALATE_TO_HUMAN,
                 reasoning=f"모든 Fallback 실패 (Ollama: {llm_result}, ipex: {ipex_result})",
+                resolution_source="L2_LLM",
             )
 
         # =================================================================
@@ -354,13 +397,13 @@ class RAGEngine:
             action_enum = ActionType.ESCALATE_TO_HUMAN
 
         reasoning_text = best_match_meta.get("reasoning", "No reasoning found in DB")
-        reasoning_with_l1_marker = f"[Vector DB 유사도 매칭 성공] {reasoning_text}"
 
         return AgentResponse(
             error_category=best_match_meta.get("error_category", "Unknown"),
             severity="HIGH",
             action_type=action_enum,
-            reasoning=reasoning_with_l1_marker,
+            reasoning=reasoning_text,
+            resolution_source="L1_CACHE",
         )
 
     def learn_from_feedback(self, error_log: str, successful_command: str) -> None:
