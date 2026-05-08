@@ -23,7 +23,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 
 class LogTailHandler(FileSystemEventHandler):
-    def __init__(self, filepath: str, debouncer: LogDebouncer):
+    def __init__(
+        self,
+        filepath: str,
+        debouncer: LogDebouncer,
+        executor: ActionExecutor = None,
+        observer_agent: AgentObserver = None,
+        engine: RAGEngine = None,
+        circuit_breaker: CircuitBreaker = None,
+    ):
         super().__init__()
         self.filepath = os.path.abspath(filepath)
         self.debouncer = debouncer
@@ -31,11 +39,11 @@ class LogTailHandler(FileSystemEventHandler):
         self.error_pattern = re.compile(
             r"(ERROR|CRITICAL|OOM|Timeout|Exception)", re.IGNORECASE
         )
-        self.executor        = ActionExecutor()
-        self.observer_agent  = AgentObserver()
-        self.engine          = RAGEngine()
-        self.circuit_breaker = CircuitBreaker()
-        self._line_buf: deque[str] = deque(maxlen=10)  # 에러 이전 최근 10줄 버퍼
+        self.executor        = executor        or ActionExecutor()
+        self.observer_agent  = observer_agent  or AgentObserver()
+        self.engine          = engine          or RAGEngine()
+        self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        self._line_buf: deque[str] = deque(maxlen=10)
 
     def on_modified(self, event):
         if os.path.abspath(event.src_path) != self.filepath:
@@ -124,6 +132,7 @@ class LogTailHandler(FileSystemEventHandler):
             result_category=result_category,
             error_type=error_type,
             error_detail=error_detail,
+            error_category=decision.error_category,
         )
         logging.info(
             f"[조치 완료] 소스:{source} | 결과:{result_category} ({latency:.2f}s)"

@@ -4,13 +4,18 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 import traceback
 from typing import Optional
 
 import requests
 
+from src import approval_store
 from src.schemas import ActionType, AgentResponse
 from src.slack_bot import SlackChatOps
+
+_APPROVAL_POLL_INTERVAL = 5   # 초
+_APPROVAL_TIMEOUT_SEC   = 300 # 5분 대기 후 자동 거절
 
 _SHELL_METACHAR = frozenset('|><;&`$(){}*?!\\~')
 
@@ -203,13 +208,8 @@ class ActionExecutor:
 
         elif is_interactive:
             # 터미널 인터랙티브 모드 — 개발/테스트 환경
-            chatops = SlackChatOps()
-            chatops.send_approval_request(
-                error_log="실시간 감지된 시스템 장애", command=command, reason=reasoning
-            )
             print("\n" + "=" * 50)
-            print("[Human-in-the-Loop] 슬랙으로 승인 요청이 발송되었습니다.")
-            print(f"실행 대기 중인 명령어: {command}")
+            print("[Human-in-the-Loop] 실행 대기 중인 명령어:", command)
             approval = input("이 명령어를 실행하시겠습니까? (y/n): ").strip().lower()
             if approval != "y":
                 logging.warning("[관리자 거절] 조치가 취소되었습니다.")
@@ -218,26 +218,43 @@ class ActionExecutor:
             print("=" * 50 + "\n")
 
         else:
-            # 데몬 모드 — stdin 없음. input()은 영구 블로킹이므로 Slack 알림 후 에스컬레이션.
-            # 실행하려면 .env에서 AUTO_APPROVE=true로 설정하거나 인터랙티브 터미널로 재실행.
+            # 데몬 모드 — approval_store에 요청 등록 후 Slack으로 승인 URL 발송, 폴링 대기.
+            approval_store.init_table()
+            token    = approval_store.create_request(command, error_log, "")
+            base_url = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
+            approve_url = f"{base_url}/approve/{token}"
+            reject_url  = f"{base_url}/reject/{token}"
             logging.warning(
-                f"  [데몬 모드] stdin 없음 — 승인 대기 불가. Slack 알림 발송 후 에스컬레이션: {command}"
+                f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {command}\n"
+                f"  승인: {approve_url}\n  거절: {reject_url}"
             )
-            chatops = SlackChatOps()
-            chatops.send_approval_request(
-                error_log="실시간 감지된 시스템 장애 (데몬 모드 — 수동 승인 필요)",
-                command=command,
-                reason=reasoning,
-            )
-            return {
-                "success": False,
-                "result_category": "IMPOSSIBLE",
-                "error_type": "PendingHumanApproval",
-                "error_detail": (
-                    f"데몬 모드에서 승인 대기 불가. Slack 알림 발송됨. "
-                    f"실행하려면 AUTO_APPROVE=true 설정 후 재시작: {command}"
-                ),
-            }
+            try:
+                chatops = SlackChatOps()
+                chatops.send_approval_request(
+                    error_log=error_log,
+                    command=command,
+                    reason=f"✅ 승인: {approve_url}\n🚫 거절: {reject_url}",
+                )
+            except Exception:
+                logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
+
+            deadline = time.time() + _APPROVAL_TIMEOUT_SEC
+            while time.time() < deadline:
+                time.sleep(_APPROVAL_POLL_INTERVAL)
+                status = approval_store.get_status(token)
+                if status == "approved":
+                    logging.info("  [승인됨] Slack 승인 확인. 실행 진행.")
+                    break
+                if status == "rejected":
+                    logging.warning("  [거절됨] Slack 거절 확인. 실행 취소.")
+                    return {"success": False, "result_category": "FAILURE",
+                            "error_type": "HumanRejected",
+                            "error_detail": "Slack에서 관리자가 실행을 거절했습니다."}
+            else:
+                logging.warning(f"  [타임아웃] {_APPROVAL_TIMEOUT_SEC}s 내 응답 없음. 실행 취소.")
+                return {"success": False, "result_category": "IMPOSSIBLE",
+                        "error_type": "ApprovalTimeout",
+                        "error_detail": f"{_APPROVAL_TIMEOUT_SEC}s 대기 후 응답 없음: {command}"}
 
         logging.info(f"  [조치 승인됨] 커맨드 실행: {command}")
         try:

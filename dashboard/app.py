@@ -103,7 +103,13 @@ def load_metrics() -> pd.DataFrame:
         df["timestamp"]       = pd.to_datetime(df["timestamp"])
         df["latency_ms"]      = (df["latency_sec"] * 1000).round(1)
         df["result_category"] = df["result_category"].fillna("SUCCESS")
-        # error_type: 컬럼이 없거나 전부 NULL이면 error_log 텍스트에서 추론
+        # error_category: LLM이 분류한 도메인 카테고리 (우선). 없으면 텍스트 추론.
+        if "error_category" not in df.columns or df["error_category"].isna().all():
+            df["error_category"] = df["error_log"].apply(_infer_error_type)
+        else:
+            null_mask = df["error_category"].isna()
+            df.loc[null_mask, "error_category"] = df.loc[null_mask, "error_log"].apply(_infer_error_type)
+        # error_type: executor 예외 타입. 없으면 텍스트 추론 (후방 호환).
         if "error_type" not in df.columns or df["error_type"].isna().all():
             df["error_type"] = df["error_log"].apply(_infer_error_type)
         else:
@@ -280,20 +286,20 @@ with tab1:
             st.plotly_chart(fig_donut, use_container_width=True)
 
         with v2:
-            st.markdown('<p class="section-title">에러 타입별 발생 빈도</p>',
+            st.markdown('<p class="section-title">에러 카테고리별 발생 빈도</p>',
                         unsafe_allow_html=True)
-            etype_df = df["error_type"].value_counts().reset_index()
-            etype_df.columns = ["error_type", "count"]
+            etype_df = df["error_category"].value_counts().reset_index()
+            etype_df.columns = ["error_category", "count"]
             fig_etype = px.bar(
                 etype_df,
                 x="count",
-                y="error_type",
+                y="error_category",
                 orientation="h",
                 color="count",
                 color_continuous_scale="Blues",
                 text="count",
                 template=THEME,
-                labels={"count": "발생 건수", "error_type": "에러 타입"},
+                labels={"count": "발생 건수", "error_category": "에러 카테고리"},
             )
             fig_etype.update_traces(
                 textposition="outside",
@@ -375,7 +381,7 @@ with tab1:
         st.markdown('<p class="section-title">최근 에러 처리 로그 (10건)</p>',
                     unsafe_allow_html=True)
 
-        _SHOW  = ["timestamp", "error_type", "result_category",
+        _SHOW  = ["timestamp", "error_category", "result_category",
                   "resolution_source", "action_type", "latency_ms", "error_log"]
         _SHOW  = [c for c in _SHOW if c in df.columns]
         log_df = df[_SHOW].head(10).copy()
@@ -389,7 +395,7 @@ with tab1:
 
         _RENAME = {
             "timestamp":         "발생 시간",
-            "error_type":        "에러 타입",
+            "error_category":    "에러 카테고리",
             "result_category":   "결과 분류",
             "resolution_source": "해결 소스",
             "action_type":       "실행 커맨드",
