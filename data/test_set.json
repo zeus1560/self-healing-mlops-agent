@@ -1,0 +1,693 @@
+{
+  "total": 86,
+  "data": [
+    {
+      "log_text": "**Describe the bug**\r\n\r\nWhen authenticating to Vault using JWT auth method and a JWT role, the `bound_audiences` is checked even if `bound_claims` is defined in the role.\r\n\r\nWhen the `bound_audiences` of the JWT role is empty, it results in the following error: `Authentication failed: audience claim found in JWT but no audiences bound to the role`, even if the provided JWT meets the required bound claims\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n\r\n1. Configure a JWT Back-End\r\n\r\n2. Configure a JWT role for this Back-End\r\n\r\n```console\r\nvault write auth/jwt/role/my-role - <<EOF\r\n{\r\n   \"role_type\": \"jwt\",\r\n   \"user_claim\": \"user_email\",\r\n   \"policies\": \"my-policy\",\r\n   \"ttl\": \"1h\",\r\n   \"bound_claims\": { \"project_id\": [\"123\"] }\r\n}\r\nEOF\r\n```\r\n\r\nThe JWT role should define a `bound_claims`. I have used `project_id` as I have used GitLab as a JWT auth Back-End.\r\n\r\n3. Log in Vault through the UI by selecting the JWT auth method and using the configured JWT role `my-role`.\r\n\r\n4. It s",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "**Describe the bug**\r\n\r\nFor `vault audit` it is not possible to output the required policy\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n\r\n```\r\n$ vault audit -output-policy enable file file_path=/var/log/audit.log\r\nUsage: vault audit <subcommand> [options] [args]\r\n<...>\r\nUnable to generate policy from command\r\n\r\n$ vault audit enable file file_path=/var/log/audit.log -output-policy\r\nFailed to parse K=V data: invalid key/value pair \"-output-policy\": format must be key=value\r\nUnable to generate policy from command\r\n\r\n$ vault audit enable file file_path=/var/log/audit.log -output-policy=1\r\nError enabling audit device: Error making API request.\r\n\r\nURL: PUT <...>\r\nCode: 403. Errors:\r\n\r\n* 1 error occurred:\r\n\t* permission denied\r\n```\r\n\r\n**Environment:**\r\n* Vault Server Version (retrieve with `vault status`): 1.17.0\r\n* Vault CLI Version (retrieve with `vault version`): 1.17.5\r\n* Server Operating System/Architecture: Linux",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "## Backport\n\nThis PR is auto-generated from #28873 to be assessed for backporting due to the inclusion of the label backport/1.18.x.\n\n\n\nThe below text is copied from the body of the original PR.\n\n---\n\n### Description\r\nThis PR fixes the MFA workflow for OIDC, Okta and SAML (enterprise only). Now users can enable MFA and log in to the Vault GUI with OIDC, Okta or SAML. \r\n\r\n❌ Failures for MFA+SSO don't return very intuitive error messages and differ depending on the auth mount type. Screenshots are below for posterity and to help triage bug reports.\r\n\r\n## Test scenarios\r\n\r\n\r\n  | OIDC SSO authenticator   | MFA method | `root` | child namespace | cloud `admin/` namespace |\r\n  | ------------------------ | ---------- | ------ | --------------- | ------------------------ |\r\n  | `azure`*                 | TOTP       | ✅     | ✅              | ✅                       |\r\n  | `auth0`*                  | TOTP       | ✅     | ✅              | ✅                       |\r\n  | `okta`",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "**Describe the bug**\r\nCreating a Vault policy that aims to restrict what \"token_policies\" and/or \"policies\" can be set on different auth method roles receives an unexpected permission denied. The permission denied error appears to be limited to when *multiple* Vault policies are specified when creating a role. \r\n  - Creating a role with only one (1) \"token_policies\" value set is successful\r\n  - Creating a role with multiple \"token_policies\" values receives permission denied\r\n  - Issue is present on *at least* AppRole and K8s auth method\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Create Vault policy `vault policy write auth-restricted auth-restricted.hcl` restricting permissions via \"allowed_parameters\"; policy below:\r\n    ```\r\n    ### Auth Restricted Policy ###\r\n    # allow creating auth methods with given requirements\r\n    path \"sys/auth/*\" {\r\n      capabilities = [\"create\", \"update\", \"sudo\"]\r\n      allowed_parameters = {\r\n        \"*\" = []\r\n        \"type\" = [\"kubernetes",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "### Description\r\nResolves https://github.com/hashicorp/vault/issues/27772\r\n\r\nWhen the error handling changed in this PR: https://github.com/hashicorp/vault/pull/25953 the error handling failed to redirect users to authenticate in the OIDC provider workflow. \r\n\r\n> ### Testing\r\n> I spent a while trying to figure out a way to revoke the user's token to simulate the reported bug but with our test  architecture that's very challenging. Instead, the auth service is stubbed and rejects the authorize url with the updated error format. I confirmed the added test fails before the fix.\r\n\r\n## Broken - Vault v1.17.2\r\n1. revoke user's token\r\n2. submit OIDC authorize request\r\n3. 🐛 ❌ error is returned and user is not redirected (Ignore large `Success` message). \r\n> The error returned by [oidcdebugger](https://oidcdebugger.com/) is URL-encoded:\r\n> `errors=2+errors+occurred%3A%0A%09*+permission+denied%0A%09*+invalid+token%0A%0A`\r\n>\r\n> When the query string is decoded and formatted as JSON it reads:\r\n> `",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "PR to hopefully stabilize enterprise KMIP tests, which have been failing with: \r\n\r\n```\r\nKMIP secrets: it can revoke from the credentials show page\r\nError: Error occurred while running commands: \"write sys/mounts/kmip-24de19eb-fc6d-43b5-aacf-46a33d628425 type=kmip; write kmip-24de19eb-fc6d-43b5-aacf-46a33d628425/config listen_addrs=127.0.0.1:1003\" - Error writing to: kmip-24de19eb-fc6d-43b5-aacf-46a33d628425/config. URL: /v1/kmip-24de19eb-fc6d-43b5-aacf-46a33d628425/config Code: 400 Errors: listen tcp4 127.0.0.1:1003: bind: permission denied\r\n```\r\n\r\nHopefully consistent cleanup after each test will resolve this flakiness",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "Vault 0.6.5\r\n\r\nI would like to be able to have a vault anonymous policy. From my reading of the default policy, it seems that this assumes a token already exists(?) \r\n\r\nI would like users for example to be able to run `vault auth -methods` - to see which methods of authentication are available to them as this may change over time - however currently I cant find a way of doing this without the user being logged in first, which kind of defeats the point. \r\n\r\nIs there an anonymous policy at the moment? Is this possible?",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "### Description\r\nℹ️ No user facing changes\r\n\r\nThis PR implements the new `api` service to make login requests and migrates the abstracted `authenticate` method to each auth component to reduce abstraction.\r\n\r\n### Previous behavior\r\nPreviously the [old login form](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/components/auth/login-form.js#L81-L86) invoked `this.auth.authenticate` for every auth method. This [auth service method](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/services/auth.js#L480-L490) then called the `cluster` adapter's [authenticate method](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/adapters/cluster.js#L124-L144). \r\n\r\nThis abstraction made it hard to follow the login logic and required the need for two separate MFA workflows depending on which component was called. It also was challenging to discern what auth response data was actually necessary for the app. \r\n\r\n#### Whimsical diagram for the previous workflow.\r\n![imag",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "I wanted to seal the vault using the output policy report by vault, i.e.\r\n```\r\n$ vault operator seal -output-policy\r\npath \"sys/seal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n$ vault policy read admin | grep -FA 2 seal\r\npath \"sys/seal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n```\r\nBut it fails:\r\n```\r\n$ vault operator seal\r\nError sealing: Error making API request.\r\n\r\nURL: PUT https://...:8200/v1/sys/seal\r\nCode: 403. Errors:\r\n\r\n* 1 error occurred:\r\n\t* permission denied\r\n```\r\n\r\nSo the `seal` operation requires \"sudo\" to be present, so that is missing in the output of `-output-policy`.\r\n\r\nSimilar the output for the unseal operation is also wrong:\r\n```\r\n$ vault operator unseal -output-policy\r\nUnseal Key (will be hidden): \r\npath \"sys/unseal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n```\r\n\r\nThis suggests I need a token attached to a policy with those capabilities while in fact I don't even need any token, just the unseal key.\r\n\r\nSo the bugfix/improvement I'm suggesting is that the o",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "**Describe the bug**\r\nAfter upgrading from Vault 1.12.8 to 1.13+ (tested with 1.13.1, 1.13.4 and 1.14.0), approle login fails on _some_ of our app roles.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Run `curl --request POST --data '{\"role_id\":\"<redacted>\",\"secret_id\":\"<redacted>\"}' https://<redacted>/v1/auth/approle/login`\r\n2. Returns `{\"errors\":[\"permission denied\"]}`\r\n\r\nWe're struggling to find any more detail on this. Runing Vault with `log_level: \"trace\"` provides nothing.\r\n\r\nWhat we've tested so far is:\r\n1. Try to log in with role_id/secret_id created prior to upgrade -> fails on some app roles\r\n2. Try to log in with same role_id and secret_id created after upgrade -> fails on same app roles\r\n3. Created a new role_id/secret_id with the same configuration as one that fails -> can login successfully\r\n\r\nOne curious thing is that we also get `permission denied` when running `list auth/approle/role/:rolename/secret-id` on some app roles (all of the ones that fail to log in",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "### Summary\r\n\r\nThis PR adds two utilities to `django.utils.module_loading` to improve model resolution via string labels:\r\n\r\n- **`get_model_by_label(label: str)`**  \r\n  Resolves a model class from a dotted label (e.g., `\"auth.User\"`). Raises `ImproperlyConfigured` for malformed labels or unknown models to avoid leaking low-level `LookupError`s.\r\n\r\n- **`lazy_model(label: str)`**  \r\n  Returns a `SimpleLazyObject` that lazily resolves the model when accessed. Helps avoid circular imports and is useful in settings, signal handlers, and module-level code.\r\n\r\n---\r\n\r\n### Motivation\r\n\r\nString-based model references are common in Django projects — in settings, admin site registration, dynamic imports, etc. These helpers:\r\n\r\n- Reduce repeated boilerplate (e.g., splitting and validating labels).\r\n- Make error handling more consistent and readable.\r\n- Improve safety in cases where early model access can cause import-time side effects.\r\n\r\n---\r\n\r\n### Testing\r\n\r\nTests have been added under `utils_tes",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "Had a couple of ideas in mind on how to check if selenium is installed, went with the idea suggested in the ticket comments (importing selenium).",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "#### Trac ticket number\r\n<!-- Replace XXXXX with the corresponding Trac ticket number, or delete the line and write \"N/A\" if this is a trivial PR. -->\r\n\r\nticket-36138\r\n\r\n#### Branch description\r\nChanged the ADMINS and MANAGERS settings from lists of (name, address) tuples (where the name had been unused) to lists of email address strings. Deprecated use of tuples.\r\n\r\n#### Checklist\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [x] I have added or updated relevant tests.\r\n- [x] I have added or updated relevant docs, including release notes if applicable.\r\n- n/a I have attached screenshots in both light and dark modes for any UI changes.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "# Trac ticket number\r\n\r\nticket-35514\r\n\r\n# Branch description\r\n\r\nThis is a draft pull request. It just replaces the the configuration settings starting with `EMAIL_…` with a dictionary based configuration. More features have to be added.\r\n\r\n# Checklist\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [x] I have added or updated relevant tests.\r\n- [x] I have added or updated relevant docs, including release notes if applicable.\r\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "Opening this as a draft pull request until I figure out the following:\r\n\r\n- [x] Where to add validation for the transaction_mode values?\r\n\r\nRight now it's in `get_connection_params`, but it doesn't feel like the right place. We do validation for `NAME` there though, so maybe it's ok? \r\n\r\n- [x] Is `OPTIONS` the right place for this `transaction_mode`?\r\n\r\nJust double checking, since it doesn't feel clean that I have to pop it from the `OPTIONS` dict to avoid `TypeError: 'transaction_mode' is an invalid keyword argument for Connection()`\r\n\r\n- [x] Figure out which documentation files to update",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "What did I do? I took\r\nhttps://github.com/dvarrazzo/django-psycopg3-backend and blackified it +\r\nported over most (all?) new commits. I am now opening this on GitHub to\r\nbe able to nicely diff and start a discussion about whether we can\r\nsupport psycopg2 & 3 easiyl from the same codebase (I think we can).\r\n\r\n----\r\nI (i.e. @felixxm) have the following plan to move this forward:\r\n- [x]  merge #16245,\r\n- [x]  squash commits,\r\n- [x]  rebase,\r\n- [x]  revert unnecessary changes, e.g.\r\n  - [x]  https://github.com/django/django/pull/15687#discussion_r1036784854\r\n- [x]  merge more small cleanups:\r\n  - #16345\r\n  - #16346\r\n  - #16347\r\n  - #16351\r\n  - #16352\r\n  - #16353\r\n  - #16362\r\n  - #16363\r\n  - #16368\r\n  - #16371\r\n  - 2f38f7b8f9bd65905dc6bec4f3e2a30b5da8e338\r\n  - 1d90c9b1132482d446ca8375c151e894002c9e8d\r\n  - db7bb3b64e469fbb5c79e7b5b2fcb890434aa60f\r\n- [x]  push (or wait) for docs changes,\r\n- [x]  move import changes to a separate PR:\r\n  - 2ebfbd894e21e1656c1e1f32d98b8df7a32d3649\r\n- [x]  make d",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ConfigurationError: Required key not found in config file.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ConfigurationError: Required key \"database_url\" not found in config.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "#### Trac ticket number\r\n\r\nticket-35859\r\n\r\nhttps://github.com/django/deps/blob/main/accepted/0014-background-workers.rst\r\n\r\n#### Branch description\r\n\r\nThis PR implements the first parts of `django.tasks`, as implemented in [`django-tasks`](https://github.com/realOrangeOne/django-tasks):\r\n\r\n- Common API interface\r\n- Base backend\r\n- Task / result classes\r\n- Immediate / Dummy backends\r\n\r\nThe database backend is intentionally absent, and will be added in future (**after** this PR is merged). This makes the PR significantly smaller, and easier to review.\r\n\r\nThe commits are also not squashed, to assist with iterative reviewing. I'll squash them all towards the end once the change is approved.\r\n\r\n##### Notable deviations from the DEP\r\n\r\n- The email backend has been removed, as it isn't possible to be API-compatible, due to the need to return the number of successfully-sent emails.\r\n- Enqueue and finished task signals were added, to allow easier introspection from day 1.\r\n\r\n#### Checklist\r\n- [",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "FileNotFoundError: Config file /etc/app/config.yaml does not exist.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "When port lengh is bigger thant strlen(\"65535\"), redis-cli prompt seems wrong.\r\nI started a server with port 30001，and connect it with \"redis-cli -p 300010000\"，while the prompt is \"127.0.0.1:300010000>\". \r\nI think it should be \"127.0.0.1:30001\".",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "The while loop is useless and it may send redundant commands to server.",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Add `needs:save` tag for the test introduced by https://github.com/redis/redis/pull/11376",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Hello Experts,\r\n\r\nWe are testing redis 7.0.5 before rolling out this version to production. For testing we are using below command\r\n\r\nredis-benchmark -p 6382 -c 1000 -r 1700000 -n 1700000 -t hset -d 18000 -P 750\r\nThis command inserted around 21 Gig of data in redis but we observed that data synching between master and slave node didn't get completed even after 20 minutes. \r\n\r\nPlease see below screenshot\r\n![image](https://user-images.githubusercontent.com/3268654/202378207-f9d9415f-7e39-45d5-a1ab-e61a82f04bb0.png)\r\n\r\n\r\nPlesae see below logs\r\n\r\n11:M 16 Nov 2022 09:17:19.695 * Replica [10.3.50.102:6379](http://10.3.50.102:6379/) asks for synchronization\r\n11:M 16 Nov 2022 09:17:19.695 * Unable to partial resync with replica [10.3.50.102:6379](http://10.3.50.102:6379/) for lack of backlog (Replica request was: [3866175099](tel:(386)%20617-5099)).\r\n11:M 16 Nov 2022 09:17:19.695 * Can't attach the replica to the current BGSAVE. Waiting for next BGSAVE for SYNC\r\n11:M 16 Nov 2022 09:17:19.695 *",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "The following usage will output an empty newline:\r\n```\r\n> redis-cli help set\r\nempty line\r\n```\r\n\r\nThe reason is that in interactive mode, we have called\r\n`cliInitHelp`, which initializes help.\r\n\r\nWhen using `redis-cli help xxx` or `redis-cli help ? xxx`,\r\nwe can't match the command due to empty `helpEntries`,\r\nso we output an empty newline.\r\n\r\nIn this commit, we will call `cliInitHelp` to init the help.\r\nNote that in this case, we need to call `cliInitHelp` (COMMAND DOCS)\r\nevery time, which i think is acceptable.\r\n\r\nSo now the output will look like:\r\n```\r\n[redis]# src/redis-cli help get\r\n\r\n  GET key\r\n  summary: Get the value of a key\r\n  since: 1.0.0\r\n  group: string\r\n\r\n[redis]#\r\n```\r\n\r\nFixes #10378\r\n\r\nThis PR also fix a redis-cli crash when using `--ldb --eval`:\r\n```\r\n[root]# src/redis-cli --ldb --eval test.lua test 1\r\nLua debugging session started, please use:\r\nquit    -- End the session.\r\nrestart -- Restart the script in debug mode again.\r\nhelp    -- Show Lua script debugging commands",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "## Version:\r\n- os: centos 7.4 x64\r\n- redis: 5.0.7\r\n\r\n## Conf:\r\n\r\n**redis**\r\n```\r\nbind 0.0.0.0\r\nport 7003\r\ntcp-backlog 511\r\ntimeout 0\r\ntcp-keepalive 300\r\ndaemonize yes\r\nsupervised systemd\r\npidfile /var/run/redis_7003.pid\r\nloglevel notice\r\nlogfile /data/redis/7003/log/redis_7003.log\r\ndatabases 16\r\nsave \"\"\r\nmaxclients 10000\r\nmaxmemory 512MB\r\nmaxmemory-policy volatile-ttl\r\ndir /data/redis/7003/data\r\nrequirepass 123456\r\nappendonly yes\r\nappendfilename \"appendonly.aof\"\r\nappendfsync everysec\r\nauto-aof-rewrite-percentage 100\r\nauto-aof-rewrite-min-size 64mb\r\naof-load-truncated yes\r\naof-use-rdb-preamble yes\r\n```\r\n**systemd**\r\n```\r\n[Unit]\r\nDescription=Redis persistent key-value database\r\nAfter=network.target\r\n\r\n[Service]\r\nType=notify\r\nExecStart=/usr/local/redis/bin/redis-server /data/redis/7003/conf/redis.conf --supervised systemd\r\nExecReload=/bin/kill -USR2 $MAINPID\r\nExecStop=/usr/local/redis/bin/redis-cli -p 7003 -a 123456 shutdown;\r\nUser=redis\r\nGroup=redis\r\nRuntimeDirectory=redis\r\nRuntimeDirect",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "refer: #8205",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Fix coredump after `Client Unpause` command when threaded I/O is also enabled for the reading + parsing side and  clients are sending pipelining requests.\r\n\r\nenable threaded I/O in redis.conf:\r\n```\r\nio-threads 4\r\nio-threads-do-reads yes\r\n```\r\nstart redis-benchmark sending pipelining requests:\r\n```\r\nredis-benchmark -t set -P 1000 -c 10 -r 100000000 -n 100000000\r\n```\r\nsend `client pause` and `client unpause`:\r\n```\r\n127.0.0.1:6379> client pause 100000 write\r\nOK\r\n127.0.0.1:6379> client unpause\r\nCould not connect to Redis at 127.0.0.1:6379: Connection refused\r\n```\r\nBacktrace:\r\n```\r\n0   redis-server                        0x000000010e9e7b79 unblockClient + 329\r\n1   redis-server                        0x000000010e974e23 clientCommand + 3459\r\n2   redis-server                        0x000000010e95e2eb call + 267\r\n3   redis-server                        0x000000010e95f27e processCommand + 2398\r\n4   redis-server                        0x000000010e976e39 processInputBuffer + 393\r\n5   redis-server",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "This pull request corrects the following bug (fixes #3888):\r\n- Using `RedisModule_Call` write commands on a `HASH` data type passing a `'l' (long long)` formatter on `field` or `value` results in a segmentation fault.\r\n\r\nI wrote a [simple redis module](https://github.com/aviggiano/pr-redis) to better explain the problem. \r\nThe fix consists of calling `getDecodedObject` before the `hashTypeSet` call in the `hsetCommand` function. The `getDecodedObject` properly decodes a `(void*)(long long)` to a `sds` when the object is of type `OBJ_ENCODING_INT`, which is the case of this issue.\r\n\r\nNote: I'm not sure if this bug exists in other commands, since some of them use `getDecodedObject` internally (such as those from the `LIST` data type) and others do not (e.g. `HASH` write commands). It would be probably better to change all data types write calls to pass a `robj` instead of a `sds` as a function argument, but I wasn't not sure about how @antirez would feel about this structural change.",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "@hengku @itamarhaber Please have a look\r\n\r\nRelated to https://github.com/antirez/redis/issues/6474\r\n\r\nOutput Log:\r\n**Default Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 set key1 value1\r\n>>> Calling set key1 value1\r\n127.0.0.1:6001: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:7001: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:6003: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:6002: OK\r\n127.0.0.1:7002: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:7003: MOVED 9189 127.0.0.1:6002\r\n```\r\n\r\n**Master Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 master set key2 value1\r\n>>> Calling set key2 value1\r\n127.0.0.1:6001: OK\r\n127.0.0.1:6003: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:6002: MOVED 4998 127.0.0.1:6001\r\n```\r\n\r\n**Slave Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 slave set key2 value1\r\n>>> Calling set key2 value1\r\n127.0.0.1:7001: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:7002: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:7003: MOVED 4998 127.0.0.1:6001\r\n```",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "I have tested using `docker build` both within target(`docker build .`) and parallel to my fig location(`docker build web/`). When I use the direct `docker` command, my context builds normally about <8 MBs. When I invoke `fig build` the `web` container building process seems to not use the `.dockerignore` located in my web folder. Leading to `Service 'web' failed to build: write /mnt/sda1/var/lib/docker/aufs/mnt/.../app/log/development.log: no space left on device`",
+      "error_category": "Disk_Full",
+      "severity": "CRITICAL",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "reasoning": "Docker 리포지토리에서 수집된 디스크 용량 부족 에러. 불필요한 이미지/컨테이너 정리 필요."
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- pkg == \"golang.org/x/tools/gopls/internal/cache/parsego\" && test == \"TestGoplsSourceDoesNotUseObjectResolution\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8718211178121857857)):\n\n    === RUN   TestGoplsSourceDoesNotUseObjectResolution\n    runtime: VirtualAlloc of 8192 bytes failed with errno=1455\n    fatal error: out of memory\n    \n    runtime stack:\n    runtime.throw({0x7ff6eb6ee5ea?, 0x400b47e000?})\n    \tC:/Users/swarming/.swarming/w/ir/x/w/gopath/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.windows-arm64/src/runtime/panic.go:1101 +0x38 fp=0x8e015ffca0 sp=0x8e015ffc70 pc=0x7ff6eb461fb8\n    runtime.sysUsedOS(0x400b47e000, 0x2000)\n    \tC:/Users/swarming/.swarming/w/ir/x/w/gopath/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.windows-arm64/src/runtime/mem_windows.go:83 +0x178 fp=0x8e015ffd00 sp=0x8e015ffca0 pc=0x7ff6eb408048\n    runtime.sysUsed(...)\n    ...\n    created by golang.org/x/sync/errgroup.(*G",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- pkg == \"golang.org/x/tools/go/packages\" && test == \"TestParseFileModifyAST/Modules\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8718215636726388865)):\n\n    === RUN   TestParseFileModifyAST/Modules\n    === PAUSE TestParseFileModifyAST/Modules\n    === CONT  TestParseFileModifyAST/Modules\n        invoke.go:205: starting GOROOT= GOPATH=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\modcache GO111MODULE=off GOPROXY=file:///C:/Users/swarming/.swarming/w/ir/x/t/TestParseFileModifyAST_Modules2955769261/modproxy PWD=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\fake go list -e -f {{context.ReleaseTags}} -- unsafe\n        invoke.go:205: starting GOROOT= GOPATH=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\modcache GO111MODULE=on GOPROXY=file:///C:/Users/swarming/.swarming/w/ir/x/t/TestParseFileModifyAST_Modules295576",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- builder == \"x_tools-go1.23-windows-arm64\" && repo == \"tools\" && mode == \"build\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8718220110909758145)):\n\n    Use of LUCI is subject to the Google [Terms of Service](https://policies.google.com/terms) and [Privacy Policy](https://policies.google.com/privacy)\n    \n    [I2025-04-07T20:32:50.836111Z 30064 0 sink.go:350] SinkServer: warm-up started\n    [I2025-04-07T20:32:50.836111Z 30064 0 sink.go:423] SinkServer: starting HTTP server...\n    [I2025-04-07T20:32:50.838827Z 30064 0 sink.go:355] SinkServer: warm-up ended\n    [I2025-04-07T20:32:50.838827Z 30064 0 cmd_stream.go:569] rdb-stream: starting the test command - [\"C:\\\\Users\\\\swarming\\\\.swarming\\\\w\\\\ir\\\\cache\\\\tools\\\\bin\\\\result_adapter.exe\" \"go\" \"-v=false\" \"-dump-json\" \"C:\\\\Users\\\\swarming\\\\.swarming\\\\w\\\\ir\\\\x\\\\w\\\\go.testjson\" \"--\" \"C:\\\\Users\\\\swarming\\\\.swarming\\\\w\\\\ir\\\\x\\\\w\\\\goroot\\\\bin\\\\go\" \"test\" \"-json\"",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "```\r\n#!watchflakes\r\ndefault <- builder ~ `windows-arm64` && log ~ `fatal error: out of memory`\r\n```\r\n\r\nhttps://ci.chromium.org/ui/p/golang/builders/luci.golang.ci/gotip-windows-arm64\r\nseems all builders are offline.\r\n\r\ncc @golang/release @thanm",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### Go version\n\ngo1.25-devel_6c3b5a2798\n\n### Output of `go env` in your module/workspace:\n\n```shell\nAR='ar'\nCC='gcc'\nCGO_CFLAGS='-O2 -g'\nCGO_CPPFLAGS=''\nCGO_CXXFLAGS='-O2 -g'\nCGO_ENABLED='1'\nCGO_FFLAGS='-O2 -g'\nCGO_LDFLAGS='-O2 -g'\nCXX='g++'\nGCCGO='gccgo'\nGO111MODULE=''\nGOARCH='arm64'\nGOARM64='v8.0'\nGOAUTH='netrc'\nGOBIN=''\nGOCACHE='/root/.cache/go-build'\nGOCACHEPROG=''\nGODEBUG=''\nGOENV='/root/.config/go/env'\nGOEXE=''\nGOEXPERIMENT=''\nGOFIPS140='off'\nGOFLAGS=''\nGOGCCFLAGS='-fPIC -pthread -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=/tmp/go-build4235166786=/tmp/go-build -gno-record-gcc-switches'\nGOHOSTARCH='arm64'\nGOHOSTOS='linux'\nGOINSECURE=''\nGOMOD='/dev/null'\nGOMODCACHE='/root/go/pkg/mod'\nGONOPROXY=''\nGONOSUMDB=''\nGOOS='linux'\nGOPATH='/root/go'\nGOPRIVATE=''\nGOPROXY='https://proxy.golang.org,direct'\nGOROOT='/root/Code/src/github.com/golang/go'\nGOSUMDB='sum.golang.org'\nGOTELEMETRY='local'\nGOTELEMETRYDIR='/root/.config/go/telemetry'\nGOTMPDIR=''\nGOTOOLCHAIN='auto'\nGOTOOLDIR='/",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- pkg == \"cmd/cgo/internal/testsanitizers\" && test == \"TestLSAN/lsan1\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8721179446387710529)):\n\n    === RUN   TestLSAN/lsan1\n    === PAUSE TestLSAN/lsan1\n    === CONT  TestLSAN/lsan1\n        lsan_test.go:49: /home/swarming/.swarming/w/ir/x/t/TestLSANlsan1408284404/001/lsan1\n            signal: trace/breakpoint trap\n            AddressSanitizer:DEADLYSIGNAL\n            =================================================================\n            ==1596752==ERROR: AddressSanitizer: SEGV on unknown address 0x100d54dc9378 (pc 0x7fffbe7249ea bp 0x7ffffc3c9be0 sp 0x7ffffc3c9390 T-1)\n            ==1596752==The signal is caused by a READ memory access.\n            AddressSanitizer: CHECK failed: asan_suppressions.cpp:47 \"((suppression_ctx)) != (0)\" (0x0, 0x0) (tid=1596752)\n            AddressSanitizer: CHECK failed: asan_suppressions.cpp:47 \"((suppression_ctx)) != (0)",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### Go version\n\nGo Version: go1.24.1 linux/amd64\n\n### Output of `go env` in your module/workspace:\n\n```shell\nany\n```\n\n### What did you do?\n\nThere is a subtle memory leak pattern when `time.Local` is updated dynamically. When `time.LoadLocation` or `time.LoadLocationFromTZData` is called, it returns a pointer to a **newly allocated** `time.Location` object. \n\nIf a program repeatedly updates the global `time.Local` with these new instances (e.g., in a scheduled task or dynamic configuration update), any `time.Time` object created via `time.Now()` (or any constructor using `Local`) will hold a reference to that specific `Location` instance.\n\nIf these `time.Time` objects are long-lived (e.g., stored in a global cache, map, or persistent buffer), they prevent the specific `Location` instance from being garbage collected. Over time, as `time.Local` is reassigned again and again, the number of `Location` objects pinned in memory grows linearly, leading to a significant memory leak.\n\n**Reprodu",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### Go version\n\ngo version devel go1.24-6edc1c23ed Thu Aug 22 01:18:23 2024 +0000 linux/amd64\n\n### Output of `go env` in your module/workspace:\n\n```shell\nGO111MODULE=''\r\nGOARCH='amd64'\r\nGOBIN=''\r\nGOCACHE='/home/amarkin/.cache/go-build'\r\nGOENV='/home/amarkin/.config/go/env'\r\nGOEXE=''\r\nGOEXPERIMENT=''\r\nGOFLAGS=''\r\nGOHOSTARCH='amd64'\r\nGOHOSTOS='linux'\r\nGOINSECURE=''\r\nGOMODCACHE='/home/amarkin/go/pkg/mod'\r\nGONOPROXY=''\r\nGONOSUMDB=''\r\nGOOS='linux'\r\nGOPATH='/home/amarkin/go'\r\nGOPRIVATE=''\r\nGOPROXY='https://proxy.golang.org,direct'\r\nGOROOT='/home/amarkin/repo/go_bb'\r\nGOSUMDB='sum.golang.org'\r\nGOTMPDIR=''\r\nGOTOOLCHAIN='auto'\r\nGOTOOLDIR='/home/amarkin/repo/go_bb/pkg/tool/linux_amd64'\r\nGOVCS=''\r\nGOVERSION='devel go1.24-6edc1c23ed Thu Aug 22 01:18:23 2024 +0000'\r\nGODEBUG=''\r\nGOTELEMETRY='local'\r\nGOTELEMETRYDIR='/home/amarkin/.config/go/telemetry'\r\nGCCGO='gccgo'\r\nGOAMD64='v1'\r\nAR='ar'\r\nCC='gcc'\r\nCXX='g++'\r\nCGO_ENABLED='1'\r\nGOMOD='/home/amarkin/repo/benchmarks/go.mod'\r\nGOWORK=''\r\nCGO_CFLAGS='-O2 -g",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### gopls version\n\nBuild info\n----------\n```shell\ngolang.org/x/tools/gopls v0.18.1\n    golang.org/x/tools/gopls@v0.18.1 h1:2xJBNzdImS5u/kV/ZzqDLSvlBSeZX+pWY9uKVP7Pask=\n    github.com/BurntSushi/toml@v1.4.1-0.20240526193622-a339e1f7089c h1:pxW6RcqyfI9/kWtOwnv/G+AzdKuy2ZrqINhenH4HyNs=\n    github.com/google/go-cmp@v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\n    golang.org/x/exp/typeparams@v0.0.0-20241210194714-1829a127f884 h1:1xaZTydL5Gsg78QharTwKfA9FY9CZ1VQj6D/AZEvHR0=\n    golang.org/x/mod@v0.23.0 h1:Zb7khfcRGKk+kqfxFaP5tZqCnDZMjC5VtUBs87Hr6QM=\n    golang.org/x/sync@v0.11.0 h1:GGz8+XQP4FvTTrjZPzNKTMFtSXH80RAzG+5ghFPgK9w=\n    golang.org/x/telemetry@v0.0.0-20241220003058-cc96b6e0d3d9 h1:L2k9GUV2TpQKVRGMjN94qfUMgUwOFimSQ6gipyJIjKw=\n    golang.org/x/text@v0.22.0 h1:bofq7m3/HAFvbF51jz3Q9wLg3jkvSPuiZu/pD1XwgtM=\n    golang.org/x/tools@v0.30.1-0.20250221230316-5055f70f240c h1:Ja/5gV5a9Vvho3p2NC/T2TtxhHjrWS/2DvCKMvA0a+Y=\n    golang.org/x/vuln@v1.1.3 h1:NPGnvPOTgnjBc9HTaUx+nj+EaUYxl5SJO",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### Go version\n\ngo version go1.20.13 darwin/amd64\n\n### Output of `go env` in your module/workspace:\n\n```shell\ngo.opentelemetry.io/collector v0.98.0\r\ngithub.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver v0.98.0\n```\n\n\n### What did you do?\n\n fetching msg and just printing.\r\npprof result:\r\n<img width=\"1323\" alt=\"image\" src=\"https://github.com/user-attachments/assets/0348bca2-7f57-46df-b7f4-3daadc7825f8\">\r\n<img width=\"1398\" alt=\"image\" src=\"https://github.com/user-attachments/assets/df6f7780-ee73-42fa-aee4-f524d05e061a\">\r\n\r\n\n\n### What did you see happen?\n\nmemory usage is going up over time until oom\n\n### What did you expect to see?\n\nno oom",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "Hello,\r\nI currently adopted psycopg2 for logical decoding. It runs very fine for a few hours and then it throws the error : \r\nDatabaseError: SSL SYSCALL error: EOF detected\r\njust at the point : consume_stream(consume)\r\n\r\nand doesn't reconnect until a few hours later.\r\n\r\nany ideas ?\r\n\r\nrunning PG9.5 and psycopg2.7.1\r\n\r\nthanks",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "error: subprocess-exited-with-error",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "I'm trying to update my docker image switching from python:3.8.2-alpine3.10 to python:3.9.0-alpine3.12, but I'm getting an issue when running django commands SSL_check_private_key: symbol not found.\r\n\r\n\r\n\r\nI'm trying to update my docker image switching from python:3.8.2-alpine3.10 to python:3.9.0-alpine3.12, but I'm getting an issue when running django commands SSL_check_private_key: symbol not found.\r\n\r\nI get the following error when running checks:\r\n\r\nbash -c \"touch /var/donor_reporting_portal/.touch && django-admin check --deploy \" /usr/local/lib/python3.9/site-packages/environ/environ.py:628: UserWarning: /usr/local/lib/python3.9/site-packages/donor_reporting_portal/config/.env doesn't exist - if you're not configuring your environment separately, create one. Traceback (most recent call last): File \"/usr/local/bin/django-admin\", line 8, in sys.exit(execute_from_command_line()) File \"/usr/local/lib/python3.9/site-packages/django/core/management/init.py\", line 401, in execute_from_co",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Overnight database connections can timeout. Coming back one gets InterfaceErrors if not checking `closed` == 1. Can the pool please only hand out open connections, currently there is no check on `closed`. Meaning using it eg with pool.getconn() might raise. I see no point in a pool handing out broken connections, or me missed sth.?\r\n\r\nhttps://github.com/psycopg/psycopg2/blob/cb3353be1f10590cdc2a894ada42c3b4c171feb7/lib/pool.py#L86",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "**This is a bug tracker**\r\nI cant connect to redshift anymore.\r\n\r\n**Please complete the following information:**\r\n- OS: Ubuntu\r\n- Psycopg version: psycopg2-binary==2.9.10\r\n- Python version: 3.12\r\n- PostgreSQL version: ~\r\n- pip version 24.0\r\n\r\n**Describe the bug**\r\nI am just trying to make an connection to redshift database.\r\nThis code used to work a year ago, but I tried using it today and the error appears.\r\n\r\n```python\r\nfrom psycopg2 import connect\r\ncon = connect(\r\n    dbname=DB,\r\n    host=HOST,\r\n    port=PORT,\r\n    user=USERNAME,\r\n    password=PASSWORD,\r\n)\r\n\r\n```\r\n\r\nwhich gives me the following error:\r\n\r\n```\r\nFile ~/.local/lib/python3.12/site-packages/psycopg2/__init__.py:122, in connect(dsn, connection_factory, cursor_factory, **kwargs)\r\n    [119](https://file+.vscode-resource.vscode-cdn.net/home/miguel.filho/Documents/rnd_data_libs/utils/~/.local/lib/python3.12/site-packages/psycopg2/__init__.py:119)     kwasync['async_'] = kwargs.pop('async_')\r\n    [121](https://file+.vscode-reso",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Better handling of infinite date handling:\n\nCurrent state:\nhttp://initd.org/psycopg/docs/usage.html#infinite-dates-handling\n{{{\nPostgreSQL can store the representation of an “infinite” date, timestamp, or interval. Infinite dates are not available to Python, so these objects are mapped to date.max, datetime.max, interval.max. Unfortunately the mapping cannot be bidirectional so these dates will be stored back into the database with their values, such as 9999-12-31.\n}}}\n\nIt would be very good to have a better solution.\n\nFeature Request: Support the special values from postgres:\n- infinity\n- \\- infinity\n\nRelated: http://www.postgresql.org/docs/current/static/datatype-datetime.html#AEN6027\n\nI know that Python does not support infinty in the datetime module. \n\nMaybe psycopg could use a custom subclass of date/datetime/timedelta?",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "- OS: Debian 12\n- Psycopg version: 2.9.11\n- Python version: 3.11 (latest patch packaged by debian)\n- PostgreSQL version: managed postgres on Google cloud (I do not have the exact version at hand right now, but can find out if required)\n\n---\n\nDear maintainers,\nWhen our application connects to a managed postgres database on GCP with a password that is near expiry, the following is printed to stderr:\n\n`Caution: Password is set to expire on 2025-09-13 06:23:52+00. Be sure to update the password before the expiration time.`\n\nWe did some digging and it appears that this is a `NOTICE` that is sent on connection establishment. As our password is rotated regularly, this message is not actionable for us and we would like to suppress it.\n\nAs we do not have a custom notice handler in our python application, this notice should not appear on stderr in the first place. I read through the psycopg2 code and I believe that there is a race condition where `NOTICE` messages that are sent right when the co",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "error:\r\n\r\nOperationalError: server closed the connection unexpectedly This probably means the server terminated abnormally before",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "requests.exceptions.ConnectTimeout: HTTPSConnectionPool read timed out.",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "When a connection was closed by the server `cursor.execute()` raises an `AdminShutdown` exception:\r\n\r\n```\r\n>>> conn = psycopg2.connect(dsn=\"\")\r\n>>> # here the connection gets closed on the postgres side\r\n>>> curs = conn.cursor()\r\n>>> curs.execute(\"select 1\")\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 1, in <module>\r\npsycopg2.errors.AdminShutdown: terminating connection due to administrator command\r\nserver closed the connection unexpectedly\r\n        This probably means the server terminated abnormally\r\n        before or while processing the request.\r\n\r\n>>>\r\n```\r\n\r\nbut `conn.poll()` raises an `OperationalError`:\r\n\r\n```\r\n>>> conn = psycopg2.connect(dsn=\"\")\r\n>>> # here the connection gets closed on the postgres side\r\n>>> conn.poll()\r\n0\r\n>>> conn.poll()\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 1, in <module>\r\npsycopg2.OperationalError: server closed the connection unexpectedly\r\n        This probably means the server terminated abnormally\r\n        before o",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Error: invalid dsn: invalid connection option \"idle_timeout\"",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "**This is a bug tracker**\r\nIf you have a question, such has \"how do you do X with Python/PostgreSQL/psycopg2\" please [write to the mailing list](https://lists.postgresql.org/manage/) or [open a question](https://github.com/psycopg/psycopg2/discussions) instead.\r\n\r\n**Before opening this ticket, please confirm that:**\r\n- [ ] I am running the latest version of pip, i.e. typing ``pip --version`` you get [this version](https://pypi.org/project/pip/).\r\n- [ ] I have read the [installation documentation](https://www.psycopg.org/docs/install.html) and the [frequently asked questions](https://www.psycopg.org/docs/faq.html)\r\n- [ ] If install failed, I typed `pg_config` on the command line and I obtained an output instead of an error.\r\n\r\n**Please complete the following information:**\r\n\r\n- OS: **Oryx 0.2.20220825.1**, **gunicorn 20.1.0**\r\n- Psycopg version: **2.9.5** *psycopg2_binary-2.9.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl*\r\n- Python version: **3.11.0**\r\n- PostgreSQL versio",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "- OS: Ubuntu 20.04.6 LTS\r\n- Psycopg version: psycopg2 Version: 2.9.9\r\n- Python version: 3.11.8\r\n- PostgreSQL version: PostgreSQL 12.16 (Ubuntu 12.16-0ubuntu0.20.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0, 64-bit\r\n- pip version 24.1.1\r\n\r\nI have an linux service that runs `Thread()` every 12 second and do queries to database. Suddenly I notice that after 1-5 days my python script freezes and nothing happens. So I put a lot of breakpoints and found out that script hangs on these lines and nothing happens, no errors:\r\n```python\r\ncursor.execute(f\"SELECT 1 FROM _blocks WHERE number={block_number}\")\r\n_exists_block = cursor.fetchone()\r\n```\r\nService is located in `/etc/systemd/system/`:\r\n```\r\nEnvironment=PYTHONUNBUFFERED=1\r\nEnvironment=\"PATH=/home/fridary/miniconda3/envs/eth/bin\"\r\nExecStart=/home/fridary/miniconda3/envs/eth/bin/python eth_newHeads.py\r\nStandardOutput=append:/home/fridary/python/ethereum/lib/logs/service_output.log\r\nStandardError=append:/h",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Platforms: linux\n\n  This test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_rms_norm_bwd_bfloat16_split_reductions_False_shape0_max_autotune_False_initial_xblock_1_add_1dim_False&suite=NoMixOrderReductionTest&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/66335692983).\n\n  Over the past 6 hours, it has been determined flaky in 16 workflow(s) with 32 failures and 16 successes.\n\n  **Debugging instructions (after clicking on the recent samples link):**\n  DO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\n  To find relevant log snippets:\n  1. Click on the workflow logs linked above\n  2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n  3. Grep for `test_rms_norm_bwd_bfloat16_split_reductions_False_shape0_max_autotune_False_initial_",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "### 🐛 Describe the bug\n\n# Description\nThere appears to be a significant and consistent memory leak in the PyTorch `DataLoader` on the Windows platform. The leak occurs specifically when the DataLoader's iterator is kept alive for a large number of steps (e.g., in an \"infinite\" sampling loop for step-based training).\n\nThe key characteristics of this bug are:\n* System RAM continuously increases until the program crashes or the system becomes unresponsive.\n* The leak occurs even when `num_workers=0`, indicating it is not a multiprocessing-related issue.\n* The leak occurs even when pin_memory=False, indicating it is not related to CUDA pinned memory.\n* With pin_memory=True: The Shared GPU Memory (as reported by Windows Task Manager) continuously increases, even if no tensors are ever moved to a CUDA device. This eventually leads to a CUDA out of memory error, while the dedicated GPU memory remains unused.\n* Explicitly calling gc.collect() does not free the leaked memory, suggesting the lea",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "OutOfMemoryError: CUDA out of memory. Tried to allocate 3725.29 GiB. GPU",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Platforms: linux, slow\n\nThis test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_max_split_expandable&suite=TestCudaMallocAsync&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/29456799947).\n\nOver the past 3 hours, it has been determined flaky in 16 workflow(s) with 48 failures and 16 successes.\n\n**Debugging instructions (after clicking on the recent samples link):**\nDO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\nTo find relevant log snippets:\n1. Click on the workflow logs linked above\n2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n3. Grep for `test_max_split_expandable`\n4. There should be several instances run (as flaky tests are rerun in CI) from which you can study the logs.\n\n\n\n<details><summary>Sample error message</s",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Stack from [ghstack](https://github.com/ezyang/ghstack) (oldest at bottom):\n* __->__ #173735\n\nThis test is failing with CUDA out of memory. I guess we need the decorator on the calling method too?\n\nFixes: https://github.com/pytorch/pytorch/issues/145359\n\ncc @voznesenskym @penguinwu @EikanWang @jgong5 @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @wenzhe-nrv @jiayisunx @ipiszy @kadeng @muchulee8 @amjames @chauhang @aakhundov @coconutruben @jataylo",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.06 GiB. GPU 0 has a total capacity of 15.56 GiB of which 2.74 GiB is free. Inc",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Platforms: linux\n\n  This test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_rms_norm_bwd_bfloat16_split_reductions_False_shape0_max_autotune_False_initial_xblock_1_add_1dim_True&suite=NoMixOrderReductionTest&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/66390491523).\n\n  Over the past 6 hours, it has been determined flaky in 10 workflow(s) with 20 failures and 10 successes.\n\n  **Debugging instructions (after clicking on the recent samples link):**\n  DO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\n  To find relevant log snippets:\n  1. Click on the workflow logs linked above\n  2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n  3. Grep for `test_rms_norm_bwd_bfloat16_split_reductions_False_shape0_max_autotune_False_initial_x",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Platforms: linux\n\n  This test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_cublas_addmm_reduced_precision_fp16_accumulate_size_10000_backend_cublas_cuda_bfloat16&suite=TestMatmulCudaCUDA&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/43015499460).\n\n  Over the past 3 hours, it has been determined flaky in 8 workflow(s) with 16 failures and 8 successes.\n\n  **Debugging instructions (after clicking on the recent samples link):**\n  DO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\n  To find relevant log snippets:\n  1. Click on the workflow logs linked above\n  2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n  3. Grep for `test_cublas_addmm_reduced_precision_fp16_accumulate_size_10000_backend_cublas_cuda_bfloat16`\n  4. There sho",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "https://hud.pytorch.org/hud/pytorch/pytorch/9df2e8020f190bdad02258aff2b2f88f7db3dcab/1?per_page=100&mergeEphemeralLF=true\r\n\r\nhttps://hud.pytorch.org/pytorch/pytorch/commit/8e8d4b13b0f6358e249a1e6fea9831b91b41b6d0#43980565863-box\r\n\r\nstarted OOMing after switching to cuda 12.8\r\n\r\nMaybe b/c I made some changes fix the per process memory fraction so each proc has fewer memory\r\n```\r\n2025-06-12T15:29:50.4998758Z FAILED [0.0124s] test_linalg.py::TestLinalgCUDA::test_svd_memory_allocation_cuda_complex128 - torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 4.10 GiB. GPU 0 has a total capacity of 7.43 GiB of which 6.85 GiB is free. Process 80272 has 68.75 MiB memory in use. Process 83346 has 68.75 MiB memory in use. Process 83365 has 374.75 MiB memory in use. Process 83384 has 70.75 MiB memory in use. 2.90 GiB allowed; Of the allocated memory 240.00 MiB is allocated by PyTorch, and 2.00 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try settin",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Platforms: linux, win, windows, slow\n\n\n\n\n\nThis test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_assigning_back_deleter_fns_to_tensor&suite=TestBlockStateAbsorption&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/29446658101).\n\nOver the past 3 hours, it has been determined flaky in 30 workflow(s) with 90 failures and 30 successes.\n\n**Debugging instructions (after clicking on the recent samples link):**\nDO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\nTo find relevant log snippets:\n1. Click on the workflow logs linked above\n2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n3. Grep for `test_assigning_back_deleter_fns_to_tensor`\n4. There should be several instances run (as flaky tests are rerun in CI) from which you can study",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "### 🐛 vLLM Update to Release 2.10 Status\n\nDec 18 2025 11AM EST Update. \n\nETA for this work to be complete: 1.9.2026 Final RC produced:\n* M4: Release branch finalized, Announce final launch date, Feature classifications published (week of 1/9/26) - Final RC is produced.\n* M4.1: Tutorial drafts submission deadline (1/12/26)\n* M5: External-Facing Content Finalized (1/16/26)\n* M6: PyTorch Release Day (1/21/26)\n\nThis issue description is updated on daily basis with  latest findings from https://github.com/vllm-project/vllm/pull/30525 \n\nRC1 Run: https://buildkite.com/vllm/ci/builds/43419  - 14.12.2025\nRC1 Run: https://buildkite.com/vllm/ci/builds/43612 - 15.12.2025\nRC1 Run: https://buildkite.com/vllm/ci/builds/43679 - 16.12.2025\nRC1 Run: https://buildkite.com/vllm/ci/builds/43849 - 17.12.2025\nRC1 Run with skipped tests: https://buildkite.com/vllm/ci/builds/43786 - 17.12.2025 \nRC1 Run: https://buildkite.com/vllm/ci/builds/43989 - 18.12.2025\nRC1 Run with skipped tests: https://buildkite.com/vl",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "### 🐛 Describe the bug\n\nthis could be related to https://github.com/pytorch/pytorch/issues/172537, but https://github.com/pytorch/pytorch/issues/172537 is regarding performance, not memory.\n\nRun the repro code below on torch 2.8.0 and torch 2.9.1\nopen the resulting file using https://docs.pytorch.org/memory_viz\n\ntorch 2.8.0 peak vram is 6.3 GB\ntorch 2.9.1 peak vram is 12.7 GB\n\non 16 GB vram GPUs it can fail entirely because of fragmentation:\n```\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.06 GiB. GPU 0 has a total capacity of 15.56 GiB of which 2.74 GiB is free. Including non-PyTorch memory, this process has 12.37 GiB memory in use. Of the allocated memory 6.55 GiB is allocated by PyTorch, and 5.53 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environm",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "### Summary\r\n\r\nI had `private_key_file` in .ansible.cfg and used that file. But now it seems that `ansible_ssh_private_key_file` from group vars takes precedence.\r\n\r\n### Issue Type\r\n\r\nBug Report\r\n\r\n### Component Name\r\n\r\nvariables\r\n\r\n### Ansible Version\r\n\r\n```console\r\n$ ansible --version\r\nansible [core 2.11.12] \r\n  config file = /home/ann/.ansible.cfg\r\n  configured module search path = ['/home/ann/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /usr/local/lib/python3.6/site-packages/ansible\r\n  ansible collection location = /home/ann/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /usr/local/bin/ansible\r\n  python version = 3.6.8 (default, Sep 13 2022, 09:40:27) [GCC 8.5.0 20210514 (Red Hat 8.5.0-10.1.0.1)]\r\n  jinja version = 2.10.1\r\n  libyaml = True\r\n```\r\n\r\n\r\n### Configuration\r\n\r\n```console\r\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "##### SUMMARY\r\n\r\nResolves https://github.com/ansible/ansible/issues/82713\r\n\r\nAdding the `--confcutdir` option to the `pytest` invocation prevents pytest >= 8 from searching for `conftest.py` in unwanted locations, such as all directories under `/home`. This can occur when running ansible-test from an install, where it sources a pytest config file from a path symlinked under `/tmp`.\r\n\r\nThanks to @sivel for digging into this and figuring out the `--confcutdir` option prevents the unwanted behavior.\r\n\r\n##### ISSUE TYPE\r\n\r\nBugfix Pull Request",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "<!---\r\nVerify first that your issue/request is not already reported on GitHub.\r\nTHIS FORM WILL BE READ BY A MACHINE, COMPLETE ALL SECTIONS AS DESCRIBED.\r\nAlso test if the latest release, and devel branch are affected too.\r\nALWAYS add information AFTER (OUTSIDE) these html comments.\r\nOtherwise it may end up being automatically closed by our bot. -->\r\n\r\n##### SUMMARY\r\n<!--- Explain the problem briefly -->\r\n\r\nHello There, if the Environment Variable ANSIBLE_VAULT_PASSWORD_FILE is empty but set, (to override specific ansible.cfg Settings, on the current working dir), which is not wanted by me personal. I get the following error:\r\n```\r\nERROR! Problem running vault password script /home/nronecker/projects/anon/ansible ([Errno 13] Permission denied). If this is not a script, remove the executable bit from the file.\r\n```\r\nAnsible acts like the Variable is set to \".\", which in my case is unusefull, i want to type the password in by myself.\r\nI use the following Command: `ANSIBLE_VAULT_PASSWORD_F",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\n\nAlthough I can interact with a host using ssh from the control node, ansible complains about permissions. \n\n### Issue Type\n\nBug Report\n\n### Component Name\n\npip\n\n### Ansible Version\n\n```console\n$ ansible --version\r\nansible [core 2.15.1]\r\n  config file = None\r\n  configured module search path = ['/Users/xxx/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /Users/xxx/.local/lib/python3.9/site-packages/ansible\r\n  ansible collection location = /Users/xxx/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /Users/xxx/.local/bin/ansible\r\n  python version = 3.9.5 (default, May 18 2021, 12:31:01) [Clang 10.0.0 ] (/Users/xxx/opt/miniconda3/bin/python3)\r\n  jinja version = 3.0.1\r\n  libyaml = True\n```\n\n\n### Configuration\n\n```console\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed -t all\r\nCONFIG_FILE() = None\r\nPAGER(env: PAGER) = less\n```\n\n\n###",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\n\nI am running simple shell module with async and poll and getting permission denied error on the remote ansible module files. \n\n```\n(ansible_venv) [root@ansible_host]# ansible-playbook  k  -i tower.yml -e \"target_host=myhost\"\n\nPLAY [Run debug command] ********************************************************************************************************************************************\n\nTASK [IPU Remediate tasks | Apply latest updates on system] *********************************************************************************************************\n[WARNING]: sftp transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\n[WARNING]: scp transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\n[WARNING]: piped transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\nfatal: [myhost]: FAILED! => {\"msg\": \"failed to transfer file to /root/.ansible/tmp/ansible-local-523372x5d1eox9/tmp8j4g",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\n\nIt used to work but not with recent versions.\n\n### Issue Type\n\nBug Report\n\n### Component Name\n\nansible core\n\n### Ansible Version\n\n```console\n$ ansible --version\r\nansible [core 2.16.2]\r\n  config file = /home/self/.ansible.cfg\r\n  configured module search path = ['/home/self/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /home/self/.local/lib/python3.10/site-packages/ansible\r\n  ansible collection location = /home/self/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /home/self/.local/bin/ansible\r\n  python version = 3.10.12 (main, Nov 20 2023, 15:14:05) [GCC 11.4.0] (/usr/bin/python3)\r\n  jinja version = 3.0.3\r\n  libyaml = True\n```\n\n\n### Configuration\n\n```console\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed -t all\r\n\r\nI omit this as it includes too much private data\n```\n\n\n### OS / Environment\n\nKubuntu 22.04\n\n### Steps to Reprod",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\n\nThe mere act of importing an Ansible module may cause writing to `~/.ansible'. Worse, errors doing that are not caught and propagate out.\r\n\r\nIMHO it's a violation of Python's module contract for an import attempt to raise anything but `ImportError`. I also do not expect an import to write to my file system, much less die when it can't do that.\n\n### Issue Type\n\nBug Report\n\n### Component Name\n\nvars\n\n### Ansible Version\n\n```console\n2.17.5, devel 2a53b851fe\n```\n\n\n### Configuration\n\n```console\nnot relevant\n```\n\n\n### OS / Environment\n\nAny Linux with a user that has a nonexistent or unwriteable home directory\n\n### Steps to Reproduce\n\n```\r\n$ chmod 400 ~/.ansible\r\n$ ansible --version\r\n```\r\nAlternately\r\n```\r\n$ python3\r\n>>> from ansible.vars.hostvars import HostVars\r\n```\r\n\n\n### Expected Results\n\nThe command works.\n\n### Actual Results\n\n```console\nERROR: Unable to create local directories(/home/smurf/.ansible/tmp): [Errno 13] Permission denied: b'/home/smurf/.ansible/tmp'\r\n```\r\nExact s",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\r\n\r\nWhen installing Ansible in a virtual environment, it creates `.pyc` files as root when running playbooks. This leads to problems with updating/deleting these virtual environments later on.\r\n\r\n### Issue Type\r\n\r\nBug Report\r\n\r\n### Component Name\r\n\r\nany\r\n\r\n### Ansible Version\r\n\r\n```console\r\n$ ansible --version\r\nansible [core 2.17.5]\r\n  config file = None\r\n  configured module search path = ['/home/{...}/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /home/{...}/ansible-test/ansible-test/lib/python3.12/site-packages/ansible\r\n  ansible collection location = /home/{...}/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /home/{...}/ansible-test/bin/ansible\r\n  python version = 3.12.3 (main, Sep 11 2024, 14:17:37) [GCC 13.2.0] (/home/{...}/ansible-test/ansible-test/bin/python3)\r\n  jinja version = 3.1.4\r\n  libyaml = True\r\n```\r\n\r\n\r\n### Configuration\r\n\r\n```console\r\n# if using a version older than ansible-",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\n\nIf you have write permissions for the file you want to encrypt, but not for the directory it's in, `ansible-vault encrypt` corrupts the file.\r\n\r\nMy colleague originally encountered this problem on `ansible [core 2.13.1]` with `python version = 3.8.10`, which I believe is the version from the Ubuntu 20.04 package repo, but I managed to reproduce it on a fresh install of ansible core 2.15.2.\r\n\r\nI'd upload the original and corrupted file but my corporate firewall stupidly blocks gists and that's too annoying to work around right now. If you do think the files would help, just let me know and I'll make it work.\n\n### Issue Type\n\nBug Report\n\n### Component Name\n\nansible-vault\n\n### Ansible Version\n\n```console\n$ ansible --version\r\nansible [core 2.15.2]\r\n  config file = None\r\n  configured module search path = ['<homedir>/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = <homedir>/test_ansible/lib/python3.10/site-packages/ansible",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Summary\r\n\r\nRelates to #64954\r\n\r\nThis appears to still be an issue with rootless podman containers.  The ansible fact to set virtualization_type == podman is checking the contents of /proc/1/environ which is not readable in rootless containers when nested.\r\n\r\nTo reproduce run podman in docker as user:\r\n\r\n`$ docker run --rm --hostname docker --security-opt seccomp=unconfined --user podman -it quay.io/podman/stable bash`\r\n\r\nSecurity Option for seccomp is required to use \"clone\" per https://github.com/containers/podman/issues/10802\r\n \r\nNext run podman as user podman (included in podman's test container):\r\n\r\n`[podman@docker /]$ podman run --rm --uts=private --hostname podman -it quay.io/podman/stable bash`\r\n\r\n(re-pulls quay.io/podman/stable - used the uts=private param to set the hostname but not required for test, just easier to know what container I'm in)\r\n\r\n```\r\n[root@podman /]# yum install ansible\r\n<snip output>\r\n\r\n\r\n[root@podman /]# ansible localhost -m setup|grep 'ansible_virtuali",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "### Environment\n\nInclude the result of the following commands:\n  - `nginx/1.24.0`\n  - `Linux i-0b1e9a928bcb1c9f8 6.8.0-1026-aws #28-Ubuntu SMP Mon Mar 24 19:41:53 UTC 2025 aarch64 aarch64 aarch64 GNU/Linux`\n\n### Description\n\nDescribe the bug in full detail including expected and actual behavior.\nSpecify conditions that caused it. Provide the relevant part of nginx\nconfiguration and debug log.\n\n- [ ] The bug is reproducible with the latest version of nginx\n- [ ] The nginx configuration is minimized to the smallest possible\nto reproduce the issue and doesn't contain third-party modules\n\n#### nginx configuration\n\n```\n# grep -r \"listen\" /etc/nginx/*\n/etc/nginx/sites-available/domain.conf:    listen 443 ssl http2 default_server;\n```\nor share the configuration in [gist](https://gist.github.com/).\n\n#### nginx debug log\n\nIt is advised to enable\n[debug logging](http://nginx.org/en/docs/debugging_log.html).\n```\n# Your nginx debug log here\nApr 18 21:43:06 i-0b1e9a928bcb1c9f8 nginx[4748]: 2025/04/",
+      "error_category": "Port_Conflict",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "nginx",
+      "reasoning": "Nginx 리포지토리에서 수집된 포트 충돌 에러. 기존 프로세스 종료 후 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Most static pods run as critical components. When an exception occurs and a restart is required, the sooner the better, so a separate backoff policy is set for static pods.\r\n\r\n\r\n\r\n#### What type of PR is this?\r\n\r\n/kind feature\r\n\r\n#### What this PR does / why we need it:\r\n\r\n#### Which issue(s) this PR fixes:\r\n\r\n#### Special notes for your reviewer:\r\n\r\n#### Does this PR introduce a user-facing change?\r\n\r\nNONE\r\n\r\n```release-note\r\n\r\n```\r\n\r\n#### Additional documentation e.g., KEPs (Kubernetes Enhancement Proposals), usage docs, etc.:\r\n\r\n<!--\r\nThis section can be blank if this pull request does not require a release note.\r\n\r\nWhen adding links which point to resources within git repositories, like\r\nKEPs or supporting documentation, please reference a specific commit and avoid\r\nlinking directly to the master branch. This ensures that links reference a\r\nspecific point in time, rather than a document that may change over time.\r\n\r\nSee here for guidance on getting permanent links to files: https:/",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "**What should be added?**\r\nThis issue focuses on writing new test cases that cover Pod lifecycle events in Kubernetes. The aim is to create a suite of tests that thoroughly document and validate the behaviours throughout the Pod lifecycle. These tests will ensure that Pods function correctly during various phases, including creation, deletion, probe handling, restart policies, and termination scenarios.\r\n\r\nTasks:\r\n- [ ] Create a new directory structure to organise tests by area and behaviour: test/e2e_node/AREA/BEHAVIOUR-SHORTNAME_test.go\r\n \r\n**Write test cases for the following Pod lifecycle behaviours:**\r\n\r\nPod Phases:\r\n\r\n- [ ]  Pending \r\n- [ ]  Running\r\n- [ ]  Succeeded\r\n- [ ]  Failed\r\n- [ ]  Unknown\r\n\r\nContainer States:\r\n\r\n- [ ]  Waiting\r\n- [ ]  Running\r\n- [ ] Terminated\r\n\r\nLifecycle Hooks:\r\n\r\n- [ ] postStart Hook\r\n- [ ] preStop Hook\r\n\r\nProbes:\r\n\r\n - [ ] Liveness Probe\r\n - [ ] Readiness Probe \r\n - [ ] Startup Probe\r\n\r\nRestart Policies:\r\n\r\n - [ ] Always\r\n - [ ] OnFailure\r\n - [ ] Nev",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "### What happened?\n\nAfter enabling the feature --feature-gates=InPlacePodVerticalScaling=true, I tried to dynamically patch the Pod’s CPU and memory with\n```\n> kubectl patch pod operator-0 -n wx \\\n>   --type='json' \\\n>   -p='[{\"op\":\"replace\",\"path\":\"/spec/containers/0/resources\",\"value\":{\"requests\":{\"cpu\":\"4\",\"memory\":\"4096Mi\"},\"limits\":{\"cpu\":\"4\",\"memory\":\"4096Mi\"}}}]'\n```\n\nThe Pod then failed and showed:\n```\nstatus:\n  conditions:\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:06:23Z\"\n    status: \"True\"\n    type: Initialized\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:45:10Z\"\n    message: 'containers with unready status: [goldendb-operator]'\n    reason: ContainersNotReady\n    status: \"False\"\n    type: Ready\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:45:10Z\"\n    message: 'containers with unready status: [goldendb-operator]'\n    reason: ContainersNotReady\n    status: \"False\"\n    type: ContainersReady\n  - lastProbeTime: null\n    last",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "running a kubernetes cluster on low priority vms using aks-engine, when attempting to scale up our container deployment (single container image) we are getting a lot of failed containers  failing to resolve public dns addresses \r\n\r\nkubectl get pods\r\nNAME                                              READY     STATUS             RESTARTS   AGE\r\nclients-user-experience-journey-7d74567f6-22ghg   1/1       Running            0          29m\r\nclients-user-experience-journey-7d74567f6-24lvj   0/1       CrashLoopBackOff   10         1h\r\nclients-user-experience-journey-7d74567f6-2568g   0/1       Completed          10         1h\r\nclients-user-experience-journey-7d74567f6-26dj7   0/1       CrashLoopBackOff   10         1h\r\nclients-user-experience-journey-7d74567f6-26x2c   1/1       Running            0          1h\r\nclients-user-experience-journey-7d74567f6-276sd   1/1       Running            10         1h\r\nclients-user-experience-journey-7d74567f6-27hjl   0/1       CrashLoopBackOff   10",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "### What would you like to be added?\n\nWe should add a swap test in e2e for swap that tests OOM with LimitedSwap.  We can replicate similar tests from OOMKilled but we should run them separately from conformance.  \n\n### Why is this needed?\n\nhttps://github.com/kubernetes/kubernetes/pull/121706\r\n\r\nTesting UnlimitedSwap in OOM will cause a lot of failures in CI.  This is because the kernel will reclaim memory and you won't hit the pressure limit.  \r\n\r\nLimitedSwap is necessary for OOM.  But we were not a",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "#### What type of PR is this?\r\n\r\n/kind feature\r\n\r\n#### What this PR does / why we need it:\r\n\r\nSets the oom.memory.group bit for container cgroups on kernels with cgroups v2.\r\n\r\n#### Which issue(s) this PR fixes:\r\nFixes #117070\r\n\r\n#### Special notes for your reviewer:\r\n\r\n#### Does this PR introduce a user-facing change?\r\n<!--\r\nIf no, just write \"NONE\" in the release-note block below.\r\nIf yes, a release note is required:\r\nEnter your extended release note in the block below. If the PR requires additional action from users switching to the new release, include the string \"action required\".\r\n\r\nFor more information on release notes see: https://git.k8s.io/community/contributors/guide/release-notes.md\r\n-->\r\n```release-note\r\nIf using cgroups v2, then the cgroup aware OOM killer will be enabled for container cgroups via  `memory.oom.group` .  This causes processes within the cgroup to be treated as a unit and killed simultaneously in the event of an OOM kill on any process in the cgroup.\r\n```",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "### What happened?\n\nI find some error when using Cilium as Kubernetes network.\r\n\r\n- Cilium: 1.11.6\r\n- Kubernetes: 1.23.0\r\n\r\n## Describe\r\n\r\nThe step of create cluster as follow:\r\n\r\n1. Use `kubeadm --config kubeadm.conf` to init cluster:\r\n```shell\r\nkind: InitConfiguration\r\nlocalAPIEndpoint:\r\n  advertiseAddress: 192.168.153.21\r\n  bindPort: 6443\r\nnodeRegistration:\r\n  criSocket: /var/run/dockershim.sock\r\n  imagePullPolicy: IfNotPresent\r\n  name: nm\r\n  taints: null\r\n---\r\napiServer:\r\n  timeoutForControlPlane: 4m0s\r\napiVersion: kubeadm.k8s.io/v1beta3\r\ncertificatesDir: /etc/kubernetes/pki\r\nclusterName: kubernetes\r\ncontrollerManager: {}\r\ndns: {}\r\netcd:\r\n  local:\r\n    dataDir: /var/lib/etcd\r\nimageRepository: registry.aliyuncs.com/google_containers\r\nkind: ClusterConfiguration\r\nkubernetesVersion: 1.23.0\r\nnetworking:\r\n  dnsDomain: cluster.local\r\n  serviceSubnet: 10.96.0.0/12\r\n  podSubnet: 10.5.0.0/16\r\nscheduler: {}\r\n---\r\napiVersion: kubelet.config.k8s.io/v1beta1\r\nkind: KubeletConfiguration\r\nresolvCon",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "This PR is based on #122763, and we use `IsEventedPLEGInUse()` instead of `utilfeature.DefaultFeatureGate.Enabled(features.EventedPLEG)`.\r\n\r\n- This PR also includes #127954 which can fix init container problem.\r\n\r\nFixes #123087\r\n\r\nContext can be found in #122763.\r\n\r\n```release-note\r\nkubelet: fix a static pod startup bug with Evented PLEG\r\n```",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    }
+  ]
+}

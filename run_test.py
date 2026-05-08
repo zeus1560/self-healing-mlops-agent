@@ -25,6 +25,7 @@ def simulate_error_handling(error_log: str, engine, executor, observer, step_nam
     resolution_source = (
         "L1_CACHE" if "Vector DB 유사도 매칭 성공" in decision.reasoning else "L2_LLM"
     )
+    # Ollama/규칙 기반도 L2로 분류 (소스 구분은 reasoning 마커로 확인 가능)
 
     observer.log_event(
         error_log=error_log,

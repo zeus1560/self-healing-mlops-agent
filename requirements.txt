@@ -1,10 +1,11 @@
 ﻿# --- 1. Core LLM & Inference (의존성 지옥 탈출 황금 버전) ---
+--extra-index-url https://developer.intel.com/ipex-whl-stable-cpu
 transformers==4.43.3
 tokenizers==0.19.1
-trl
+trl==0.9.6
 py-cpuinfo
-ipex-llm[all]
-torch
+ipex-llm
+torch==2.1.2+cpu
 
 # --- 2. Vector DB & 호환성 패치 (NumPy 2.0 대재앙 방지) ---
 chromadb==0.5.0
@@ -18,6 +19,8 @@ fastapi==0.124.0
 uvicorn==0.38.0
 starlette==0.50.0
 streamlit
+altair
+watchdog
 
 # --- 4. Database & ORM (PostgreSQL 연결용) ---
 SQLAlchemy==2.0.44

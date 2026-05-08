@@ -1,4 +1,5 @@
-﻿# 🚀 [Intel Arc & Iris Xe] AI 자율 운영 에이전트 프로젝트
+﻿
+# 🚀 [Intel Arc & Iris Xe] AI 자율 운영 에이전트 프로젝트
 
 이 프로젝트는 제한된 로컬 GPU 환경(Intel Arc / Iris Xe)에서 동작하는 '비용 0원'의 Self-Healing MLOps 에이전트를 구축하는 저장소입니다.
 
@@ -28,7 +29,7 @@ Step 1. 최신 코드 가져오기 (작업 시작 전)
 
 git checkout dev # 일단 dev 브랜치로 이동
 git fetch origin dev # dev 최신화
-git pull origin dev # 팀원이 짠 최신 코드를 내 컴퓨터로 다운로드
+git pull --rebase origin dev # 팀원이 짠 최신 코드를 내 컴퓨터로 다운로드
 
 Step 2. 내 작업 공간(브랜치) 만들기
 
