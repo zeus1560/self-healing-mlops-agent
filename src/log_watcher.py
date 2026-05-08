@@ -177,7 +177,7 @@ def start_watching(target_log_files: str | List[str]) -> None:
     )
 
     _cluster_interval = 86400  # 24시간마다 클러스터링
-    _last_cluster     = 0.0
+    _last_cluster     = time.time()  # 시작 시점부터 카운트 → 24h 후 첫 실행
 
     try:
         while True:
