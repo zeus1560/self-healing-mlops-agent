@@ -5,21 +5,20 @@ import sys
 import time
 import traceback
 from collections import deque
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from typing import List
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from src.circuit_breaker import CircuitBreaker
+from src.error_clusterer import ErrorClusterer
 from src.executor import ActionExecutor
 from src.llm_engine import RAGEngine
 from src.maintenance import MaintenanceRunner
 from src.observability import AgentObserver
 from src.proactive_monitor import ProactiveMonitor
 from src.utils.debouncer import LogDebouncer
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from src.utils.logging_config import setup_json_logging
 
 
 class LogTailHandler(FileSystemEventHandler):
@@ -140,36 +139,54 @@ class LogTailHandler(FileSystemEventHandler):
         )
 
 
-def start_watching(target_log_file: str) -> None:
-    abs_log_file = os.path.abspath(target_log_file)
-    os.makedirs(os.path.dirname(abs_log_file), exist_ok=True)
+def start_watching(target_log_files: str | List[str]) -> None:
+    """
+    하나 또는 여러 로그 파일을 동시 감시한다.
+    target_log_files: 단일 경로(str) 또는 경로 목록(List[str])
+    """
+    if isinstance(target_log_files, str):
+        target_log_files = [target_log_files]
 
-    if not os.path.exists(abs_log_file):
-        with open(abs_log_file, "w", encoding="utf-8") as f:
-            f.write("=== System Log Initialized ===\n")
-
-    debouncer = LogDebouncer(cooldown_seconds=30)
-    event_handler = LogTailHandler(abs_log_file, debouncer)
-
+    debouncer    = LogDebouncer(cooldown_seconds=30)
     watch_observer = Observer()
-    watch_observer.schedule(
-        event_handler,
-        path=os.path.dirname(abs_log_file),
-        recursive=False,
-    )
-    watch_observer.start()
-    logging.info(f"실시간 로그 감시 시작: {abs_log_file}")
+    first_handler = None
 
-    maintenance  = MaintenanceRunner()
-    proactive    = ProactiveMonitor(
-        pipeline_callback=event_handler.trigger_agent_pipeline
+    for log_file in target_log_files:
+        abs_path = os.path.abspath(log_file)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        if not os.path.exists(abs_path):
+            with open(abs_path, "w", encoding="utf-8") as f:
+                f.write("=== System Log Initialized ===\n")
+
+        handler = LogTailHandler(abs_path, debouncer)
+        watch_observer.schedule(
+            handler,
+            path=os.path.dirname(abs_path),
+            recursive=False,
+        )
+        logging.info(f"실시간 로그 감시 시작: {abs_path}")
+        if first_handler is None:
+            first_handler = handler
+
+    watch_observer.start()
+
+    maintenance = MaintenanceRunner()
+    clusterer   = ErrorClusterer()
+    proactive   = ProactiveMonitor(
+        pipeline_callback=first_handler.trigger_agent_pipeline
     )
+
+    _cluster_interval = 86400  # 24시간마다 클러스터링
+    _last_cluster     = 0.0
 
     try:
         while True:
             time.sleep(1)
             maintenance.run_if_due()
             proactive.check_and_trigger()
+            if time.time() - _last_cluster >= _cluster_interval:
+                clusterer.run()
+                _last_cluster = time.time()
     except KeyboardInterrupt:
         watch_observer.stop()
         logging.info("감시 종료.")
@@ -177,5 +194,16 @@ def start_watching(target_log_file: str) -> None:
 
 
 if __name__ == "__main__":
-    TARGET_LOG = "./data/realtime_system.log"
-    start_watching(TARGET_LOG)
+    import json as _json
+    import sys as _sys
+    # JSON 로깅 활성화 (환경변수 USE_JSON_LOG=1)
+    if os.getenv("USE_JSON_LOG", "0") == "1":
+        setup_json_logging()
+    else:
+        logging.basicConfig(level=logging.INFO,
+                            format="%(asctime)s - %(levelname)s - %(message)s")
+
+    # 복수 로그 파일 지원: 인자로 여러 경로 전달 가능
+    # python -m src.log_watcher /var/log/app.log /var/log/nginx/error.log
+    targets = _sys.argv[1:] if len(_sys.argv) > 1 else ["./data/realtime_system.log"]
+    start_watching(targets)

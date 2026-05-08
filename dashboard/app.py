@@ -61,9 +61,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── 경로 상수 ─────────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).parent.parent
-DB_PATH     = BASE_DIR / "data" / "agent_metrics.db"
-RESULTS_DIR = BASE_DIR / "experiments" / "results"
+BASE_DIR     = Path(__file__).parent.parent
+DB_PATH      = BASE_DIR / "data" / "agent_metrics.db"
+RESULTS_DIR  = BASE_DIR / "experiments" / "results"
+CHROMA_PATH  = BASE_DIR / "data" / "chroma_db"
 
 # ── 색상 팔레트 ───────────────────────────────────────────────────────────────
 RESULT_COLORS = {"SUCCESS": "#2ecc71", "FAILURE": "#e74c3c", "IMPOSSIBLE": "#e67e22"}
@@ -186,10 +187,52 @@ if not df_all.empty:
     if source_opts:
         df_prev = df_prev[df_prev["resolution_source"].isin(source_opts)]
 
+# ── ChromaDB 벡터 품질 로드 ──────────────────────────────────────────────────
+@st.cache_data(ttl=120)
+def load_vector_quality() -> dict:
+    """ChromaDB에서 벡터 품질 지표를 수집한다."""
+    result = {
+        "total": 0, "categories": {}, "learned": 0,
+        "hit_rate": None, "dead_count": 0,
+    }
+    if not CHROMA_PATH.exists():
+        return result
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE_DIR))
+        from src.llm_engine import _get_chroma_client
+        col = _get_chroma_client().get_collection("error_playbook_vectors")
+        data = col.get(include=["metadatas"])
+        metas = data["metadatas"]
+        result["total"] = len(metas)
+        from collections import Counter
+        cats = Counter(m.get("error_category", "Unknown") for m in metas)
+        result["categories"] = dict(cats)
+        result["learned"] = sum(1 for m in metas if m.get("learned_at"))
+    except Exception:
+        pass
+
+    # metrics DB에서 L1 히트율 계산
+    if DB_PATH.exists() and result["total"] > 0:
+        try:
+            import sqlite3
+            with sqlite3.connect(DB_PATH) as conn:
+                total_q = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
+                l1_hits = conn.execute(
+                    "SELECT COUNT(*) FROM metrics WHERE resolution_source='L1_CACHE'"
+                ).fetchone()[0]
+            result["hit_rate"] = (l1_hits / total_q * 100) if total_q else 0.0
+        except Exception:
+            pass
+
+    return result
+
+
 # ── 탭 레이아웃 ───────────────────────────────────────────────────────────────
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "📡  실시간 에이전트 모니터링",
     "🔬  아키텍처 실험 및 성능 평가",
+    "🧬  Vector DB 품질 모니터링",
 ])
 
 
@@ -748,6 +791,86 @@ with tab2:
                     height=260,
                 )
                 st.plotly_chart(fig_sec, use_container_width=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TAB 3 — Vector DB 품질 모니터링
+# ════════════════════════════════════════════════════════════════════════════════
+with tab3:
+    vq = load_vector_quality()
+    st.markdown("ChromaDB에 누적된 에러 지식 벡터의 품질과 분포를 모니터링합니다.")
+    st.divider()
+
+    if vq["total"] == 0:
+        st.info(
+            "Vector DB가 비어있거나 경로를 찾을 수 없습니다. "
+            "`python -m src.etl_vector_sync` 로 데이터를 먼저 로드하세요."
+        )
+    else:
+        # ── KPI ──────────────────────────────────────────────────────────
+        st.markdown('<p class="section-title">Vector DB 핵심 지표</p>',
+                    unsafe_allow_html=True)
+        vk1, vk2, vk3, vk4 = st.columns(4)
+        vk1.metric("총 벡터 수",       f"{vq['total']:,} 개")
+        vk2.metric("학습된 벡터 (L2)", f"{vq['learned']:,} 개",
+                   f"{vq['learned']/vq['total']*100:.1f}%")
+        vk3.metric("카테고리 수",      f"{len(vq['categories'])} 종류")
+        if vq["hit_rate"] is not None:
+            vk4.metric("L1 히트율",    f"{vq['hit_rate']:.1f} %")
+        else:
+            vk4.metric("L1 히트율",    "데이터 없음")
+
+        st.divider()
+
+        # ── 카테고리 분포 ────────────────────────────────────────────────
+        v1, v2 = st.columns([5, 5])
+        with v1:
+            st.markdown('<p class="section-title">에러 카테고리별 벡터 분포</p>',
+                        unsafe_allow_html=True)
+            cat_df = pd.DataFrame(
+                list(vq["categories"].items()), columns=["category", "count"]
+            ).sort_values("count", ascending=False)
+            fig_cat = px.bar(
+                cat_df, x="count", y="category", orientation="h",
+                color="count", color_continuous_scale="Viridis",
+                text="count", template=THEME,
+                labels={"count": "벡터 수", "category": "에러 카테고리"},
+            )
+            fig_cat.update_traces(textposition="outside", marker_line_width=0)
+            fig_cat.update_layout(
+                coloraxis_showscale=False,
+                yaxis=dict(autorange="reversed", title=None),
+                margin=dict(t=10, b=10, l=10, r=60), height=380,
+            )
+            st.plotly_chart(fig_cat, use_container_width=True)
+
+        with v2:
+            st.markdown('<p class="section-title">벡터 구성 비율 (원본 vs 학습)</p>',
+                        unsafe_allow_html=True)
+            original = vq["total"] - vq["learned"]
+            fig_pie = px.pie(
+                pd.DataFrame({
+                    "구분": ["원본 Playbook", "L2/Rule 학습"],
+                    "수":   [original, vq["learned"]],
+                }),
+                names="구분", values="수", hole=0.5,
+                color_discrete_sequence=["#3498db", "#2ecc71"],
+                template=THEME,
+            )
+            fig_pie.update_layout(
+                legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center"),
+                margin=dict(t=10, b=30, l=10, r=10), height=380,
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        st.divider()
+
+        # ── 원시 카테고리 테이블 ─────────────────────────────────────────
+        st.markdown('<p class="section-title">카테고리별 상세</p>',
+                    unsafe_allow_html=True)
+        cat_df["비율(%)"] = (cat_df["count"] / vq["total"] * 100).round(1)
+        cat_df.columns = ["에러 카테고리", "벡터 수", "비율(%)"]
+        st.dataframe(cat_df, use_container_width=True, hide_index=True)
 
 
 # ── 자동 새로고침 ─────────────────────────────────────────────────────────────

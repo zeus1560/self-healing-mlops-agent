@@ -14,7 +14,6 @@ from chromadb.config import Settings
 
 from src.system_diagnostics import gather_system_context
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.schemas import AgentResponse, ActionType
 
@@ -284,7 +283,7 @@ class RAGEngine:
         logging.info("[RAGEngine] 에러 로그 벡터 유사도 검색 시작...")
         start_time = time.perf_counter()
 
-        results = self.collection.query(query_texts=[log_text], n_results=1)
+        results = self.collection.query(query_texts=[log_text], n_results=5)
 
         latency = time.perf_counter() - start_time
         logging.info(f"[RAGEngine] Vector DB 검색 완료 (소요시간: {latency:.4f}초)")
@@ -298,16 +297,41 @@ class RAGEngine:
                 resolution_source="L1_CACHE",
             )
 
-        best_match_doc = results["documents"][0][0]
-        best_match_meta = results["metadatas"][0][0]
-        distance = results["distances"][0][0]
+        # ── 앙상블: threshold 이하 결과 중 action_type 다수결 ──────────────
+        THRESHOLD = 1.2
+        candidates = [
+            (results["metadatas"][0][i], results["distances"][0][i])
+            for i in range(len(results["distances"][0]))
+            if results["distances"][0][i] <= THRESHOLD
+        ]
 
-        logging.info(f"  👉 [매칭된 과거 에러] {best_match_doc[:60]}... (거리: {distance:.4f})")
+        if candidates:
+            from collections import Counter
+            action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
+            top_action   = action_votes.most_common(1)[0][0]
+            # 다수결 action_type을 가진 후보 중 거리가 가장 가까운 것의 메타데이터 사용
+            best_match_meta = min(
+                (m for m, _ in candidates if m.get("action_type") == top_action),
+                key=lambda m: next(d for mm, d in candidates if mm is m),
+                default=candidates[0][0],
+            )
+            distance = candidates[0][1]  # 전체 최근접 거리 (로그용)
+            logging.info(
+                f"  [앙상블] {len(candidates)}/{len(results['distances'][0])}개 후보 "
+                f"→ 다수결 action: {top_action} (득표 {action_votes[top_action]}표)"
+            )
+        else:
+            # threshold 이하 없음 → 가장 가까운 것만 보고 slow track으로
+            best_match_meta = results["metadatas"][0][0]
+            distance = results["distances"][0][0]
+
+        best_match_doc = results["documents"][0][0]
+        logging.info(f"  [매칭된 과거 에러] {best_match_doc[:60]}... (거리: {distance:.4f})")
 
         # =================================================================
         # 2. [Slow Track] 모르는 에러 처리 (Fallback LLM 개입 + 사전 진단)
         # =================================================================
-        if distance > 1.2:
+        if not candidates:
             logging.warning(f"[RAGEngine] 유사도 낮음 (거리: {distance:.4f}). Fallback 체인 시작...")
 
             logging.info("🔍 [Observation] 시스템 상태 사전 진단을 시작합니다...")
@@ -372,7 +396,7 @@ class RAGEngine:
                 return AgentResponse(
                     error_category="Rule_Inferred",
                     severity="HIGH",
-                    action_type=ActionType.EXECUTE_LLM_COMMAND,
+                    action_type=ActionType.EXECUTE_RULE_COMMAND,
                     reasoning="규칙 기반 키워드 매칭",
                     resolution_source="RULE",
                     command=rule_cmd,

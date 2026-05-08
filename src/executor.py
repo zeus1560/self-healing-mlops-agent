@@ -101,7 +101,8 @@ class ActionExecutor:
                 "error_type": "EscalatedToHuman",
                 "error_detail": decision.reasoning[:300],
             }
-        elif decision.action_type == ActionType.EXECUTE_LLM_COMMAND:
+        elif decision.action_type in (ActionType.EXECUTE_LLM_COMMAND,
+                                       ActionType.EXECUTE_RULE_COMMAND):
             result = self._execute_llm_command(decision.command or "", original_error_log)
         else:
             logging.warning(f"수행 불가 액션: {decision.action_type}")
