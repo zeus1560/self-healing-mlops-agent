@@ -52,6 +52,8 @@ class AgentResponse:
     action_type: ActionType
     target_process: Optional[str] = None
     reasoning: str = ""
+    resolution_source: str = "L1_CACHE"  # "L1_CACHE" | "L2_LLM" | "RULE"
+    command: Optional[str] = None        # 실행할 셸 명령어 (L2/RULE 시 명시적으로 설정)
 
     def to_json(self):
         data = asdict(self)
