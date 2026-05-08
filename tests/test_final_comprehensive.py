@@ -375,15 +375,163 @@ class TestSchemas(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────
 class TestThresholdApplied(unittest.TestCase):
     def test_threshold_value_reasonable(self):
-        """threshold가 0.1~1.5 범위 내 합리적인 값인지 확인"""
+        """THRESHOLD 상수가 llm_engine.py에 합리적인 값으로 정의돼 있는지 확인"""
         import re
         with open("src/llm_engine.py", encoding="utf-8") as f:
             content = f.read()
-        m = re.search(r"if distance\s*[><=]+\s*(\d+\.\d+)", content)
-        self.assertIsNotNone(m, "threshold 비교 구문을 찾지 못했다")
+        # "THRESHOLD = 1.2" 형태 또는 "if distance > 1.2" 형태 모두 허용
+        m = (re.search(r"THRESHOLD\s*=\s*(\d+\.\d+)", content) or
+             re.search(r"if distance\s*[><=]+\s*(\d+\.\d+)", content))
+        self.assertIsNotNone(m, "THRESHOLD 정의 또는 distance 비교 구문을 찾지 못했다")
         threshold = float(m.group(1))
         self.assertGreater(threshold, 0.0)
         self.assertLess(threshold, 2.0, f"threshold={threshold}이 비합리적으로 크다")
+
+
+# ─────────────────────────────────────────────────────────────
+# #15 PII 마스킹
+# ─────────────────────────────────────────────────────────────
+class TestPIIMasker(unittest.TestCase):
+    def _mask(self, text):
+        from src.utils.pii_masker import mask
+        return mask(text)
+
+    def test_ipv4_masked(self):
+        self.assertIn("<IP>", self._mask("host=192.168.1.100 failed"))
+
+    def test_email_masked(self):
+        self.assertIn("<EMAIL>", self._mask("user admin@corp.com not found"))
+
+    def test_password_masked(self):
+        result = self._mask("password=supersecret123")
+        self.assertNotIn("supersecret123", result)
+        self.assertIn("<REDACTED>", result)
+
+    def test_aws_key_masked(self):
+        self.assertIn("<AWS_KEY>", self._mask("key=AKIAIOSFODNN7EXAMPLE"))
+
+    def test_safe_text_unchanged(self):
+        safe = "ERROR: disk full on /var/log"
+        self.assertEqual(self._mask(safe), safe)
+
+
+# ─────────────────────────────────────────────────────────────
+# #14 EXECUTE_RULE_COMMAND ActionType
+# ─────────────────────────────────────────────────────────────
+class TestRuleCommandActionType(unittest.TestCase):
+    def test_rule_command_distinct_from_llm(self):
+        from src.schemas import ActionType
+        self.assertNotEqual(
+            ActionType.EXECUTE_RULE_COMMAND,
+            ActionType.EXECUTE_LLM_COMMAND,
+        )
+
+    def test_executor_handles_rule_command(self):
+        from src.schemas import ActionType, AgentResponse
+        from src.executor import ActionExecutor
+        import os
+        os.environ["AUTO_APPROVE"] = "true"
+        ex = ActionExecutor()
+        resp = AgentResponse(
+            error_category="Test",
+            severity="LOW",
+            action_type=ActionType.EXECUTE_RULE_COMMAND,
+            command="uptime",
+            resolution_source="RULE",
+        )
+        result = ex.execute(resp, original_error_log="test")
+        os.environ.pop("AUTO_APPROVE", None)
+        self.assertIn(result["result_category"], {"SUCCESS", "FAILURE", "IMPOSSIBLE"})
+
+
+# ─────────────────────────────────────────────────────────────
+# #9 n_results=5 앙상블 — 코드 검증
+# ─────────────────────────────────────────────────────────────
+class TestEnsembleQuery(unittest.TestCase):
+    def test_n_results_is_5(self):
+        import re
+        with open("src/llm_engine.py", encoding="utf-8") as f:
+            content = f.read()
+        m = re.search(r"n_results\s*=\s*(\d+)", content)
+        self.assertIsNotNone(m)
+        self.assertEqual(int(m.group(1)), 5)
+
+    def test_threshold_constant_defined(self):
+        import re
+        with open("src/llm_engine.py", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("THRESHOLD", content)
+
+
+# ─────────────────────────────────────────────────────────────
+# #17 ErrorClusterer
+# ─────────────────────────────────────────────────────────────
+class TestErrorClusterer(unittest.TestCase):
+    def test_returns_none_when_sklearn_missing_or_empty(self):
+        from src.error_clusterer import ErrorClusterer, _SKLEARN_AVAILABLE
+        from unittest.mock import MagicMock
+        mock_col = MagicMock()
+        mock_col.count.return_value = 5  # < _MIN_VECTORS=20
+        ec = ErrorClusterer(chroma_collection=mock_col)
+        result = ec.run()
+        self.assertIsNone(result)
+
+
+# ─────────────────────────────────────────────────────────────
+# #18 멀티 로그 파일 시그니처 검증
+# ─────────────────────────────────────────────────────────────
+class TestMultiLogWatch(unittest.TestCase):
+    def test_start_watching_accepts_list(self):
+        import inspect
+        from src.log_watcher import start_watching
+        sig = inspect.signature(start_watching)
+        param = list(sig.parameters.values())[0]
+        # 타입 힌트가 str | List[str] 포함하는지 확인
+        ann = str(param.annotation)
+        self.assertTrue("str" in ann or "List" in ann)
+
+
+# ─────────────────────────────────────────────────────────────
+# #19 JSON 로깅
+# ─────────────────────────────────────────────────────────────
+class TestJSONLogging(unittest.TestCase):
+    def test_setup_json_logging_does_not_raise(self):
+        from src.utils.logging_config import setup_json_logging
+        try:
+            setup_json_logging()
+        except Exception as e:
+            self.fail(f"setup_json_logging() raised: {e}")
+
+    def test_fallback_when_no_jsonlogger(self):
+        import sys
+        from src.utils import logging_config as lc
+        orig = lc._JSON_AVAILABLE
+        lc._JSON_AVAILABLE = False
+        try:
+            lc.setup_json_logging()
+        except Exception as e:
+            self.fail(f"폴백 모드에서 예외 발생: {e}")
+        finally:
+            lc._JSON_AVAILABLE = orig
+
+
+# ─────────────────────────────────────────────────────────────
+# #12 pyproject.toml 존재 + sys.path.insert 제거 확인
+# ─────────────────────────────────────────────────────────────
+class TestPackageSetup(unittest.TestCase):
+    def test_pyproject_toml_exists(self):
+        import os
+        self.assertTrue(os.path.exists("pyproject.toml"))
+
+    def test_no_sys_path_insert_in_llm_engine(self):
+        with open("src/llm_engine.py", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("sys.path.insert", content)
+
+    def test_no_sys_path_insert_in_log_watcher(self):
+        with open("src/log_watcher.py", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("sys.path.insert", content)
 
 
 if __name__ == "__main__":

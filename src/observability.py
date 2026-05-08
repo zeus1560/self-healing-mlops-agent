@@ -6,6 +6,7 @@ import urllib.request
 from datetime import datetime
 
 from src.utils.sqlite_pool import get_conn
+from src.utils.pii_masker import mask as _mask_pii
 
 
 class AgentObserver:
@@ -65,6 +66,7 @@ class AgentObserver:
         error_category: str = None,
     ):
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요시 Slack 알람을 보냅니다."""
+        safe_log = _mask_pii(error_log)  # PII 마스킹 후 저장
         try:
             conn = get_conn(self.db_path)
             conn.execute(
@@ -77,7 +79,7 @@ class AgentObserver:
                 """,
                 (
                     datetime.now().isoformat(),
-                    error_log,
+                    safe_log,
                     source,
                     action_type,
                     latency_sec,
