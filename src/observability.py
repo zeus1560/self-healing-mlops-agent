@@ -1,10 +1,11 @@
 import json
 import logging
 import os
-import sqlite3
 import traceback
 import urllib.request
 from datetime import datetime
+
+from src.utils.sqlite_pool import get_conn
 
 
 class AgentObserver:
@@ -20,36 +21,36 @@ class AgentObserver:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS metrics (
-                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp        DATETIME,
-                    error_log        TEXT,
-                    resolution_source TEXT,   -- 'L1_CACHE' | 'L2_LLM' | 'RULE'
-                    action_type      TEXT,
-                    latency_sec      REAL,
-                    success          BOOLEAN,
-                    result_category  TEXT DEFAULT 'SUCCESS', -- 'SUCCESS' | 'FAILURE' | 'IMPOSSIBLE'
-                    error_type       TEXT,    -- 예: 'CalledProcessError', 'PermissionError'
-                    error_detail     TEXT     -- str(e) 전체 메시지
-                )
-                """
+        conn = get_conn(self.db_path)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metrics (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp        DATETIME,
+                error_log        TEXT,
+                resolution_source TEXT,
+                action_type      TEXT,
+                latency_sec      REAL,
+                success          BOOLEAN,
+                result_category  TEXT DEFAULT 'SUCCESS',
+                error_type       TEXT,
+                error_detail     TEXT,
+                error_category   TEXT
             )
-            # 기존 DB에 새 컬럼이 없으면 추가 (마이그레이션)
-            existing = {row[1] for row in cursor.execute("PRAGMA table_info(metrics)")}
-            for col, definition in [
-                ("result_category", "TEXT DEFAULT 'SUCCESS'"),
-                ("error_type",      "TEXT"),
-                ("error_detail",    "TEXT"),
-            ]:
-                if col not in existing:
-                    cursor.execute(f"ALTER TABLE metrics ADD COLUMN {col} {definition}")
-                    logging.info(f"📊 [Observer] 컬럼 추가: {col}")
-            conn.commit()
-        logging.info("📊 [Observer] SQLite 메트릭 데이터베이스 초기화 완료.")
+            """
+        )
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
+        for col, definition in [
+            ("result_category", "TEXT DEFAULT 'SUCCESS'"),
+            ("error_type",      "TEXT"),
+            ("error_detail",    "TEXT"),
+            ("error_category",  "TEXT"),
+        ]:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE metrics ADD COLUMN {col} {definition}")
+                logging.info(f"[Observer] 컬럼 추가: {col}")
+        conn.commit()
+        logging.info("[Observer] SQLite 메트릭 데이터베이스 초기화 완료.")
 
     def log_event(
         self,
@@ -61,37 +62,39 @@ class AgentObserver:
         result_category: str = "SUCCESS",
         error_type: str = None,
         error_detail: str = None,
+        error_category: str = None,
     ):
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요시 Slack 알람을 보냅니다."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO metrics
-                        (timestamp, error_log, resolution_source, action_type,
-                         latency_sec, success, result_category, error_type, error_detail)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        datetime.now().isoformat(),
-                        error_log,
-                        source,
-                        action_type,
-                        latency_sec,
-                        success,
-                        result_category,
-                        error_type,
-                        error_detail,
-                    ),
-                )
-                conn.commit()
+            conn = get_conn(self.db_path)
+            conn.execute(
+                """
+                INSERT INTO metrics
+                    (timestamp, error_log, resolution_source, action_type,
+                     latency_sec, success, result_category, error_type, error_detail,
+                     error_category)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    datetime.now().isoformat(),
+                    error_log,
+                    source,
+                    action_type,
+                    latency_sec,
+                    success,
+                    result_category,
+                    error_type,
+                    error_detail,
+                    error_category,
+                ),
+            )
+            conn.commit()
         except Exception:
-            logging.error(f"📊 [Observer] 메트릭 SQLite 기록 실패:\n{traceback.format_exc()}")
+            logging.error(f"[Observer] 메트릭 SQLite 기록 실패:\n{traceback.format_exc()}")
             return
 
         logging.info(
-            f"📝 [Observer] 소스:{source} | 결과:{result_category} | {latency_sec:.4f}초"
+            f"[Observer] 소스:{source} | 결과:{result_category} | {latency_sec:.4f}초"
             + (f" | {error_type}" if error_type else "")
         )
 
@@ -130,45 +133,44 @@ class AgentObserver:
             logging.error(f"📊 [Observer] 성능 리포트 생성 실패:\n{traceback.format_exc()}")
 
     def _print_performance_report_inner(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        conn = get_conn(self.db_path)
+        cursor = conn.cursor()
 
-            cursor.execute("SELECT COUNT(*) FROM metrics")
-            total_cases = cursor.fetchone()[0]
-            if total_cases == 0:
-                print("\n[Report] 수집된 데이터가 없습니다.")
-                return
+        cursor.execute("SELECT COUNT(*) FROM metrics")
+        total_cases = cursor.fetchone()[0]
+        if total_cases == 0:
+            print("\n[Report] 수집된 데이터가 없습니다.")
+            return
 
-            cursor.execute("SELECT COUNT(*) FROM metrics WHERE success = 1")
-            success_cases = cursor.fetchone()[0]
-            success_rate = (success_cases / total_cases) * 100
+        cursor.execute("SELECT COUNT(*) FROM metrics WHERE success = 1")
+        success_cases = cursor.fetchone()[0]
+        success_rate = (success_cases / total_cases) * 100
 
-            cursor.execute("SELECT COUNT(*) FROM metrics WHERE resolution_source = 'L1_CACHE'")
-            l1_hits = cursor.fetchone()[0]
-            hit_ratio = (l1_hits / total_cases) * 100
+        cursor.execute("SELECT COUNT(*) FROM metrics WHERE resolution_source = 'L1_CACHE'")
+        l1_hits = cursor.fetchone()[0]
+        hit_ratio = (l1_hits / total_cases) * 100
 
-            cursor.execute("SELECT AVG(latency_sec) FROM metrics WHERE resolution_source = 'L1_CACHE'")
-            l1_latency = cursor.fetchone()[0] or 0.0
+        cursor.execute("SELECT AVG(latency_sec) FROM metrics WHERE resolution_source = 'L1_CACHE'")
+        l1_latency = cursor.fetchone()[0] or 0.0
 
-            cursor.execute("SELECT AVG(latency_sec) FROM metrics WHERE resolution_source = 'L2_LLM'")
-            l2_latency = cursor.fetchone()[0] or 0.0
+        cursor.execute("SELECT AVG(latency_sec) FROM metrics WHERE resolution_source = 'L2_LLM'")
+        l2_latency = cursor.fetchone()[0] or 0.0
 
-            # 3분류 집계
-            cursor.execute(
-                "SELECT result_category, COUNT(*) FROM metrics GROUP BY result_category"
-            )
-            category_counts = dict(cursor.fetchall())
+        cursor.execute(
+            "SELECT result_category, COUNT(*) FROM metrics GROUP BY result_category"
+        )
+        category_counts = dict(cursor.fetchall())
 
-            print("\n" + "=" * 50)
-            print("📈 Self-Healing Agent Performance Report")
-            print("=" * 50)
-            print(f"총 처리 에러 수    : {total_cases}건")
-            print(f"✅ 전체 조치 성공률 : {success_rate:.1f}%")
-            print(f"🎯 L1 Cache 적중률 : {hit_ratio:.1f}%")
-            print(f"⚡ L1 평균 복구시간 : {l1_latency:.3f}초")
-            print(f"🐢 L2 평균 복구시간 : {l2_latency:.3f}초")
-            print(f"📊 결과 분류")
-            for cat in ["SUCCESS", "FAILURE", "IMPOSSIBLE"]:
-                cnt = category_counts.get(cat, 0)
-                print(f"   {cat:12s}: {cnt}건 ({cnt/total_cases*100:.1f}%)")
-            print("=" * 50 + "\n")
+        print("\n" + "=" * 50)
+        print("Self-Healing Agent Performance Report")
+        print("=" * 50)
+        print(f"총 처리 에러 수    : {total_cases}건")
+        print(f"전체 조치 성공률   : {success_rate:.1f}%")
+        print(f"L1 Cache 적중률   : {hit_ratio:.1f}%")
+        print(f"L1 평균 복구시간   : {l1_latency:.3f}초")
+        print(f"L2 평균 복구시간   : {l2_latency:.3f}초")
+        print("결과 분류")
+        for cat in ["SUCCESS", "FAILURE", "IMPOSSIBLE"]:
+            cnt = category_counts.get(cat, 0)
+            print(f"   {cat:12s}: {cnt}건 ({cnt/total_cases*100:.1f}%)")
+        print("=" * 50 + "\n")
