@@ -252,6 +252,43 @@ class TestExecutorSecurity(unittest.TestCase):
         _, err = self.ex._validate_command("")
         self.assertIsNotNone(err)
 
+    def test_absolute_path_command_blocked(self):
+        _, err = self.ex._validate_command("/bin/bash -c id")
+        self.assertIsNotNone(err)
+        self.assertEqual(err["error_type"], "SecurityBlock")
+
+    def test_relative_path_command_blocked(self):
+        _, err = self.ex._validate_command("../../bin/sh")
+        self.assertIsNotNone(err)
+        self.assertEqual(err["error_type"], "SecurityBlock")
+
+    def test_systemctl_disallowed_subcommand_blocked(self):
+        # "enable" 은 허용 인자 집합에 없으므로 차단
+        _, err = self.ex._validate_command("systemctl enable nginx")
+        self.assertIsNotNone(err)
+        self.assertEqual(err["error_type"], "SecurityBlock")
+        self.assertIn("enable", err["error_detail"])
+
+    def test_journalctl_disallowed_flag_blocked(self):
+        _, err = self.ex._validate_command("journalctl -e")
+        self.assertIsNotNone(err)
+        self.assertEqual(err["error_type"], "SecurityBlock")
+        self.assertIn("-e", err["error_detail"])
+
+    def test_fuser_disallowed_flag_blocked(self):
+        _, err = self.ex._validate_command("fuser -m /dev/sda")
+        self.assertIsNotNone(err)
+
+    def test_systemctl_allowed_subcommand_passes(self):
+        tokens, err = self.ex._validate_command("systemctl restart nginx")
+        self.assertIsNone(err)
+        self.assertEqual(tokens, ["systemctl", "restart", "nginx"])
+
+    def test_pkill_any_arg_allowed(self):
+        # pkill은 빈 set → 어떤 인자도 허용
+        tokens, err = self.ex._validate_command("pkill nginx")
+        self.assertIsNone(err)
+
 
 # ─────────────────────────────────────────────────────────────
 # #16 Approval Store

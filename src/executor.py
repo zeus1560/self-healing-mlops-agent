@@ -197,6 +197,10 @@ class ActionExecutor:
 
         base_cmd = tokens[0]
 
+        # 경로 포함 명령어 차단: /bin/bash 같은 절대·상대 경로로 화이트리스트 우회 방지
+        if "/" in base_cmd or "\\" in base_cmd:
+            return _block("경로 포함 명령어", f"경로 구분자가 포함된 명령어: {base_cmd!r}")
+
         # 블랙리스트: 인터프리터·파괴적 명령어 차단
         if base_cmd in self.BANNED_TOKENS:
             return _block("블랙리스트 명령어", base_cmd)
@@ -204,6 +208,17 @@ class ActionExecutor:
         # 화이트리스트: 명시적으로 허용된 명령어만 통과
         if base_cmd not in self.ALLOWED_COMMANDS:
             return _block("허용되지 않은 명령어", base_cmd)
+
+        # 인자 화이트리스트: 허용 인자 집합이 정의된 명령어는 첫 번째 인자도 검증
+        # (빈 set인 명령어는 어떤 인자도 허용)
+        allowed_args = self.ALLOWED_COMMANDS[base_cmd]
+        if allowed_args and len(tokens) >= 2:
+            first_arg = tokens[1]
+            if first_arg not in allowed_args:
+                return _block(
+                    "허용되지 않은 인자",
+                    f"'{base_cmd}' 의 인자 {first_arg!r} 미허용. 허용: {sorted(allowed_args)}",
+                )
 
         return tokens, None
 
