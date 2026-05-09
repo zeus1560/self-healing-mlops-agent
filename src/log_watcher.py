@@ -1,11 +1,24 @@
 import logging
 import os
 import re
+import signal
 import sys
+import threading
 import time
 import traceback
 from collections import deque
 from typing import List
+
+# 종료 신호를 받으면 set() → 메인 루프와 이벤트 핸들러가 함께 종료를 인지
+_shutdown_event = threading.Event()
+
+
+def _handle_shutdown(signum, frame):
+    logging.info(
+        f"[Shutdown] 종료 신호 수신 (signal {signum}). "
+        "진행 중인 파이프라인 완료 후 종료합니다..."
+    )
+    _shutdown_event.set()
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -62,6 +75,9 @@ class LogTailHandler(FileSystemEventHandler):
             self._line_buf.append(line)
 
             if line and self.error_pattern.search(line):
+                if _shutdown_event.is_set():
+                    logging.info("[Shutdown] 종료 중 — 새 파이프라인 시작 생략.")
+                    return
                 if self.debouncer.should_process(line):
                     context = self._build_context_window(
                         line,
@@ -171,6 +187,10 @@ def start_watching(target_log_files: str | List[str]) -> None:
 
     watch_observer.start()
 
+    # SIGTERM (systemd/docker stop) 과 SIGINT (Ctrl+C) 모두 graceful 처리
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+    signal.signal(signal.SIGINT,  _handle_shutdown)
+
     maintenance   = MaintenanceRunner()
     clusterer     = ErrorClusterer()
     etl_scheduler = ETLScheduler()
@@ -181,19 +201,23 @@ def start_watching(target_log_files: str | List[str]) -> None:
     _cluster_interval = 86400  # 24시간마다 클러스터링
     _last_cluster     = time.time()  # 시작 시점부터 카운트 → 24h 후 첫 실행
 
-    try:
-        while True:
-            time.sleep(1)
-            maintenance.run_if_due()
-            proactive.check_and_trigger()
-            etl_scheduler.run_if_due()
-            if time.time() - _last_cluster >= _cluster_interval:
-                clusterer.run()
-                _last_cluster = time.time()
-    except KeyboardInterrupt:
-        watch_observer.stop()
-        logging.info("감시 종료.")
-    watch_observer.join()
+    # _shutdown_event.wait(1): 종료 신호가 오면 sleep 없이 즉시 루프 탈출
+    while not _shutdown_event.is_set():
+        _shutdown_event.wait(1)
+        if _shutdown_event.is_set():
+            break
+        maintenance.run_if_due()
+        proactive.check_and_trigger()
+        etl_scheduler.run_if_due()
+        if time.time() - _last_cluster >= _cluster_interval:
+            clusterer.run()
+            _last_cluster = time.time()
+
+    # 진행 중인 watchdog 이벤트 핸들러가 완료될 때까지 최대 30초 대기
+    logging.info("[Shutdown] 감시 루프 종료. 실행 중인 작업 완료 대기 중 (최대 30s)...")
+    watch_observer.stop()
+    watch_observer.join(timeout=30)
+    logging.info("[Shutdown] 종료 완료.")
 
 
 if __name__ == "__main__":
