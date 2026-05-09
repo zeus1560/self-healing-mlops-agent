@@ -331,6 +331,43 @@ class ActionExecutor:
         logging.warning("메모리 최적화 완료")
         return True
 
+    def _verify_process_dead(self, target_name: str, wait_sec: float = 1.0) -> bool:
+        """pkill 후 프로세스가 실제로 종료됐는지 pgrep으로 확인."""
+        time.sleep(wait_sec)
+        try:
+            proc = subprocess.run(
+                ["pgrep", "-x", target_name],
+                capture_output=True, text=True, shell=False, timeout=5,
+            )
+            # pgrep 반환코드: 0=프로세스 존재(아직 살아있음), 1=없음(종료 확인)
+            if proc.returncode != 0:
+                logging.info(f"  [복구 검증 ✓] '{target_name}' 프로세스 종료 확인됨.")
+                return True
+            pids = proc.stdout.strip()
+            logging.warning(f"  [복구 검증 ✗] '{target_name}' 여전히 실행 중 (PID: {pids}).")
+            return False
+        except Exception:
+            logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
+            return False
+
+    def _verify_service_active(self, service_name: str, wait_sec: float = 2.0) -> bool:
+        """systemctl restart 후 서비스가 실제로 active 상태인지 확인."""
+        time.sleep(wait_sec)
+        try:
+            proc = subprocess.run(
+                ["systemctl", "is-active", service_name],
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            status = proc.stdout.strip()
+            if status == "active":
+                logging.info(f"  [복구 검증 ✓] '{service_name}' 서비스 active 확인됨.")
+                return True
+            logging.warning(f"  [복구 검증 ✗] '{service_name}' 상태: {status}.")
+            return False
+        except Exception:
+            logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
+            return False
+
     def _kill_process(self, target: str) -> bool:
         target_name = target if target else "Unknown_Process"
         logging.warning(f"[조치] '{target_name}' 프로세스 종료 시도...")
@@ -341,8 +378,8 @@ class ActionExecutor:
             )
             # pkill 반환코드: 0=종료됨, 1=매칭 없음(이미 죽었을 수 있음)
             if proc.returncode == 0:
-                logging.info(f"  '{target_name}' 프로세스 종료 완료.")
-                return True
+                logging.info(f"  '{target_name}' 종료 신호 전송. 복구 검증 중...")
+                return self._verify_process_dead(target_name)
             logging.warning(f"  '{target_name}' 매칭 프로세스 없음 (이미 종료됐을 수 있음).")
             return False
         except subprocess.TimeoutExpired:
@@ -364,8 +401,8 @@ class ActionExecutor:
                 timeout=30,
             )
             if proc.returncode == 0:
-                logging.info(f"'{target_name}' 재시작 성공")
-                return True
+                logging.info(f"  '{target_name}' 재시작 신호 전송. 복구 검증 중...")
+                return self._verify_service_active(target_name)
             detail = proc.stderr.strip() or f"returncode={proc.returncode}"
             logging.error(f"'{target_name}' 재시작 실패: {detail}")
             self._try_rollback(f"systemctl restart {target_name}")
