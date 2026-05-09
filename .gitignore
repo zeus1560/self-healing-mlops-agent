@@ -23,7 +23,8 @@ secrets.json
 *.sqlite
 *.sqlite3
 *.db
-/chroma_db/
+chroma_db/
+data/chroma_db/
 logs/
 *.log
 
