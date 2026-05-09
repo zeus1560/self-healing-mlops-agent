@@ -26,12 +26,22 @@ MEM_THRESHOLD_PCT   = 85.0
 DISK_THRESHOLD_PCT  = 90.0
 CHECK_INTERVAL_SEC  = 60        # 최소 재검사 간격 (초)
 CPU_STREAK_TRIGGER  = 2         # CPU 임계 초과 연속 횟수 → 발동
+ALERT_COOLDOWN_SEC  = 1800      # 동일 알림 재발동 최소 간격 (30분)
+# 알림 키는 "cpu" | "memory" | "disk" 3가지로 고정 → dict 크기 O(1)
+_ALERT_KEYS = frozenset({"cpu", "memory", "disk"})
 
 
 class ProactiveMonitor:
     """
     시스템 리소스를 주기적으로 점검해 임계치 초과 시
     합성(synthetic) 에러 로그를 생성하고 콜백으로 파이프라인을 선제 발동한다.
+
+    메모리 설계:
+      _last_fired: dict[str, float] — 알림 키 3개로 크기 고정, 무한 증가 없음.
+      _cpu_streak: int — 정수 1개.
+      이전 구현의 _triggered set은 매 사이클 clear() 했으나
+      그로 인해 임계치가 지속되는 동안 매 60초마다 알림이 반복 발동되는 버그 존재.
+      ALERT_COOLDOWN_SEC(30분) 기반 쿨다운으로 교체해 알림 폭풍을 방지한다.
     """
 
     def __init__(self, pipeline_callback=None):
@@ -43,7 +53,7 @@ class ProactiveMonitor:
         self._callback   = pipeline_callback
         self._cpu_streak = 0
         self._last_check = 0.0
-        self._triggered: set[str] = set()   # 동일 이벤트 연속 발동 방지
+        self._last_fired: dict[str, float] = {}  # key → 마지막 발동 시각, 최대 3개 항목
 
     # ── 공개 인터페이스 ────────────────────────────────────────────────────
     def check_and_trigger(self) -> None:
@@ -54,7 +64,6 @@ class ProactiveMonitor:
         if now - self._last_check < CHECK_INTERVAL_SEC:
             return
         self._last_check = now
-        self._triggered.clear()   # 매 주기 초기화
 
         try:
             self._check_cpu()
@@ -106,10 +115,17 @@ class ProactiveMonitor:
             )
 
     def _fire(self, synthetic_log: str, key: str) -> None:
-        """중복 발동 방지 후 콜백 실행."""
-        if key in self._triggered:
+        """ALERT_COOLDOWN_SEC 이내 동일 알림 재발동 방지 후 콜백 실행."""
+        now      = time.time()
+        last     = self._last_fired.get(key, 0.0)
+        cooldown = ALERT_COOLDOWN_SEC
+        if now - last < cooldown:
+            remaining = int(cooldown - (now - last))
+            logging.debug(
+                f"[ProactiveMonitor] '{key}' 알림 쿨다운 중 (남은 시간: {remaining//60}분)"
+            )
             return
-        self._triggered.add(key)
+        self._last_fired[key] = now
 
         logging.warning(f"[ProactiveMonitor] 선제 파이프라인 발동: {synthetic_log}")
         if self._callback:
