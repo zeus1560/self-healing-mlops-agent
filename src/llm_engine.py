@@ -37,6 +37,39 @@ OLLAMA_BASE_URL     = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL        = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 _OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
 _OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))  # 지수 백오프 밑수
+# Ollama가 모델을 메모리에 유지하는 시간. -1 = 영구 유지, 기본 "30m"
+_OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+
+
+def _ollama_warmup() -> None:
+    """
+    에이전트 시작 시 백그라운드에서 Ollama 모델을 미리 로드한다.
+
+    빈 프롬프트로 generate 요청 → 토큰 생성 없이 모델만 메모리에 올림.
+    keep_alive로 최소 30분간 로드 상태 유지 → 첫 L2 추론 지연(수 초) 제거.
+    백그라운드 스레드에서 실행되므로 에이전트 시작을 블로킹하지 않는다.
+    """
+    import threading
+
+    def _load():
+        try:
+            payload = json.dumps({
+                "model":      OLLAMA_MODEL,
+                "prompt":     "",          # 빈 프롬프트 → 토큰 생성 없이 모델 로드만
+                "keep_alive": _OLLAMA_KEEP_ALIVE,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=60):
+                pass
+            logging.info(f"[Ollama Warmup] 모델 '{OLLAMA_MODEL}' 사전 로딩 완료 (keep_alive={_OLLAMA_KEEP_ALIVE}).")
+        except Exception:
+            logging.warning(f"[Ollama Warmup] 사전 로딩 실패 (Ollama 미실행 시 정상):\n{traceback.format_exc()}")
+
+    threading.Thread(target=_load, daemon=True, name="ollama-warmup").start()
 
 # =====================================================================
 # [Rule-based Heuristic Fallback]
@@ -278,6 +311,9 @@ class RAGEngine:
             logging.warning(f"[RAGEngine] 콜렉션 없음, 새로 생성합니다: {e}")
             self.collection = client.get_or_create_collection(name="error_playbook_vectors")
             logging.info("[RAGEngine] 빈 콜렉션 생성 완료. 추가 학습이 필요합니다.")
+
+        # Ollama 모델 백그라운드 사전 로딩 — 첫 L2 추론 지연 제거
+        _ollama_warmup()
 
     def analyze_error(self, log_text: str) -> AgentResponse:
         logging.info("[RAGEngine] 에러 로그 벡터 유사도 검색 시작...")
