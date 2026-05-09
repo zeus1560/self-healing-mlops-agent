@@ -297,6 +297,27 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
 
 
 # =====================================================================
+# [공통 헬퍼]
+# =====================================================================
+def _build_response_from_meta(meta: dict, source: str) -> "AgentResponse":
+    """ChromaDB 메타데이터 dict → AgentResponse. L1 fast track과 배치 쿼리가 공유."""
+    action_str = meta.get("action_type", "escalate_to_human")
+    try:
+        action_enum = ActionType(action_str)
+    except ValueError:
+        action_enum = ActionType.ESCALATE_TO_HUMAN
+    return AgentResponse(
+        error_category=meta.get("error_category", "Unknown"),
+        severity="HIGH",
+        action_type=action_enum,
+        command=meta.get("command") or None,
+        target_process=meta.get("target_process") or None,
+        reasoning=meta.get("reasoning", "No reasoning found in DB"),
+        resolution_source=source,
+    )
+
+
+# =====================================================================
 # [메인 엔진 클래스]
 # =====================================================================
 class RAGEngine:
@@ -450,21 +471,68 @@ class RAGEngine:
         # =================================================================
         # 3. [Fast Track] 아는 에러 처리 (Vector DB 기반 즉각 조치)
         # =================================================================
-        action_str = best_match_meta.get("action_type", "escalate_to_human")
-        try:
-            action_enum = ActionType(action_str)
-        except ValueError:
-            action_enum = ActionType.ESCALATE_TO_HUMAN
+        return _build_response_from_meta(best_match_meta, "L1_CACHE")
 
-        reasoning_text = best_match_meta.get("reasoning", "No reasoning found in DB")
+    def analyze_errors_batch(self, log_texts: list[str]) -> list["AgentResponse"]:
+        """
+        N개의 에러 로그를 ChromaDB 단일 쿼리로 처리한다.
 
-        return AgentResponse(
-            error_category=best_match_meta.get("error_category", "Unknown"),
-            severity="HIGH",
-            action_type=action_enum,
-            reasoning=reasoning_text,
-            resolution_source="L1_CACHE",
-        )
+        L1 히트(threshold 이하 후보 존재): 배치 내에서 앙상블 응답 즉시 생성.
+        L1 미스: 해당 항목만 analyze_error()로 slow track(Ollama/ipex/Rule) 처리.
+        N=1이면 analyze_error()와 동일하지만 ChromaDB 호출은 공유.
+        """
+        from collections import Counter
+
+        if not log_texts:
+            return []
+
+        logging.info(f"[RAGEngine] 배치 쿼리 시작: {len(log_texts)}건")
+        start   = time.perf_counter()
+        results = self.collection.query(query_texts=log_texts, n_results=5)
+        latency = time.perf_counter() - start
+        logging.info(f"[RAGEngine] 배치 Vector DB 검색 완료 ({len(log_texts)}건 / {latency:.4f}초)")
+
+        THRESHOLD = 1.2
+        responses: list[AgentResponse] = []
+
+        for i, log_text in enumerate(log_texts):
+            docs  = results["documents"][i]
+            metas = results["metadatas"][i]
+            dists = results["distances"][i]
+
+            if not docs:
+                responses.append(AgentResponse(
+                    error_category="Unknown",
+                    severity="MEDIUM",
+                    action_type=ActionType.ESCALATE_TO_HUMAN,
+                    reasoning="Vector DB가 비어있거나 검색에 실패했습니다.",
+                    resolution_source="L1_CACHE",
+                ))
+                continue
+
+            candidates = [(metas[j], dists[j]) for j in range(len(dists)) if dists[j] <= THRESHOLD]
+
+            if not candidates:
+                # L1 미스 → slow track (Ollama 포함). analyze_error가 다시 쿼리하지만 미스 케이스는 드묾.
+                logging.info(f"  [배치 {i+1}/{len(log_texts)}] L1 미스 → slow track")
+                responses.append(self.analyze_error(log_text))
+                continue
+
+            # L1 히트 → 앙상블 다수결
+            action_votes    = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
+            top_action      = action_votes.most_common(1)[0][0]
+            best_match_meta = min(
+                (m for m, _ in candidates if m.get("action_type") == top_action),
+                key=lambda m: next(d for mm, d in candidates if mm is m),
+                default=candidates[0][0],
+            )
+            logging.info(
+                f"  [배치 {i+1}/{len(log_texts)}] 앙상블 {len(candidates)}개 후보 "
+                f"→ {top_action} ({action_votes[top_action]}표)"
+            )
+            responses.append(_build_response_from_meta(best_match_meta, "L1_CACHE"))
+
+        return responses
 
     def learn_from_feedback(self, error_log: str, successful_command: str) -> None:
         # executor._save_to_l1_cache()와 동일한 MD5 기반 ID → upsert로 중복 방지
