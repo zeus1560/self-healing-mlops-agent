@@ -4,6 +4,7 @@ import logging
 import multiprocessing as mp
 import os
 import sys
+import threading
 import time
 import traceback
 import urllib.error
@@ -19,17 +20,23 @@ from src.schemas import AgentResponse, ActionType
 
 # ── ChromaDB Singleton ────────────────────────────────────────────────────────
 # 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
+# Double-Checked Locking: 첫 번째 검사(락 없이)는 초기화 완료 후 빠른 경로.
+# 두 번째 검사(락 안에서)는 경쟁 스레드가 먼저 초기화했을 경우 중복 방지.
 _chroma_client = None
+_chroma_lock   = threading.Lock()
+
 
 def _get_chroma_client():
     global _chroma_client
-    if _chroma_client is None:
-        persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
-        _chroma_client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=Settings(anonymized_telemetry=False),
-        )
-        logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
+    if _chroma_client is None:                    # 1차 검사 (락 없이 — 빠른 경로)
+        with _chroma_lock:
+            if _chroma_client is None:            # 2차 검사 (락 안에서 — 경쟁 방지)
+                persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
+                _chroma_client = chromadb.PersistentClient(
+                    path=persist_dir,
+                    settings=Settings(anonymized_telemetry=False),
+                )
+                logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
     return _chroma_client
 
 # ─────────────────────────────────────────────────────────────────────────────
