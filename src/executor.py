@@ -238,19 +238,18 @@ class ActionExecutor:
             # 데몬 모드 — approval_store에 요청 등록 후 Slack으로 승인 URL 발송, 폴링 대기.
             approval_store.init_table()
             token    = approval_store.create_request(command, error_log, "")
-            base_url = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
-            approve_url = f"{base_url}/approve/{token}"
-            reject_url  = f"{base_url}/reject/{token}"
+            base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
+            pending_url = f"{base_url}/pending/{token}"   # 확인 페이지 (명령어 미리보기 + 버튼)
             logging.warning(
                 f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {command}\n"
-                f"  승인: {approve_url}\n  거절: {reject_url}"
+                f"  확인 및 승인: {pending_url}"
             )
             try:
                 chatops = SlackChatOps()
                 chatops.send_approval_request(
                     error_log=error_log,
                     command=command,
-                    reason=f"✅ 승인: {approve_url}\n🚫 거절: {reject_url}",
+                    reason=f"🔐 명령어 확인 및 승인: {pending_url}",
                 )
             except Exception:
                 logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
