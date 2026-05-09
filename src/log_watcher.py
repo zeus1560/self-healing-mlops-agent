@@ -12,6 +12,7 @@ from watchdog.observers import Observer
 
 from src.circuit_breaker import CircuitBreaker
 from src.error_clusterer import ErrorClusterer
+from src.etl_scheduler import ETLScheduler
 from src.executor import ActionExecutor
 from src.llm_engine import RAGEngine
 from src.maintenance import MaintenanceRunner
@@ -170,9 +171,10 @@ def start_watching(target_log_files: str | List[str]) -> None:
 
     watch_observer.start()
 
-    maintenance = MaintenanceRunner()
-    clusterer   = ErrorClusterer()
-    proactive   = ProactiveMonitor(
+    maintenance   = MaintenanceRunner()
+    clusterer     = ErrorClusterer()
+    etl_scheduler = ETLScheduler()
+    proactive     = ProactiveMonitor(
         pipeline_callback=first_handler.trigger_agent_pipeline
     )
 
@@ -184,6 +186,7 @@ def start_watching(target_log_files: str | List[str]) -> None:
             time.sleep(1)
             maintenance.run_if_due()
             proactive.check_and_trigger()
+            etl_scheduler.run_if_due()
             if time.time() - _last_cluster >= _cluster_interval:
                 clusterer.run()
                 _last_cluster = time.time()
