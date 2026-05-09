@@ -347,7 +347,12 @@ class RAGEngine:
         logging.info("[RAGEngine] 에러 로그 벡터 유사도 검색 시작...")
         start_time = time.perf_counter()
 
-        results = self.collection.query(query_texts=[log_text], n_results=5)
+        try:
+            results = self.collection.query(query_texts=[log_text], n_results=5)
+        except TypeError:
+            # ChromaDB 0.5.x 버그: 빈 컬렉션 쿼리 시 int에 len() 호출해 TypeError 발생.
+            # 데이터 없음과 동일하게 처리해 L2로 폴스루한다.
+            results = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         latency = time.perf_counter() - start_time
         logging.info(f"[RAGEngine] Vector DB 검색 완료 (소요시간: {latency:.4f}초)")
