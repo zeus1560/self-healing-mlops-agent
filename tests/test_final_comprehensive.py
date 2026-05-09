@@ -194,18 +194,25 @@ class TestLogTailHandlerDI(unittest.TestCase):
         os.unlink(tf)
 
     def test_default_objects_when_no_injection(self):
+        """실 DB·ChromaDB 접근 없이 기본 타입 인스턴스화만 검증."""
+        from unittest.mock import patch, MagicMock
         from src.utils.debouncer import LogDebouncer
         from src.log_watcher import LogTailHandler
-        from src.executor import ActionExecutor
-        from src.observability import AgentObserver
 
         tf = tempfile.mktemp(suffix=".log")
         open(tf, "w").write("test\n")
         debouncer = LogDebouncer(30)
-        handler = LogTailHandler(tf, debouncer)
 
-        self.assertIsInstance(handler.executor, ActionExecutor)
-        self.assertIsInstance(handler.observer_agent, AgentObserver)
+        # 실제 DB·ChromaDB 접근을 막고, 올바른 클래스가 호출됐는지 확인
+        with patch("src.log_watcher.ActionExecutor") as MockEx, \
+             patch("src.log_watcher.AgentObserver") as MockObs, \
+             patch("src.log_watcher.RAGEngine") as MockEng, \
+             patch("src.log_watcher.CircuitBreaker") as MockCB:
+            LogTailHandler(tf, debouncer)
+            MockEx.assert_called_once()
+            MockObs.assert_called_once()
+            MockEng.assert_called_once()
+            MockCB.assert_called_once()
         os.unlink(tf)
 
 
@@ -532,6 +539,152 @@ class TestPackageSetup(unittest.TestCase):
         with open("src/log_watcher.py", encoding="utf-8") as f:
             content = f.read()
         self.assertNotIn("sys.path.insert", content)
+
+
+# ─────────────────────────────────────────────────────────────
+# Debouncer 정규화 키 (#7 고도화)
+# ─────────────────────────────────────────────────────────────
+class TestDebouncerNormalization(unittest.TestCase):
+    def setUp(self):
+        from src.utils.debouncer import LogDebouncer
+        self.d = LogDebouncer(cooldown_seconds=30)
+
+    def test_different_pids_same_bucket(self):
+        """PID가 달라도 같은 에러 패턴으로 묶인다."""
+        from src.utils.debouncer import LogDebouncer
+        e1 = "ERROR: OOM killer invoked for pid 1234 nginx"
+        e2 = "ERROR: OOM killer invoked for pid 5678 nginx"
+        self.assertEqual(LogDebouncer._normalize(e1), LogDebouncer._normalize(e2))
+
+    def test_different_ips_same_bucket(self):
+        """IP가 달라도 같은 Connection refused로 묶인다."""
+        from src.utils.debouncer import LogDebouncer
+        e1 = "ERROR: Connection refused to 10.0.0.1:8080"
+        e2 = "ERROR: Connection refused to 192.168.1.1:9090"
+        self.assertEqual(LogDebouncer._normalize(e1), LogDebouncer._normalize(e2))
+
+    def test_different_error_types_different_buckets(self):
+        """다른 에러 패턴은 다른 버킷."""
+        from src.utils.debouncer import LogDebouncer
+        self.assertNotEqual(
+            LogDebouncer._normalize("ERROR: OOM killer invoked"),
+            LogDebouncer._normalize("ERROR: Connection refused"),
+        )
+
+    def test_second_similar_error_suppressed(self):
+        """첫 에러 처리 후 독립 숫자(PID)만 다른 유사 에러는 쿨타임 중 무시."""
+        e1 = "ERROR: OOM killer invoked for pid 111"
+        e2 = "ERROR: OOM killer invoked for pid 222"
+        self.assertTrue(self.d.should_process(e1))
+        self.assertFalse(self.d.should_process(e2))
+
+
+# ─────────────────────────────────────────────────────────────
+# Approval 토큰 만료 (#4 인증 강화)
+# ─────────────────────────────────────────────────────────────
+class TestApprovalTokenExpiry(unittest.TestCase):
+    def setUp(self):
+        import src.approval_store as store
+        self.store = store
+        self.orig_db = store._DB_PATH
+        self.tf = tempfile.mktemp(suffix=".db")
+        store._DB_PATH = self.tf
+        store.init_table()
+
+    def tearDown(self):
+        self.store._DB_PATH = self.orig_db
+        try:
+            os.unlink(self.tf)
+        except OSError:
+            pass
+
+    def test_token_pending_before_expiry(self):
+        token = self.store.create_request("uptime", "ERR", "")
+        self.assertEqual(self.store.get_status(token), "pending")
+
+    def test_token_expired_after_expiry_time(self):
+        """expires_at을 과거로 조작해 만료 처리 확인."""
+        import sqlite3
+        from datetime import datetime, timedelta, timezone
+        token = self.store.create_request("uptime", "ERR", "")
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        conn = sqlite3.connect(self.tf)
+        conn.execute("UPDATE pending_approvals SET expires_at=? WHERE token=?", (past, token))
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.store.get_status(token), "expired")
+
+    def test_get_request_returns_command(self):
+        token = self.store.create_request("systemctl restart nginx", "ERR", "")
+        req = self.store.get_request(token)
+        self.assertIsNotNone(req)
+        self.assertEqual(req["command"], "systemctl restart nginx")
+
+    def test_pending_page_returns_200(self):
+        from fastapi.testclient import TestClient
+        from src.approval_server import app
+        token = self.store.create_request("uptime", "ERR", "")
+        resp = TestClient(app).get(f"/pending/{token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("uptime", resp.text)
+
+
+# ─────────────────────────────────────────────────────────────
+# ChromaDB 배치 쿼리 (#6)
+# ─────────────────────────────────────────────────────────────
+class TestBatchQuery(unittest.TestCase):
+    def test_analyze_errors_batch_method_exists(self):
+        from src.llm_engine import RAGEngine
+        self.assertTrue(hasattr(RAGEngine, "analyze_errors_batch"))
+
+    def test_batch_empty_input_returns_empty(self):
+        from unittest.mock import MagicMock, patch
+        with patch("src.llm_engine._get_chroma_client") as mock_client, \
+             patch("src.llm_engine._ollama_warmup"):
+            mock_col = MagicMock()
+            mock_col.count.return_value = 0
+            mock_col.get_collection.side_effect = Exception("no col")
+            mock_client.return_value.get_collection.side_effect = Exception("no col")
+            mock_client.return_value.get_or_create_collection.return_value = mock_col
+            from src.llm_engine import RAGEngine
+            engine = RAGEngine()
+            result = engine.analyze_errors_batch([])
+            self.assertEqual(result, [])
+
+    def test_build_response_from_meta_includes_target_process(self):
+        """_build_response_from_meta가 target_process를 올바르게 채운다."""
+        from src.llm_engine import _build_response_from_meta
+        meta = {
+            "action_type":    "kill_process",
+            "target_process": "nginx",
+            "error_category": "OOM",
+            "reasoning":      "test",
+        }
+        resp = _build_response_from_meta(meta, "L1_CACHE")
+        self.assertEqual(resp.target_process, "nginx")
+
+
+# ─────────────────────────────────────────────────────────────
+# 에러 복구 검증 (#2)
+# ─────────────────────────────────────────────────────────────
+class TestRecoveryVerification(unittest.TestCase):
+    def setUp(self):
+        from src.executor import ActionExecutor
+        self.ex = ActionExecutor()
+
+    def test_verify_process_dead_nonexistent(self):
+        """존재하지 않는 프로세스 → 이미 종료된 것으로 간주(True)."""
+        result = self.ex._verify_process_dead("nonexistent_proc_xyz_abc", wait_sec=0)
+        self.assertTrue(result)
+
+    def test_verify_service_active_nonexistent(self):
+        """존재하지 않는 서비스 → False."""
+        result = self.ex._verify_service_active("nonexistent_svc_xyz_abc", wait_sec=0)
+        self.assertFalse(result)
+
+    def test_verification_methods_exist(self):
+        self.assertTrue(hasattr(self.ex, "_verify_process_dead"))
+        self.assertTrue(hasattr(self.ex, "_verify_service_active"))
 
 
 if __name__ == "__main__":
