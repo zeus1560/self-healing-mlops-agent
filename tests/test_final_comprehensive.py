@@ -45,13 +45,13 @@ class TestSQLitePool(unittest.TestCase):
         from src.utils.sqlite_pool import get_conn
         results = {}
         def worker(name):
-            results[name] = id(get_conn(self.tf))
+            results[name] = get_conn(self.tf)  # 레퍼런스 유지 (id() 후 GC로 주소 재사용 방지)
         t1 = threading.Thread(target=worker, args=("t1",))
         t2 = threading.Thread(target=worker, args=("t2",))
         t1.start(); t2.start()
         t1.join(); t2.join()
-        self.assertNotEqual(results["t1"], results["t2"],
-                            "다른 스레드는 다른 연결을 가져야 한다")
+        self.assertIsNot(results["t1"], results["t2"],
+                         "다른 스레드는 다른 연결을 가져야 한다")
 
 
 # ─────────────────────────────────────────────────────────────
