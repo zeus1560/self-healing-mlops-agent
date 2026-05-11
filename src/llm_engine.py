@@ -3,7 +3,6 @@ import json
 import logging
 import multiprocessing as mp
 import os
-import sys
 import threading
 import time
 import traceback
@@ -14,23 +13,29 @@ import chromadb
 from chromadb.config import Settings
 
 from src.system_diagnostics import gather_system_context
-
-
 from src.schemas import AgentResponse, ActionType
+
+# ── Config ────────────────────────────────────────────────────────────────────
+OLLAMA_BASE_URL     = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL        = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+_OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
+_OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))
+_OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+# L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
+_RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "1.2"))
 
 # ── ChromaDB Singleton ────────────────────────────────────────────────────────
 # 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
-# Double-Checked Locking: 첫 번째 검사(락 없이)는 초기화 완료 후 빠른 경로.
-# 두 번째 검사(락 안에서)는 경쟁 스레드가 먼저 초기화했을 경우 중복 방지.
+# Double-Checked Locking: 1차 검사(락 없이)는 초기화 완료 후 빠른 경로.
 _chroma_client = None
 _chroma_lock   = threading.Lock()
 
 
 def _get_chroma_client():
     global _chroma_client
-    if _chroma_client is None:                    # 1차 검사 (락 없이 — 빠른 경로)
+    if _chroma_client is None:
         with _chroma_lock:
-            if _chroma_client is None:            # 2차 검사 (락 안에서 — 경쟁 방지)
+            if _chroma_client is None:
                 persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
                 _chroma_client = chromadb.PersistentClient(
                     path=persist_dir,
@@ -39,50 +44,8 @@ def _get_chroma_client():
                 logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
     return _chroma_client
 
-# ─────────────────────────────────────────────────────────────────────────────
-OLLAMA_BASE_URL     = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL        = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
-_OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
-_OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))  # 지수 백오프 밑수
-# Ollama가 모델을 메모리에 유지하는 시간. -1 = 영구 유지, 기본 "30m"
-_OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 
-
-def _ollama_warmup() -> None:
-    """
-    에이전트 시작 시 백그라운드에서 Ollama 모델을 미리 로드한다.
-
-    빈 프롬프트로 generate 요청 → 토큰 생성 없이 모델만 메모리에 올림.
-    keep_alive로 최소 30분간 로드 상태 유지 → 첫 L2 추론 지연(수 초) 제거.
-    백그라운드 스레드에서 실행되므로 에이전트 시작을 블로킹하지 않는다.
-    """
-    import threading
-
-    def _load():
-        try:
-            payload = json.dumps({
-                "model":      OLLAMA_MODEL,
-                "prompt":     "",          # 빈 프롬프트 → 토큰 생성 없이 모델 로드만
-                "keep_alive": _OLLAMA_KEEP_ALIVE,
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=60):
-                pass
-            logging.info(f"[Ollama Warmup] 모델 '{OLLAMA_MODEL}' 사전 로딩 완료 (keep_alive={_OLLAMA_KEEP_ALIVE}).")
-        except Exception:
-            logging.warning(f"[Ollama Warmup] 사전 로딩 실패 (Ollama 미실행 시 정상):\n{traceback.format_exc()}")
-
-    threading.Thread(target=_load, daemon=True, name="ollama-warmup").start()
-
-# =====================================================================
-# [Rule-based Heuristic Fallback]
-# ipex_llm 없이도 동작하는 키워드 기반 명령어 매핑.
-# Slow Track에서 LLM 실패 시 마지막 수단으로 사용.
-# =====================================================================
+# ── Rule-based Heuristic Fallback ─────────────────────────────────────────────
 _ERROR_RULES: list[tuple[tuple[str, ...], str]] = [
     (("out of memory", "oom killer", "cannot allocate memory", "cuda out of memory", "vram"), "pkill -f python"),
     (("no space left on device", "disk full", "disk space"), "df -h"),
@@ -93,6 +56,7 @@ _ERROR_RULES: list[tuple[tuple[str, ...], str]] = [
     (("connection refused", "connection timeout"), "ss -tuln"),
 ]
 
+
 def _rule_based_fallback(error_log: str) -> str | None:
     lower = error_log.lower()
     for keywords, command in _ERROR_RULES:
@@ -101,9 +65,7 @@ def _rule_based_fallback(error_log: str) -> str | None:
     return None
 
 
-# =====================================================================
-# [공통 프롬프트 빌더]
-# =====================================================================
+# ── Prompt Helpers ────────────────────────────────────────────────────────────
 def _build_prompt(error_log: str, system_context: str) -> str:
     return f"""You are a Self-Healing MLOps Agent. Reply with ONE raw Linux command only. No markdown, no backticks, no explanation, no sudo.
 
@@ -129,6 +91,7 @@ _PROSE_STARTERS = {
     "i", "we", "it", "if", "use", "run", "try", "make", "sure", "for",
 }
 
+
 def _clean_llm_output(raw: str) -> str:
     """마크다운, sudo, 영문 산문을 제거하고 첫 번째 유효 셸 명령어만 반환."""
     for line in raw.strip().splitlines():
@@ -138,7 +101,6 @@ def _clean_llm_output(raw: str) -> str:
         line = line.removeprefix("bash").strip()
         if line.startswith("sudo "):
             line = line[5:].strip()
-        # 번호 목록 (1. 2) 등), 마크다운 볼드(**), 산문 동사/관사 제거
         first_token = line.split()[0] if line.split() else ""
         if first_token.startswith("**") or first_token[:-1].isdigit():
             continue
@@ -148,11 +110,44 @@ def _clean_llm_output(raw: str) -> str:
     return ""
 
 
-# =====================================================================
-# [Step 1] Ollama (로컬/원격 HTTP API — CPU/GPU 무관)
-# 중앙 Ollama 서버 사용 시 .env에 OLLAMA_BASE_URL=http://<서버IP>:11434 설정.
-# 네트워크 순단 등 연결 오류에 한해 지수 백오프로 최대 OLLAMA_MAX_RETRIES 재시도.
-# =====================================================================
+# ── Ollama ────────────────────────────────────────────────────────────────────
+def _ollama_warmup() -> None:
+    """
+    에이전트 시작 시 백그라운드에서 Ollama 모델을 미리 로드한다.
+    빈 프롬프트로 generate 요청 → 토큰 생성 없이 모델만 메모리에 올림.
+    """
+    def _load():
+        try:
+            payload = json.dumps({
+                "model":      OLLAMA_MODEL,
+                "prompt":     "",
+                "keep_alive": _OLLAMA_KEEP_ALIVE,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=60):
+                pass
+            logging.info(f"[Ollama Warmup] 모델 '{OLLAMA_MODEL}' 사전 로딩 완료 (keep_alive={_OLLAMA_KEEP_ALIVE}).")
+        except Exception:
+            logging.warning(f"[Ollama Warmup] 사전 로딩 실패 (Ollama 미실행 시 정상):\n{traceback.format_exc()}")
+
+    threading.Thread(target=_load, daemon=True, name="ollama-warmup").start()
+
+
+def _is_ollama_available() -> bool:
+    """헬스체크 2회 시도 — 순단(transient failure)으로 인한 오탐 방지."""
+    for attempt in range(2):
+        try:
+            urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+            return True
+        except Exception as e:
+            logging.debug(f"[Ollama] 헬스체크 실패 ({attempt + 1}/2): {e}")
+    return False
+
+
 def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
     """Ollama API를 호출해 명령어를 추론한다. 실패 시 'ERROR:...' 반환."""
     prompt = _build_prompt(error_log, system_context)
@@ -179,7 +174,6 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
                 return command if command else "ERROR: Ollama returned empty response"
 
         except urllib.error.URLError as e:
-            # 연결 오류 → 재시도 가능
             last_error = str(e)
             if attempt < _OLLAMA_MAX_RETRIES:
                 wait = _OLLAMA_RETRY_BASE ** attempt  # 2s, 4s, 8s ...
@@ -189,7 +183,6 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
                 )
                 time.sleep(wait)
         except Exception as e:
-            # 추론 오류(모델 없음, JSON 파싱 등)는 재시도해도 동일하므로 즉시 반환
             return f"ERROR: Ollama call failed - {e}"
 
     return f"ERROR: Ollama not reachable after {_OLLAMA_MAX_RETRIES} attempts - {last_error}"
@@ -235,28 +228,12 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
         return True
 
 
-def _is_ollama_available() -> bool:
-    """헬스체크 2회 시도 — 순단(transient failure)으로 인한 오탐 방지."""
-    for _ in range(2):
-        try:
-            urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
-            return True
-        except Exception:
-            pass
-    return False
-
-
-# =====================================================================
-# [Step 2] ipex_llm (Intel Arc GPU 환경 전용)
-# =====================================================================
+# ── ipex_llm (Intel Arc GPU 환경 전용) ───────────────────────────────────────
 mp_ctx = mp.get_context("spawn")
 
 
 def _ipex_inference_worker(conn, error_log, system_context):
-    import sys
     import warnings
-    import traceback
-
     warnings.filterwarnings("ignore")
     try:
         from ipex_llm.transformers import AutoModelForCausalLM
@@ -284,7 +261,7 @@ def _ipex_inference_worker(conn, error_log, system_context):
         conn.send({"status": "error", "reason": f"{e}\n{traceback.format_exc()}"})
     finally:
         conn.close()
-        os._exit(0)   # spawn 프로세스 즉시 종료 → VRAM 즉시 반환 (sys.exit은 finalizer 거침)
+        os._exit(0)  # spawn 프로세스 즉시 종료 → VRAM 즉시 반환 (sys.exit은 finalizer 거침)
 
 
 def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> str:
@@ -303,9 +280,7 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
         return "TIMEOUT"
 
 
-# =====================================================================
-# [공통 헬퍼]
-# =====================================================================
+# ── 공통 헬퍼 ─────────────────────────────────────────────────────────────────
 def _build_response_from_meta(meta: dict, source: str) -> "AgentResponse":
     """ChromaDB 메타데이터 dict → AgentResponse. L1 fast track과 배치 쿼리가 공유."""
     action_str = meta.get("action_type", "escalate_to_human")
@@ -324,14 +299,27 @@ def _build_response_from_meta(meta: dict, source: str) -> "AgentResponse":
     )
 
 
-# =====================================================================
-# [메인 엔진 클래스]
-# =====================================================================
+def _ensemble_vote(candidates: list[tuple[dict, float]]) -> dict:
+    """
+    후보 목록에서 action_type 다수결로 최적 메타데이터를 선택한다.
+    analyze_error()와 analyze_errors_batch()가 공유한다.
+    """
+    from collections import Counter
+    action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
+    top_action   = action_votes.most_common(1)[0][0]
+    best_meta    = min(
+        (m for m, _ in candidates if m.get("action_type") == top_action),
+        key=lambda m: next(d for mm, d in candidates if mm is m),
+        default=candidates[0][0],
+    )
+    return best_meta
+
+
+# ── RAGEngine ─────────────────────────────────────────────────────────────────
 class RAGEngine:
     def __init__(self):
         logging.info("[RAGEngine] Vector DB 연결 초기화 중...")
-        client = _get_chroma_client()  # Singleton — 프로세스당 하나의 클라이언트 공유
-
+        client = _get_chroma_client()
         try:
             self.collection = client.get_collection(name="error_playbook_vectors")
             logging.info(f"[RAGEngine] 연결 완료. (현재 보유한 에러 지식: {self.collection.count()}개)")
@@ -339,174 +327,137 @@ class RAGEngine:
             logging.warning(f"[RAGEngine] 콜렉션 없음, 새로 생성합니다: {e}")
             self.collection = client.get_or_create_collection(name="error_playbook_vectors")
             logging.info("[RAGEngine] 빈 콜렉션 생성 완료. 추가 학습이 필요합니다.")
-
-        # Ollama 모델 백그라운드 사전 로딩 — 첫 L2 추론 지연 제거
         _ollama_warmup()
+
+    def _query_l1(self, log_texts: list[str]) -> dict:
+        """ChromaDB 벡터 검색. 빈 컬렉션 TypeError 방어 포함."""
+        try:
+            return self.collection.query(query_texts=log_texts, n_results=5)
+        except TypeError:
+            # ChromaDB 0.5.x 버그: 빈 컬렉션 쿼리 시 int에 len() 호출해 TypeError 발생.
+            n = len(log_texts)
+            return {"documents": [[]] * n, "metadatas": [[]] * n, "distances": [[]] * n}
+
+    def _l2_slow_track(self, error_log: str, best_distance: float) -> AgentResponse:
+        """L1 미스 시 Ollama → ipex_llm → Rule-based → Escalation 4단계 폴백 체인."""
+        logging.warning(f"[RAGEngine] 유사도 낮음 (거리: {best_distance:.4f}). Fallback 체인 시작...")
+        logging.info("🔍 [Observation] 시스템 상태 사전 진단을 시작합니다...")
+        system_context = gather_system_context(error_log)
+        logging.info(f"📊 [진단 완료] 수집된 컨텍스트 길이: {len(system_context)}자")
+
+        # Step 1: Ollama
+        llm_result = None
+        if _is_ollama_available():
+            logging.info(f"[RAGEngine] Ollama({OLLAMA_MODEL}) 추론 시작...")
+            llm_result = _run_ollama(error_log, system_context)
+            if not llm_result.startswith("ERROR:"):
+                logging.info(f"  👉 [Ollama] 명령어: {llm_result}")
+                if not _reflect_on_command(llm_result, error_log, system_context):
+                    logging.warning(f"[자가 반성] Ollama 명령어 거부 → 인간 에스컬레이션: {llm_result}")
+                    return AgentResponse(
+                        error_category="Unknown", severity="HIGH",
+                        action_type=ActionType.ESCALATE_TO_HUMAN,
+                        reasoning=f"자가 반성 거부 — Ollama 제안 명령어 위험 판정: {llm_result}",
+                        resolution_source="L2_LLM",
+                    )
+                return AgentResponse(
+                    error_category="LLM_Inferred", severity="CRITICAL",
+                    action_type=ActionType.EXECUTE_LLM_COMMAND,
+                    reasoning="Ollama 추론 성공",
+                    resolution_source="L2_LLM",
+                    command=llm_result,
+                )
+            logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
+        else:
+            logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
+
+        # Step 2: ipex_llm
+        ipex_result = run_ipex_engine(error_log, system_context)
+        if ipex_result not in ("TIMEOUT", "ERROR") and not ipex_result.startswith("ERROR:"):
+            logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
+            if not _reflect_on_command(ipex_result, error_log, system_context):
+                logging.warning(f"[자가 반성] ipex 명령어 거부 → 인간 에스컬레이션: {ipex_result}")
+                return AgentResponse(
+                    error_category="Unknown", severity="HIGH",
+                    action_type=ActionType.ESCALATE_TO_HUMAN,
+                    reasoning=f"자가 반성 거부 — ipex 제안 명령어 위험 판정: {ipex_result}",
+                    resolution_source="L2_LLM",
+                )
+            return AgentResponse(
+                error_category="LLM_Inferred", severity="CRITICAL",
+                action_type=ActionType.EXECUTE_LLM_COMMAND,
+                reasoning="ipex_llm 추론 성공",
+                resolution_source="L2_LLM",
+                command=ipex_result,
+            )
+        logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
+
+        # Step 3: Rule-based heuristic
+        rule_cmd = _rule_based_fallback(error_log)
+        if rule_cmd:
+            logging.info(f"  👉 [Rule Match] 명령어: {rule_cmd}")
+            return AgentResponse(
+                error_category="Rule_Inferred", severity="HIGH",
+                action_type=ActionType.EXECUTE_RULE_COMMAND,
+                reasoning="규칙 기반 키워드 매칭",
+                resolution_source="RULE",
+                command=rule_cmd,
+            )
+
+        # Step 4: 완전 실패 → 인간 에스컬레이션
+        return AgentResponse(
+            error_category="Unknown", severity="HIGH",
+            action_type=ActionType.ESCALATE_TO_HUMAN,
+            reasoning=f"모든 Fallback 실패 (Ollama: {llm_result}, ipex: {ipex_result})",
+            resolution_source="L2_LLM",
+        )
 
     def analyze_error(self, log_text: str) -> AgentResponse:
         logging.info("[RAGEngine] 에러 로그 벡터 유사도 검색 시작...")
         start_time = time.perf_counter()
+        results    = self._query_l1([log_text])
+        logging.info(f"[RAGEngine] Vector DB 검색 완료 (소요시간: {time.perf_counter() - start_time:.4f}초)")
 
-        try:
-            results = self.collection.query(query_texts=[log_text], n_results=5)
-        except TypeError:
-            # ChromaDB 0.5.x 버그: 빈 컬렉션 쿼리 시 int에 len() 호출해 TypeError 발생.
-            # 데이터 없음과 동일하게 처리해 L2로 폴스루한다.
-            results = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+        docs  = results["documents"][0]
+        metas = results["metadatas"][0]
+        dists = results["distances"][0]
 
-        latency = time.perf_counter() - start_time
-        logging.info(f"[RAGEngine] Vector DB 검색 완료 (소요시간: {latency:.4f}초)")
-
-        if not results["documents"][0]:
+        if not docs:
             return AgentResponse(
-                error_category="Unknown",
-                severity="MEDIUM",
+                error_category="Unknown", severity="MEDIUM",
                 action_type=ActionType.ESCALATE_TO_HUMAN,
                 reasoning="Vector DB가 비어있거나 검색에 실패했습니다.",
                 resolution_source="L1_CACHE",
             )
 
-        # ── 앙상블: threshold 이하 결과 중 action_type 다수결 ──────────────
-        THRESHOLD = 1.2
-        candidates = [
-            (results["metadatas"][0][i], results["distances"][0][i])
-            for i in range(len(results["distances"][0]))
-            if results["distances"][0][i] <= THRESHOLD
-        ]
+        candidates = [(metas[i], dists[i]) for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD]
+        logging.info(f"  [매칭된 과거 에러] {docs[0][:60]}... (거리: {dists[0]:.4f})")
 
         if candidates:
-            from collections import Counter
-            action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
-            top_action   = action_votes.most_common(1)[0][0]
-            # 다수결 action_type을 가진 후보 중 거리가 가장 가까운 것의 메타데이터 사용
-            best_match_meta = min(
-                (m for m, _ in candidates if m.get("action_type") == top_action),
-                key=lambda m: next(d for mm, d in candidates if mm is m),
-                default=candidates[0][0],
-            )
-            distance = candidates[0][1]  # 전체 최근접 거리 (로그용)
+            best_meta = _ensemble_vote(candidates)
             logging.info(
-                f"  [앙상블] {len(candidates)}/{len(results['distances'][0])}개 후보 "
-                f"→ 다수결 action: {top_action} (득표 {action_votes[top_action]}표)"
+                f"  [앙상블] {len(candidates)}/{len(dists)}개 후보 "
+                f"→ 다수결 action: {best_meta.get('action_type')}"
             )
-        else:
-            # threshold 이하 없음 → 가장 가까운 것만 보고 slow track으로
-            best_match_meta = results["metadatas"][0][0]
-            distance = results["distances"][0][0]
+            return _build_response_from_meta(best_meta, "L1_CACHE")
 
-        best_match_doc = results["documents"][0][0]
-        logging.info(f"  [매칭된 과거 에러] {best_match_doc[:60]}... (거리: {distance:.4f})")
+        return self._l2_slow_track(log_text, dists[0])
 
-        # =================================================================
-        # 2. [Slow Track] 모르는 에러 처리 (Fallback LLM 개입 + 사전 진단)
-        # =================================================================
-        if not candidates:
-            logging.warning(f"[RAGEngine] 유사도 낮음 (거리: {distance:.4f}). Fallback 체인 시작...")
-
-            logging.info("🔍 [Observation] 시스템 상태 사전 진단을 시작합니다...")
-            current_system_state = gather_system_context(log_text)
-            logging.info(f"📊 [진단 완료] 수집된 컨텍스트 길이: {len(current_system_state)}자")
-
-            # --- Step 1: Ollama (CPU/GPU 무관, 설치만 하면 동작) ---
-            llm_result = None
-            if _is_ollama_available():
-                logging.info(f"[RAGEngine] Ollama({OLLAMA_MODEL}) 추론 시작...")
-                llm_result = _run_ollama(log_text, current_system_state)
-                if not llm_result.startswith("ERROR:"):
-                    logging.info(f"  👉 [Ollama] 명령어: {llm_result}")
-                    if not _reflect_on_command(llm_result, log_text, current_system_state):
-                        logging.warning(f"[자가 반성] Ollama 명령어 거부 → 인간 에스컬레이션: {llm_result}")
-                        return AgentResponse(
-                            error_category="Unknown",
-                            severity="HIGH",
-                            action_type=ActionType.ESCALATE_TO_HUMAN,
-                            reasoning=f"자가 반성 거부 — Ollama 제안 명령어 위험 판정: {llm_result}",
-                            resolution_source="L2_LLM",
-                        )
-                    return AgentResponse(
-                        error_category="LLM_Inferred",
-                        severity="CRITICAL",
-                        action_type=ActionType.EXECUTE_LLM_COMMAND,
-                        reasoning="Ollama 추론 성공",
-                        resolution_source="L2_LLM",
-                        command=llm_result,
-                    )
-                logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
-            else:
-                logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
-
-            # --- Step 2: ipex_llm (Intel Arc GPU 환경) ---
-            ipex_result = run_ipex_engine(log_text, current_system_state)
-            if ipex_result not in ["TIMEOUT", "ERROR"] and not ipex_result.startswith("ERROR:"):
-                logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
-                if not _reflect_on_command(ipex_result, log_text, current_system_state):
-                    logging.warning(f"[자가 반성] ipex 명령어 거부 → 인간 에스컬레이션: {ipex_result}")
-                    return AgentResponse(
-                        error_category="Unknown",
-                        severity="HIGH",
-                        action_type=ActionType.ESCALATE_TO_HUMAN,
-                        reasoning=f"자가 반성 거부 — ipex 제안 명령어 위험 판정: {ipex_result}",
-                        resolution_source="L2_LLM",
-                    )
-                return AgentResponse(
-                    error_category="LLM_Inferred",
-                    severity="CRITICAL",
-                    action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning="ipex_llm 추론 성공",
-                    resolution_source="L2_LLM",
-                    command=ipex_result,
-                )
-            logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
-
-            # --- Step 3: Rule-based heuristic (의존성 없음) ---
-            rule_cmd = _rule_based_fallback(log_text)
-            if rule_cmd:
-                logging.info(f"  👉 [Rule Match] 명령어: {rule_cmd}")
-                return AgentResponse(
-                    error_category="Rule_Inferred",
-                    severity="HIGH",
-                    action_type=ActionType.EXECUTE_RULE_COMMAND,
-                    reasoning="규칙 기반 키워드 매칭",
-                    resolution_source="RULE",
-                    command=rule_cmd,
-                )
-
-            # --- Step 4: 완전 실패 → 인간 에스컬레이션 ---
-            return AgentResponse(
-                error_category="Unknown",
-                severity="HIGH",
-                action_type=ActionType.ESCALATE_TO_HUMAN,
-                reasoning=f"모든 Fallback 실패 (Ollama: {llm_result}, ipex: {ipex_result})",
-                resolution_source="L2_LLM",
-            )
-
-        # =================================================================
-        # 3. [Fast Track] 아는 에러 처리 (Vector DB 기반 즉각 조치)
-        # =================================================================
-        return _build_response_from_meta(best_match_meta, "L1_CACHE")
-
-    def analyze_errors_batch(self, log_texts: list[str]) -> list["AgentResponse"]:
+    def analyze_errors_batch(self, log_texts: list[str]) -> list[AgentResponse]:
         """
         N개의 에러 로그를 ChromaDB 단일 쿼리로 처리한다.
-
-        L1 히트(threshold 이하 후보 존재): 배치 내에서 앙상블 응답 즉시 생성.
-        L1 미스: 해당 항목만 analyze_error()로 slow track(Ollama/ipex/Rule) 처리.
-        N=1이면 analyze_error()와 동일하지만 ChromaDB 호출은 공유.
+        L1 히트: 배치 내 앙상블 응답 즉시 생성.
+        L1 미스: _l2_slow_track()으로 직접 전달 (중복 DB 쿼리 없음).
         """
-        from collections import Counter
-
         if not log_texts:
             return []
 
         logging.info(f"[RAGEngine] 배치 쿼리 시작: {len(log_texts)}건")
         start   = time.perf_counter()
-        results = self.collection.query(query_texts=log_texts, n_results=5)
-        latency = time.perf_counter() - start
-        logging.info(f"[RAGEngine] 배치 Vector DB 검색 완료 ({len(log_texts)}건 / {latency:.4f}초)")
+        results = self._query_l1(log_texts)
+        logging.info(f"[RAGEngine] 배치 Vector DB 검색 완료 ({len(log_texts)}건 / {time.perf_counter() - start:.4f}초)")
 
-        THRESHOLD = 1.2
         responses: list[AgentResponse] = []
-
         for i, log_text in enumerate(log_texts):
             docs  = results["documents"][i]
             metas = results["metadatas"][i]
@@ -514,42 +465,31 @@ class RAGEngine:
 
             if not docs:
                 responses.append(AgentResponse(
-                    error_category="Unknown",
-                    severity="MEDIUM",
+                    error_category="Unknown", severity="MEDIUM",
                     action_type=ActionType.ESCALATE_TO_HUMAN,
                     reasoning="Vector DB가 비어있거나 검색에 실패했습니다.",
                     resolution_source="L1_CACHE",
                 ))
                 continue
 
-            candidates = [(metas[j], dists[j]) for j in range(len(dists)) if dists[j] <= THRESHOLD]
+            candidates = [(metas[j], dists[j]) for j in range(len(dists)) if dists[j] <= _RAG_THRESHOLD]
 
             if not candidates:
-                # L1 미스 → slow track (Ollama 포함). analyze_error가 다시 쿼리하지만 미스 케이스는 드묾.
                 logging.info(f"  [배치 {i+1}/{len(log_texts)}] L1 미스 → slow track")
-                responses.append(self.analyze_error(log_text))
+                responses.append(self._l2_slow_track(log_text, dists[0]))
                 continue
 
-            # L1 히트 → 앙상블 다수결
-            action_votes    = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
-            top_action      = action_votes.most_common(1)[0][0]
-            best_match_meta = min(
-                (m for m, _ in candidates if m.get("action_type") == top_action),
-                key=lambda m: next(d for mm, d in candidates if mm is m),
-                default=candidates[0][0],
-            )
+            best_meta = _ensemble_vote(candidates)
             logging.info(
                 f"  [배치 {i+1}/{len(log_texts)}] 앙상블 {len(candidates)}개 후보 "
-                f"→ {top_action} ({action_votes[top_action]}표)"
+                f"→ {best_meta.get('action_type')}"
             )
-            responses.append(_build_response_from_meta(best_match_meta, "L1_CACHE"))
+            responses.append(_build_response_from_meta(best_meta, "L1_CACHE"))
 
         return responses
 
     def learn_from_feedback(self, error_log: str, successful_command: str) -> None:
-        # executor._save_to_l1_cache()와 동일한 MD5 기반 ID → upsert로 중복 방지
         doc_id = f"learned_{hashlib.md5(error_log.encode('utf-8')).hexdigest()}"
-
         try:
             self.collection.upsert(
                 ids=[doc_id],
@@ -572,8 +512,6 @@ class RAGEngine:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     engine = RAGEngine()
-    
-    # 더미 에러로 테스트
     test_error = "OOM killer invoked for nginx"
     print("\n--- [사전 진단 연동 테스트] ---")
     response = engine.analyze_error(test_error)

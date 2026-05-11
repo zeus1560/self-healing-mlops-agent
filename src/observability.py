@@ -125,8 +125,8 @@ class AgentObserver:
             with urllib.request.urlopen(req, timeout=5) as response:
                 if response.status == 200:
                     logging.info("🔔 [Slack Alert] 경보 전송 완료.")
-        except Exception as e:
-            logging.error(f"❌ [Slack Alert] 전송 실패: {e}")
+        except Exception:
+            logging.error(f"❌ [Slack Alert] 전송 실패:\n{traceback.format_exc()}")
 
     def print_performance_report(self):
         try:

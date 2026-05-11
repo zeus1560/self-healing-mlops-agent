@@ -11,6 +11,7 @@ check_and_trigger() 를 메인 루프에서 주기적으로 호출하면 된다.
 """
 
 import logging
+import os
 import time
 import traceback
 
@@ -21,14 +22,12 @@ except ImportError:
     _PSUTIL_OK = False
     logging.warning("[ProactiveMonitor] psutil 미설치 — 선제 모니터링 비활성화")
 
-CPU_THRESHOLD_PCT   = 90.0
-MEM_THRESHOLD_PCT   = 85.0
-DISK_THRESHOLD_PCT  = 90.0
-CHECK_INTERVAL_SEC  = 60        # 최소 재검사 간격 (초)
-CPU_STREAK_TRIGGER  = 2         # CPU 임계 초과 연속 횟수 → 발동
-ALERT_COOLDOWN_SEC  = 1800      # 동일 알림 재발동 최소 간격 (30분)
-# 알림 키는 "cpu" | "memory" | "disk" 3가지로 고정 → dict 크기 O(1)
-_ALERT_KEYS = frozenset({"cpu", "memory", "disk"})
+CPU_THRESHOLD_PCT   = float(os.getenv("PROACTIVE_CPU_THRESHOLD_PCT",  "90.0"))
+MEM_THRESHOLD_PCT   = float(os.getenv("PROACTIVE_MEM_THRESHOLD_PCT",  "85.0"))
+DISK_THRESHOLD_PCT  = float(os.getenv("PROACTIVE_DISK_THRESHOLD_PCT", "90.0"))
+CHECK_INTERVAL_SEC  = int(os.getenv("PROACTIVE_CHECK_INTERVAL_SEC",   "60"))
+CPU_STREAK_TRIGGER  = int(os.getenv("PROACTIVE_CPU_STREAK_TRIGGER",   "2"))
+ALERT_COOLDOWN_SEC  = int(os.getenv("PROACTIVE_ALERT_COOLDOWN_SEC",   "1800"))
 
 
 class ProactiveMonitor:

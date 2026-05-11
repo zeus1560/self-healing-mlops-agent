@@ -14,19 +14,19 @@ from src import approval_store
 from src.schemas import ActionType, AgentResponse
 from src.slack_bot import SlackChatOps
 
-_APPROVAL_POLL_INTERVAL = 5   # 초
-_APPROVAL_TIMEOUT_SEC   = 300 # 5분 대기 후 자동 거절
+_APPROVAL_POLL_INTERVAL = int(os.getenv("APPROVAL_POLL_INTERVAL_SEC", "5"))
+_APPROVAL_TIMEOUT_SEC   = int(os.getenv("APPROVAL_TIMEOUT_SEC", "300"))
 
 _SHELL_METACHAR = frozenset('|><;&`$(){}*?!\\~')
 
 # 명령어 실패 후 시스템을 안전 상태로 되돌리기 위한 롤백 맵.
 # systemctl은 서비스명을 원본 명령어에서 추출해 동적으로 생성한다.
 _ROLLBACK_MAP: dict[str, str | None] = {
-    "systemctl":  "__stop_service__",   # systemctl stop <service> 동적 생성
+    "systemctl":  "__stop_service__",
     "nginx":      "systemctl stop nginx",
-    "ulimit":     "ulimit -n 1024",     # 커널 기본값 복원
-    "fuser":      None,                 # 이미 포트 해제됨
-    "pkill":      None,                 # 프로세스 종료는 되돌릴 수 없음
+    "ulimit":     "ulimit -n 1024",
+    "fuser":      None,
+    "pkill":      None,
     "kill":       None,
     "free":       None,
     "df":         None,
@@ -43,7 +43,6 @@ class ActionExecutor:
     def __init__(self, slack_webhook_url: Optional[str] = None):
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
-        # L1 캐시 학습은 log_watcher 파이프라인에서 RAGEngine.learn_from_feedback()로 일원화.
 
         # 허용 명령어 화이트리스트. 빈 set = 어떤 인자도 허용.
         # python/perl/node 등 인터프리터는 의도적으로 제외 (arbitrary code exec 위험).
@@ -65,7 +64,6 @@ class ActionExecutor:
         }
 
         # 화이트리스트를 통과했더라도 최상위 명령어로 허용하지 않을 블랙리스트.
-        # ALLOWED_COMMANDS와 교집합이 없어야 한다.
         self.BANNED_TOKENS = {
             "rm", "mkfs", "dd", "chmod", "chown", "shutdown", "reboot",
             "wget", "curl", "nc",
@@ -137,7 +135,7 @@ class ActionExecutor:
         return result
 
     def _try_rollback(self, failed_command: str) -> None:
-        """실패한 명령어에 대응하는 롤백 명령어가 있으면 실행한다."""
+        """실패한 명령어에 대응하는 롤백 명령어가 있으면 검증 후 실행한다."""
         try:
             tokens = shlex.split(failed_command)
         except (ValueError, IndexError):
@@ -149,17 +147,22 @@ class ActionExecutor:
         if rollback is None:
             return
 
-        # systemctl restart/start nginx → systemctl stop nginx 동적 생성
         if rollback == "__stop_service__":
             service = tokens[-1] if len(tokens) >= 3 else None
             if not service or service == base_cmd:
                 return
             rollback = f"systemctl stop {service}"
 
+        # 롤백 명령어도 화이트리스트 검증을 거쳐 인젝션 경로를 차단한다
+        rollback_tokens, err = self._validate_command(rollback)
+        if err:
+            logging.warning(f"  [롤백 차단] 롤백 명령어 보안 검증 실패: {rollback!r}")
+            return
+
         logging.warning(f"  [롤백] '{failed_command}' 실패 → 롤백 실행: {rollback}")
         try:
             proc = subprocess.run(
-                shlex.split(rollback),
+                rollback_tokens,
                 capture_output=True, text=True, shell=False, timeout=10,
             )
             if proc.returncode == 0:
@@ -190,27 +193,21 @@ class ActionExecutor:
             return [], {"success": False, "result_category": "FAILURE",
                         "error_type": "EmptyCommand", "error_detail": "빈 토큰 목록"}
 
-        # 모든 토큰에서 쉘 메타문자 전수 검사
         for token in tokens:
             if any(ch in _SHELL_METACHAR for ch in token):
                 return _block("메타문자 감지", f"토큰 {token!r} 에 쉘 메타문자 포함")
 
         base_cmd = tokens[0]
 
-        # 경로 포함 명령어 차단: /bin/bash 같은 절대·상대 경로로 화이트리스트 우회 방지
         if "/" in base_cmd or "\\" in base_cmd:
             return _block("경로 포함 명령어", f"경로 구분자가 포함된 명령어: {base_cmd!r}")
 
-        # 블랙리스트: 인터프리터·파괴적 명령어 차단
         if base_cmd in self.BANNED_TOKENS:
             return _block("블랙리스트 명령어", base_cmd)
 
-        # 화이트리스트: 명시적으로 허용된 명령어만 통과
         if base_cmd not in self.ALLOWED_COMMANDS:
             return _block("허용되지 않은 명령어", base_cmd)
 
-        # 인자 화이트리스트: 허용 인자 집합이 정의된 명령어는 첫 번째 인자도 검증
-        # (빈 set인 명령어는 어떤 인자도 허용)
         allowed_args = self.ALLOWED_COMMANDS[base_cmd]
         if allowed_args and len(tokens) >= 2:
             first_arg = tokens[1]
@@ -232,14 +229,13 @@ class ActionExecutor:
         if err:
             return err
 
-        auto_approve  = os.getenv("AUTO_APPROVE", "false").lower() == "true"
+        auto_approve   = os.getenv("AUTO_APPROVE", "false").lower() == "true"
         is_interactive = sys.stdin.isatty()
 
         if auto_approve:
             logging.info(f"  [AUTO_APPROVE] 자동 승인 모드. 커맨드: {command}")
 
         elif is_interactive:
-            # 터미널 인터랙티브 모드 — 개발/테스트 환경
             print("\n" + "=" * 50)
             print("[Human-in-the-Loop] 실행 대기 중인 명령어:", command)
             approval = input("이 명령어를 실행하시겠습니까? (y/n): ").strip().lower()
@@ -250,11 +246,10 @@ class ActionExecutor:
             print("=" * 50 + "\n")
 
         else:
-            # 데몬 모드 — approval_store에 요청 등록 후 Slack으로 승인 URL 발송, 폴링 대기.
             approval_store.init_table()
-            token    = approval_store.create_request(command, error_log, "")
+            token       = approval_store.create_request(command, error_log, "")
             base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
-            pending_url = f"{base_url}/pending/{token}"   # 확인 페이지 (명령어 미리보기 + 버튼)
+            pending_url = f"{base_url}/pending/{token}"
             logging.warning(
                 f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {command}\n"
                 f"  확인 및 승인: {pending_url}"
@@ -339,7 +334,7 @@ class ActionExecutor:
                 torch.cuda.empty_cache()
                 logging.info("  NVIDIA GPU VRAM 캐시 초기화 완료.")
         except ImportError:
-            pass
+            logging.debug("  torch 미설치 — VRAM 초기화 생략.")
         except Exception:
             logging.error(f"  VRAM 초기화 중 오류:\n{traceback.format_exc()}")
         logging.warning("메모리 최적화 완료")
@@ -353,7 +348,6 @@ class ActionExecutor:
                 ["pgrep", "-x", target_name],
                 capture_output=True, text=True, shell=False, timeout=5,
             )
-            # pgrep 반환코드: 0=프로세스 존재(아직 살아있음), 1=없음(종료 확인)
             if proc.returncode != 0:
                 logging.info(f"  [복구 검증 ✓] '{target_name}' 프로세스 종료 확인됨.")
                 return True
@@ -387,10 +381,9 @@ class ActionExecutor:
         logging.warning(f"[조치] '{target_name}' 프로세스 종료 시도...")
         try:
             proc = subprocess.run(
-                ["pkill", target_name],   # -f 없이 프로세스명 정확 매칭 (자기 자신 kill 방지)
+                ["pkill", target_name],
                 capture_output=True, text=True, shell=False, timeout=10,
             )
-            # pkill 반환코드: 0=종료됨, 1=매칭 없음(이미 죽었을 수 있음)
             if proc.returncode == 0:
                 logging.info(f"  '{target_name}' 종료 신호 전송. 복구 검증 중...")
                 return self._verify_process_dead(target_name)
@@ -431,7 +424,6 @@ class ActionExecutor:
 
     def _escalate_to_human(self, reasoning: str) -> None:
         # Slack 알림은 AgentObserver.log_event()에서 일원화해서 발송.
-        # 여기서 중복 발송하지 않는다.
         logging.error(f"[에스컬레이션] 관리자 개입 필요. 사유: {reasoning}")
 
     def _send_slack_alert(self, message: str, severity: str = "INFO") -> None:
