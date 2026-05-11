@@ -1,0 +1,24 @@
+[Unit]
+Description=Self-Healing MLOps Agent
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/agent
+EnvironmentFile=/root/agent/.env
+
+# 호스트 OS 네이티브 실행 — 커널 수준 systemctl/pkill 제어를 위해 컨테이너 외부에서 구동
+ExecStart=/root/agent/.venv/bin/python -m src.log_watcher
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=self-healing-agent
+
+# 프로세스가 비정상 종료 시 30초 대기 후 재시작
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
