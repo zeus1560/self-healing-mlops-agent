@@ -8,6 +8,7 @@ ChromaDB에 쌓인 벡터를 주기적으로 KMeans 클러스터링해서
 - MaintenanceRunner.run_if_due() 주기(1일)에 맞춰 log_watcher에서 호출
 """
 import logging
+import os
 import traceback
 from typing import Optional
 
@@ -20,8 +21,8 @@ try:
 except ImportError:
     pass
 
-_N_CLUSTERS    = 8    # 탐색할 클러스터 수
-_MIN_VECTORS   = 20   # 클러스터링에 필요한 최소 벡터 수
+_N_CLUSTERS  = int(os.getenv("CLUSTER_N_CLUSTERS",  "8"))   # 탐색할 클러스터 수
+_MIN_VECTORS = int(os.getenv("CLUSTER_MIN_VECTORS", "20"))  # 클러스터링에 필요한 최소 벡터 수
 
 
 class ErrorClusterer:

@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 from collections import deque
-from typing import List
 
 # 종료 신호를 받으면 set() → 메인 루프와 이벤트 핸들러가 함께 종료를 인지
 _shutdown_event = threading.Event()
@@ -19,6 +18,7 @@ def _handle_shutdown(signum, frame):
         "진행 중인 파이프라인 완료 후 종료합니다..."
     )
     _shutdown_event.set()
+
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -33,6 +33,9 @@ from src.observability import AgentObserver
 from src.proactive_monitor import ProactiveMonitor
 from src.utils.debouncer import LogDebouncer
 from src.utils.logging_config import setup_json_logging
+
+_CLUSTER_INTERVAL_SEC  = int(os.getenv("CLUSTER_INTERVAL_SEC", "86400"))
+_DEBOUNCE_COOLDOWN_SEC = int(os.getenv("DEBOUNCE_COOLDOWN_SEC", "30"))
 
 
 class LogTailHandler(FileSystemEventHandler):
@@ -81,8 +84,8 @@ class LogTailHandler(FileSystemEventHandler):
                 if self.debouncer.should_process(line):
                     context = self._build_context_window(
                         line,
-                        before=list(self._line_buf)[:-1],          # 에러 줄 제외 직전 최대 10줄
-                        after=[l.strip() for l in new_lines[idx + 1: idx + 11]],  # 이후 최대 10줄
+                        before=list(self._line_buf)[:-1],
+                        after=[l.strip() for l in new_lines[idx + 1: idx + 11]],
                     )
                     self.trigger_agent_pipeline(context)
 
@@ -130,7 +133,6 @@ class LogTailHandler(FileSystemEventHandler):
         error_type      = exec_result["error_type"]
         error_detail    = exec_result["error_detail"]
 
-        # L2 LLM과 Rule 기반 성공 모두 L1 캐시에 학습 (책임 일원화)
         if success and source in ("L2_LLM", "RULE") and decision.command:
             try:
                 self.engine.learn_from_feedback(error_log, decision.command)
@@ -156,17 +158,22 @@ class LogTailHandler(FileSystemEventHandler):
         )
 
 
-def start_watching(target_log_files: str | List[str]) -> None:
+def start_watching(target_log_files: str | list[str]) -> None:
     """
     하나 또는 여러 로그 파일을 동시 감시한다.
-    target_log_files: 단일 경로(str) 또는 경로 목록(List[str])
+    컴포넌트(RAGEngine, ActionExecutor, AgentObserver, CircuitBreaker)를
+    모든 핸들러가 공유해 메모리 중복 생성을 방지한다.
     """
     if isinstance(target_log_files, str):
         target_log_files = [target_log_files]
 
-    debouncer    = LogDebouncer(cooldown_seconds=30)
-    watch_observer = Observer()
-    first_handler = None
+    debouncer       = LogDebouncer(cooldown_seconds=_DEBOUNCE_COOLDOWN_SEC)
+    shared_engine   = RAGEngine()
+    shared_executor = ActionExecutor()
+    shared_observer = AgentObserver()
+    shared_breaker  = CircuitBreaker()
+    watch_observer  = Observer()
+    first_handler   = None
 
     for log_file in target_log_files:
         abs_path = os.path.abspath(log_file)
@@ -175,7 +182,13 @@ def start_watching(target_log_files: str | List[str]) -> None:
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write("=== System Log Initialized ===\n")
 
-        handler = LogTailHandler(abs_path, debouncer)
+        handler = LogTailHandler(
+            abs_path, debouncer,
+            executor=shared_executor,
+            observer_agent=shared_observer,
+            engine=shared_engine,
+            circuit_breaker=shared_breaker,
+        )
         watch_observer.schedule(
             handler,
             path=os.path.dirname(abs_path),
@@ -187,7 +200,6 @@ def start_watching(target_log_files: str | List[str]) -> None:
 
     watch_observer.start()
 
-    # SIGTERM (systemd/docker stop) 과 SIGINT (Ctrl+C) 모두 graceful 처리
     signal.signal(signal.SIGTERM, _handle_shutdown)
     signal.signal(signal.SIGINT,  _handle_shutdown)
 
@@ -198,10 +210,8 @@ def start_watching(target_log_files: str | List[str]) -> None:
         pipeline_callback=first_handler.trigger_agent_pipeline
     )
 
-    _cluster_interval = 86400  # 24시간마다 클러스터링
-    _last_cluster     = time.time()  # 시작 시점부터 카운트 → 24h 후 첫 실행
+    _last_cluster = time.time()
 
-    # _shutdown_event.wait(1): 종료 신호가 오면 sleep 없이 즉시 루프 탈출
     while not _shutdown_event.is_set():
         _shutdown_event.wait(1)
         if _shutdown_event.is_set():
@@ -209,11 +219,10 @@ def start_watching(target_log_files: str | List[str]) -> None:
         maintenance.run_if_due()
         proactive.check_and_trigger()
         etl_scheduler.run_if_due()
-        if time.time() - _last_cluster >= _cluster_interval:
+        if time.time() - _last_cluster >= _CLUSTER_INTERVAL_SEC:
             clusterer.run()
             _last_cluster = time.time()
 
-    # 진행 중인 watchdog 이벤트 핸들러가 완료될 때까지 최대 30초 대기
     logging.info("[Shutdown] 감시 루프 종료. 실행 중인 작업 완료 대기 중 (최대 30s)...")
     watch_observer.stop()
     watch_observer.join(timeout=30)
@@ -221,16 +230,11 @@ def start_watching(target_log_files: str | List[str]) -> None:
 
 
 if __name__ == "__main__":
-    import json as _json
-    import sys as _sys
-    # JSON 로깅 활성화 (환경변수 USE_JSON_LOG=1)
     if os.getenv("USE_JSON_LOG", "0") == "1":
         setup_json_logging()
     else:
         logging.basicConfig(level=logging.INFO,
                             format="%(asctime)s - %(levelname)s - %(message)s")
 
-    # 복수 로그 파일 지원: 인자로 여러 경로 전달 가능
-    # python -m src.log_watcher /var/log/app.log /var/log/nginx/error.log
-    targets = _sys.argv[1:] if len(_sys.argv) > 1 else ["./data/realtime_system.log"]
+    targets = sys.argv[1:] if len(sys.argv) > 1 else ["./data/realtime_system.log"]
     start_watching(targets)
