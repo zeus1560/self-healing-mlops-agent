@@ -44,4 +44,4 @@ logs/
 .idea/
 .claude/
 .DS_Store
-Thumbs.db
+Thumbs.db*.egg-info/
