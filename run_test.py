@@ -17,18 +17,15 @@ def simulate_error_handling(error_log: str, engine, executor, observer, step_nam
     decision = engine.analyze_error(error_log)
 
     # 2. 보안 검증 및 실행
-    result = executor.execute(decision)
+    result = executor.execute(decision, original_error_log=error_log)
 
     latency = time.perf_counter() - start_time
+    source  = decision.resolution_source
 
-    # 3. 메트릭 적재 (ETL)
-    resolution_source = (
-        "L1_CACHE" if "Vector DB 유사도 매칭 성공" in decision.reasoning else "L2_LLM"
-    )
-
+    # 3. 메트릭 적재
     observer.log_event(
         error_log=error_log,
-        source=resolution_source,
+        source=source,
         action_type=decision.action_type.value,
         latency_sec=latency,
         success=result["success"],
@@ -37,13 +34,9 @@ def simulate_error_handling(error_log: str, engine, executor, observer, step_nam
         error_detail=result.get("error_detail"),
     )
 
-    # 4. 피드백 루프 (성공적인 LLM 조치만 학습)
-    if (
-        resolution_source == "L2_LLM"
-        and decision.action_type == ActionType.EXECUTE_LLM_COMMAND
-        and result["success"]
-    ):
-        engine.learn_from_feedback(error_log, decision.reasoning)
+    # 4. 피드백 루프 — log_watcher.py와 동일 조건
+    if result["success"] and source in ("L2_LLM", "RULE") and decision.command:
+        engine.learn_from_feedback(error_log, decision.command)
 
 
 if __name__ == "__main__":
