@@ -107,7 +107,7 @@ class AgentObserver:
                 f"• *판단 소스*: `{source}`\n"
                 f"• *시도한 액션*: `{action_type}`\n"
                 f"• *실패 유형*: `{error_type or 'N/A'}`\n"
-                f"• *실패 상세*: `{(error_detail or '')[:200]}`\n"
+                f"• *실패 상세*: {('`' + error_detail[:200] + '`') if error_detail else '없음'}\n"
                 f"⚠️ *관리자의 즉각적인 확인이 필요합니다!*"
             )
             self._send_slack_alert(message)

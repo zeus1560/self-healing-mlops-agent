@@ -76,20 +76,20 @@ class ActionExecutor:
         logging.info(f"결정된 액션: {decision.action_type.name}")
 
         if decision.action_type == ActionType.CLEAR_MEMORY:
-            ok = self._clear_memory()
+            ok, err = self._clear_memory()
             result = {
                 "success": ok,
                 "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": None,
-                "error_detail": None,
+                "error_type": "MemoryClearFailed" if not ok else None,
+                "error_detail": err,
             }
         elif decision.action_type == ActionType.RESTART_SERVICE:
-            ok = self._restart_service(decision.target_process)
+            ok, err = self._restart_service(decision.target_process)
             result = {
                 "success": ok,
                 "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": None,
-                "error_detail": None,
+                "error_type": "ServiceRestartFailed" if not ok else None,
+                "error_detail": err,
             }
         elif decision.action_type == ActionType.ESCALATE_TO_HUMAN:
             self._escalate_to_human(decision.reasoning)
@@ -100,12 +100,12 @@ class ActionExecutor:
                 "error_detail": decision.reasoning[:300],
             }
         elif decision.action_type == ActionType.KILL_PROCESS:
-            ok = self._kill_process(decision.target_process)
+            ok, err = self._kill_process(decision.target_process)
             result = {
                 "success": ok,
                 "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": None,
-                "error_detail": None,
+                "error_type": "ProcessKillFailed" if not ok else None,
+                "error_detail": err,
             }
         elif decision.action_type == ActionType.ALERT_ONLY:
             logging.warning(f"[ALERT_ONLY] 조치 없음, 관찰만 기록: {decision.reasoning[:200]}")
@@ -321,7 +321,7 @@ class ActionExecutor:
             return {"success": False, "result_category": "FAILURE",
                     "error_type": type(e).__name__, "error_detail": traceback.format_exc()}
 
-    def _clear_memory(self) -> bool:
+    def _clear_memory(self) -> tuple[bool, str | None]:
         logging.warning("[조치] 시스템 메모리 최적화 시작...")
         collected = gc.collect()
         logging.info(f"  OS RAM 확보 완료 (수거: {collected}개)")
@@ -338,7 +338,7 @@ class ActionExecutor:
         except Exception:
             logging.error(f"  VRAM 초기화 중 오류:\n{traceback.format_exc()}")
         logging.warning("메모리 최적화 완료")
-        return True
+        return True, None
 
     def _verify_process_dead(self, target_name: str, wait_sec: float = 1.0) -> bool:
         """pkill 후 프로세스가 실제로 종료됐는지 pgrep으로 확인."""
@@ -376,7 +376,7 @@ class ActionExecutor:
             logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
             return False
 
-    def _kill_process(self, target: str) -> bool:
+    def _kill_process(self, target: str) -> tuple[bool, str | None]:
         target_name = target if target else "Unknown_Process"
         logging.warning(f"[조치] '{target_name}' 프로세스 종료 시도...")
         try:
@@ -386,17 +386,21 @@ class ActionExecutor:
             )
             if proc.returncode == 0:
                 logging.info(f"  '{target_name}' 종료 신호 전송. 복구 검증 중...")
-                return self._verify_process_dead(target_name)
-            logging.warning(f"  '{target_name}' 매칭 프로세스 없음 (이미 종료됐을 수 있음).")
-            return False
+                ok = self._verify_process_dead(target_name)
+                return ok, None if ok else f"'{target_name}' 종료 후 프로세스가 여전히 실행 중"
+            msg = f"'{target_name}' 매칭 프로세스 없음 (이미 종료됐을 수 있음)"
+            logging.warning(f"  {msg}.")
+            return False, msg
         except subprocess.TimeoutExpired:
-            logging.error(f"  '{target_name}' 종료 타임아웃.")
-            return False
+            msg = f"'{target_name}' 종료 타임아웃 (10s 초과)"
+            logging.error(f"  {msg}.")
+            return False, msg
         except Exception:
-            logging.error(f"  '{target_name}' 종료 오류:\n{traceback.format_exc()}")
-            return False
+            msg = traceback.format_exc()
+            logging.error(f"  '{target_name}' 종료 오류:\n{msg}")
+            return False, msg
 
-    def _restart_service(self, target: str) -> bool:
+    def _restart_service(self, target: str) -> tuple[bool, str | None]:
         target_name = target if target else "Unknown_Service"
         logging.warning(f"[조치] '{target_name}' 서비스 재시작 중...")
         try:
@@ -409,18 +413,21 @@ class ActionExecutor:
             )
             if proc.returncode == 0:
                 logging.info(f"  '{target_name}' 재시작 신호 전송. 복구 검증 중...")
-                return self._verify_service_active(target_name)
+                ok = self._verify_service_active(target_name)
+                return ok, None if ok else f"'{target_name}' 재시작 후 active 상태 미확인"
             detail = proc.stderr.strip() or f"returncode={proc.returncode}"
             logging.error(f"'{target_name}' 재시작 실패: {detail}")
             self._try_rollback(f"systemctl restart {target_name}")
-            return False
+            return False, detail
         except subprocess.TimeoutExpired:
-            logging.error(f"'{target_name}' 재시작 타임아웃 (30s 초과)")
+            msg = f"'{target_name}' 재시작 타임아웃 (30s 초과)"
+            logging.error(msg)
             self._try_rollback(f"systemctl restart {target_name}")
-            return False
+            return False, msg
         except Exception:
-            logging.error(f"'{target_name}' 재시작 오류:\n{traceback.format_exc()}")
-            return False
+            msg = traceback.format_exc()
+            logging.error(f"'{target_name}' 재시작 오류:\n{msg}")
+            return False, msg
 
     def _escalate_to_human(self, reasoning: str) -> None:
         # Slack 알림은 AgentObserver.log_event()에서 일원화해서 발송.
