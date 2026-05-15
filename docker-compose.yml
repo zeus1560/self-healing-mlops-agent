@@ -36,6 +36,7 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
+      - ./experiments:/app/experiments
     restart: unless-stopped
 
   # ── 2. Human-in-the-Loop 승인 서버 (FastAPI) ─────────────────────────
