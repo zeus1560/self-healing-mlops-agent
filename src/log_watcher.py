@@ -75,6 +75,9 @@ class LogTailHandler(FileSystemEventHandler):
             logging.error(f"[LogWatcher] 로그 파일 읽기 실패:\n{traceback.format_exc()}")
             return
 
+        # 배치 처리 전 컨텍스트 스냅샷 — 배치 내 다른 에러 줄이 컨텍스트를 오염하는 것을 방지
+        pre_batch_context = list(self._line_buf)
+
         for idx, raw in enumerate(new_lines):
             line = raw.strip()
             self._line_buf.append(line)
@@ -84,10 +87,15 @@ class LogTailHandler(FileSystemEventHandler):
                     logging.info("[Shutdown] 종료 중 — 새 파이프라인 시작 생략.")
                     return
                 if self.debouncer.should_process(line):
+                    # after 컨텍스트에서 다른 에러 줄 제외 — 별개 에러가 원인처럼 보이는 오판 방지
+                    after_lines = [
+                        l.strip() for l in new_lines[idx + 1: idx + 11]
+                        if not self.error_pattern.search(l)
+                    ]
                     context = self._build_context_window(
                         line,
-                        before=list(self._line_buf)[:-1],
-                        after=[l.strip() for l in new_lines[idx + 1: idx + 11]],
+                        before=pre_batch_context,
+                        after=after_lines,
                     )
                     self.trigger_agent_pipeline(context)
 
