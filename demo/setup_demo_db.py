@@ -322,7 +322,7 @@ DEMO_ENTRIES = [
     },
     {
         "log_text": "ERROR api-server db query failed context deadline exceeded timeout 30s database",
-        "error_category": "DB_Timeout",
+        "error_category": "DB_Connection",
         "action_type": "execute_rule_command",
         "target_process": None,
         "command": "free -h",
