@@ -16,7 +16,7 @@ from chromadb.config import Settings
 
 TEST_SET_PATH = Path("data/test_set.json")
 RESULTS_DIR   = Path("experiments/results")
-RAG_THRESHOLD = 0.80  # 현재 운영 threshold
+RAG_THRESHOLD = 1.20  # 현재 운영 threshold (threshold sweep 최적값)
 
 
 # ── 베이스라인: 키워드 매칭 ────────────────────────────────────────────

@@ -497,7 +497,8 @@ class RAGEngine:
                 metadatas=[{
                     "error_category": "Learned_from_LLM",
                     "action_type": ActionType.EXECUTE_LLM_COMMAND.value,
-                    "reasoning": successful_command,
+                    "command": successful_command,
+                    "reasoning": f"L2 학습 성공 명령어: {successful_command}",
                     "target_process": "unknown",
                     "learned_at": int(time.time()),
                 }],

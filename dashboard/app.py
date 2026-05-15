@@ -1,3 +1,5 @@
+
+
 """
 Enterprise MLOps Agent Dashboard
 캡스톤 최종 발표용 — Self-Healing Agent 모니터링 & 실험 분석
@@ -194,14 +196,19 @@ def load_vector_quality() -> dict:
     result = {
         "total": 0, "categories": {}, "learned": 0,
         "hit_rate": None, "dead_count": 0,
+        "_error": None,
     }
     if not CHROMA_PATH.exists():
+        result["_error"] = f"경로 없음: {CHROMA_PATH}"
         return result
     try:
-        import sys as _sys
-        _sys.path.insert(0, str(BASE_DIR))
-        from src.llm_engine import _get_chroma_client
-        col = _get_chroma_client().get_collection("error_playbook_vectors")
+        import chromadb
+        from chromadb.config import Settings
+        client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH),
+            settings=Settings(anonymized_telemetry=False),
+        )
+        col = client.get_collection("error_playbook_vectors")
         data = col.get(include=["metadatas"])
         metas = data["metadatas"]
         result["total"] = len(metas)
@@ -209,8 +216,8 @@ def load_vector_quality() -> dict:
         cats = Counter(m.get("error_category", "Unknown") for m in metas)
         result["categories"] = dict(cats)
         result["learned"] = sum(1 for m in metas if m.get("learned_at"))
-    except Exception:
-        pass
+    except Exception as e:
+        result["_error"] = str(e)
 
     # metrics DB에서 L1 히트율 계산
     if DB_PATH.exists() and result["total"] > 0:
@@ -801,7 +808,9 @@ with tab3:
     st.markdown("ChromaDB에 누적된 에러 지식 벡터의 품질과 분포를 모니터링합니다.")
     st.divider()
 
-    if vq["total"] == 0:
+    if vq.get("_error"):
+        st.error(f"Vector DB 로드 실패: `{vq['_error']}`")
+    elif vq["total"] == 0:
         st.info(
             "Vector DB가 비어있거나 경로를 찾을 수 없습니다. "
             "`python -m src.etl_vector_sync` 로 데이터를 먼저 로드하세요."
