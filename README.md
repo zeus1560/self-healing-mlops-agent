@@ -100,6 +100,23 @@ src/
   train_set.json 우선, 없으면 etl_backup.json 폴백
 ```
 
+### 훈련 데이터 파이프라인 (ChromaDB 총 **977건**, 합성 데이터 0건)
+
+| 소스 | ChromaDB 적재 | 수집 방법 |
+|------|------|---------|
+| ETL GitHub Issues + Demo | 504건 | GitHub API 크롤링 + 데모 시나리오 |
+| `scripts/loghub_pipeline.py --keyword-only` | 226건 | Loghub 공개 연구 데이터셋 (키워드 분류) |
+| `scripts/etl_github_to_chroma.py` | 247건 | **공식 레포 30개 쿼리** — pytorch/tensorflow/elasticsearch/celery/gunicorn/sqlalchemy/psycopg2/redis-py/aiohttp/grpc/vault/paramiko/ansible/kubernetes/helm 등 |
+
+**ETL 전략**: Extract(GitHub 공식 이슈) → 에러 스니펫 regex 추출 → 전처리(노이즈 제거·길이 제한·액션 검증) → Load(ChromaDB 직접 upsert)  
+합성 데이터 없음 — 모든 항목이 실제 오픈소스 프로젝트 이슈에서 수집된 원본 에러 메시지
+
+**데이터 전처리 파이프라인**:
+- 노이즈 필터링: URL·티켓 링크·30자 미만·에러 키워드 없는 텍스트 제거 (-286건)
+- 텍스트 길이 제한: 임베딩 모델(all-MiniLM-L6-v2) max 512자로 상한 적용
+- 액션 일관성: 카테고리별 올바른 action_type 전수 검증 및 수정 (-155건 오류 수정)
+- MD5 해시 중복 제거: 동일 텍스트 upsert 시 자동 덮어쓰기
+
 ---
 
 ## 보안 아키텍처
@@ -122,9 +139,9 @@ src/
 
 | 실험 | 결과 |
 |------|------|
-| **Threshold Sweep** (0.5~0.9) | 최적 threshold=**0.9**, F1=**0.901** |
-| **Baseline Compare** | 키워드 매칭 22.1% → RAG **73.3%** (+51.2%p) |
-| **Security Audit** (악성 30개) | **29/30 차단** (96.7%) |
+| **Threshold Sweep** (0.1~1.5) | 최적 threshold=**1.2**, action_F1=**0.982**, L1 히트율 **97.7%** |
+| **Baseline Compare** | 키워드 매칭 22.1% → RAG **84.9%** (+62.8%p) |
+| **Security Audit** (악성 30개) | **30/30 차단** (100%) |
 | **Top-K Sweep** (K=1,2,3,5) | **K=1** 최적 (오버헤드 없음) |
 | **Debouncer Sweep** | 모든 윈도우에서 **95%+** 중복 방어 |
 | **Learning Curve** (50→350건) | 데이터 증가에 따른 단조 성능 향상 확인 |

@@ -31,7 +31,9 @@ from src.llm_engine import RAGEngine
 from src.maintenance import MaintenanceRunner
 from src.observability import AgentObserver
 from src.proactive_monitor import ProactiveMonitor
+from src.slack_bot import SlackChatOps
 from src.utils.debouncer import LogDebouncer
+from src.vector_db_purger import VectorDBPurger
 from src.utils.logging_config import setup_json_logging
 
 _CLUSTER_INTERVAL_SEC  = int(os.getenv("CLUSTER_INTERVAL_SEC", "86400"))
@@ -205,7 +207,9 @@ def start_watching(target_log_files: str | list[str]) -> None:
 
     maintenance   = MaintenanceRunner()
     clusterer     = ErrorClusterer()
+    purger        = VectorDBPurger()
     etl_scheduler = ETLScheduler()
+    slack         = SlackChatOps()
     proactive     = ProactiveMonitor(
         pipeline_callback=first_handler.trigger_agent_pipeline
     )
@@ -220,8 +224,32 @@ def start_watching(target_log_files: str | list[str]) -> None:
         proactive.check_and_trigger()
         etl_scheduler.run_if_due()
         if time.time() - _last_cluster >= _CLUSTER_INTERVAL_SEC:
-            clusterer.run()
+            result = clusterer.run()
             _last_cluster = time.time()
+            if result and result["new_patterns"]:
+                patterns_str = "\n".join(f"• `{p}`" for p in result["new_patterns"])
+                slack.send_notification(
+                    title="🆕 새로운 에러 패턴 감지",
+                    message=(
+                        f"*Vector DB에서 신규 에러 카테고리가 발견되었습니다.*\n"
+                        f"{patterns_str}\n\n"
+                        f"전체 클러스터: {result['n_clusters']}개 | "
+                        f"벡터: {result['n_vectors']}개 | "
+                        f"실루엣: {result['silhouette']:.3f}"
+                    ),
+                )
+            purge_result = purger.run_if_due()
+            if purge_result and purge_result["purged"]:
+                purged_str = "\n".join(f"• `{d[:32]}...`" for d in purge_result["purged"])
+                slack.send_notification(
+                    title="🗑️ Vector DB 불량 항목 자동 정제",
+                    message=(
+                        f"*반복 실패를 유발한 항목을 삭제했습니다.*\n"
+                        f"{purged_str}\n\n"
+                        f"검사: {purge_result['checked']}건 | "
+                        f"삭제: {len(purge_result['purged'])}건"
+                    ),
+                )
 
     logging.info("[Shutdown] 감시 루프 종료. 실행 중인 작업 완료 대기 중 (최대 30s)...")
     watch_observer.stop()

@@ -5,6 +5,7 @@ Proactive Monitor — 에러 발생 전 시스템 임계치를 감시하고 선�
   CPU    >= 90% 연속 2회  → "CRITICAL CPU usage" 합성 로그 발동
   Memory >= 85%           → "CRITICAL Memory usage" 합성 로그 발동
   Disk   >= 90%           → "CRITICAL Disk usage" 합성 로그 발동
+  VRAM   >= 90%           → "CRITICAL VRAM usage" 합성 로그 발동 (Intel Arc GPU)
 
 check_and_trigger() 를 메인 루프에서 주기적으로 호출하면 된다.
 파이프라인 콜백 없이도 단독으로 경고 로그를 남긴다.
@@ -20,11 +21,18 @@ try:
     _PSUTIL_OK = True
 except ImportError:
     _PSUTIL_OK = False
-    logging.warning("[ProactiveMonitor] psutil 미설치 — 선제 모니터링 비활성화")
+    logging.warning("[ProactiveMonitor] psutil 미설치 — CPU/Memory/Disk 모니터링 비활성화")
+
+try:
+    from src.monitor.vram_profiler import get_intel_gpu_stats as _get_gpu_stats
+    _VRAM_OK = True
+except ImportError:
+    _VRAM_OK = False
 
 CPU_THRESHOLD_PCT   = float(os.getenv("PROACTIVE_CPU_THRESHOLD_PCT",  "90.0"))
 MEM_THRESHOLD_PCT   = float(os.getenv("PROACTIVE_MEM_THRESHOLD_PCT",  "85.0"))
 DISK_THRESHOLD_PCT  = float(os.getenv("PROACTIVE_DISK_THRESHOLD_PCT", "90.0"))
+VRAM_THRESHOLD_PCT  = float(os.getenv("PROACTIVE_VRAM_THRESHOLD_PCT", "90.0"))
 CHECK_INTERVAL_SEC  = int(os.getenv("PROACTIVE_CHECK_INTERVAL_SEC",   "60"))
 CPU_STREAK_TRIGGER  = int(os.getenv("PROACTIVE_CPU_STREAK_TRIGGER",   "2"))
 ALERT_COOLDOWN_SEC  = int(os.getenv("PROACTIVE_ALERT_COOLDOWN_SEC",   "1800"))
@@ -36,7 +44,7 @@ class ProactiveMonitor:
     합성(synthetic) 에러 로그를 생성하고 콜백으로 파이프라인을 선제 발동한다.
 
     메모리 설계:
-      _last_fired: dict[str, float] — 알림 키 3개로 크기 고정, 무한 증가 없음.
+      _last_fired: dict[str, float] — 알림 키 4개로 크기 고정, 무한 증가 없음.
       _cpu_streak: int — 정수 1개.
       이전 구현의 _triggered set은 매 사이클 clear() 했으나
       그로 인해 임계치가 지속되는 동안 매 60초마다 알림이 반복 발동되는 버그 존재.
@@ -57,17 +65,17 @@ class ProactiveMonitor:
     # ── 공개 인터페이스 ────────────────────────────────────────────────────
     def check_and_trigger(self) -> None:
         """메인 루프에서 호출. CHECK_INTERVAL_SEC 미만이면 즉시 반환."""
-        if not _PSUTIL_OK:
-            return
         now = time.time()
         if now - self._last_check < CHECK_INTERVAL_SEC:
             return
         self._last_check = now
 
         try:
-            self._check_cpu()
-            self._check_memory()
-            self._check_disk()
+            if _PSUTIL_OK:
+                self._check_cpu()
+                self._check_memory()
+                self._check_disk()
+            self._check_vram()
         except Exception:
             logging.error(f"[ProactiveMonitor] 점검 중 오류:\n{traceback.format_exc()}")
 
@@ -111,6 +119,26 @@ class ProactiveMonitor:
             self._fire(
                 f"CRITICAL Disk usage {pct:.1f}% — no space left on device risk (free: {free_gb}GB)",
                 key="disk",
+            )
+
+    def _check_vram(self) -> None:
+        if not _VRAM_OK:
+            return
+        stats = _get_gpu_stats()
+        used  = stats.get("vram_used_mb")
+        total = stats.get("vram_total_mb")
+        if used is None or total is None or total == 0:
+            return
+        pct = used / total * 100
+        if pct >= VRAM_THRESHOLD_PCT:
+            logging.warning(
+                f"[ProactiveMonitor] VRAM {pct:.1f}% ≥ {VRAM_THRESHOLD_PCT}% "
+                f"({used:.0f}/{total:.0f} MiB)"
+            )
+            self._fire(
+                f"CRITICAL VRAM usage {pct:.1f}% — GPU OOM risk for IPEX-LLM "
+                f"({used:.0f}/{total:.0f} MiB) detected proactively",
+                key="vram",
             )
 
     def _fire(self, synthetic_log: str, key: str) -> None:

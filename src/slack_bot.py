@@ -83,3 +83,33 @@ class SlackChatOps:
         except Exception as e:
             logging.error(f"Slack 통신 에러: {e}")
             return False
+
+    def send_notification(self, title: str, message: str) -> bool:
+        """단순 정보성 알림 메시지를 발송합니다."""
+        if not self.webhook_url:
+            logging.warning("🔔 SLACK_WEBHOOK_URL이 설정되지 않아 슬랙 알림을 건너뜁니다.")
+            return False
+
+        payload = {
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": title, "emoji": True},
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": message},
+                },
+            ]
+        }
+
+        try:
+            response = requests.post(self.webhook_url, json=payload, timeout=5)
+            if response.ok:
+                logging.info(f"[Slack] 알림 발송 완료: {title}")
+                return True
+            logging.error(f"Slack 발송 실패 (HTTP {response.status_code}): {response.text}")
+            return False
+        except Exception as e:
+            logging.error(f"Slack 통신 에러: {e}")
+            return False
