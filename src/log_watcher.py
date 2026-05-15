@@ -75,8 +75,8 @@ class LogTailHandler(FileSystemEventHandler):
             logging.error(f"[LogWatcher] 로그 파일 읽기 실패:\n{traceback.format_exc()}")
             return
 
-        # 배치 처리 전 컨텍스트 스냅샷 — 배치 내 다른 에러 줄이 컨텍스트를 오염하는 것을 방지
-        pre_batch_context = list(self._line_buf)
+        # 배치 처리 전 컨텍스트 스냅샷 — 에러 줄 제외(이전 배치 오염 방지), INFO/WARN만 포함
+        pre_batch_context = [l for l in self._line_buf if not self.error_pattern.search(l)]
 
         for idx, raw in enumerate(new_lines):
             line = raw.strip()
