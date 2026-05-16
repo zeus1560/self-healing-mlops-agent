@@ -87,26 +87,94 @@ Command:"""
 
 
 _PROSE_STARTERS = {
-    "to", "in", "please", "you", "first", "the", "this", "here", "note",
-    "i", "we", "it", "if", "use", "run", "try", "make", "sure", "for",
+    # 관사/전치사
+    "to", "in", "on", "at", "by", "of", "an", "a",
+    # 대명사
+    "i", "we", "it", "if", "you",
+    # 동사성 산문
+    "please", "use", "run", "try", "make", "sure", "check",
+    "first", "next", "then", "finally", "now", "step",
+    # 관사/지시어
+    "the", "this", "that", "these", "those", "here", "note",
+    # 접속사/부사
+    "as", "so", "since", "based", "given", "when", "where",
+    "however", "therefore", "because", "also", "simply",
 }
+
+import re as _re
+
+_JSON_PATTERN = _re.compile(r'\{[^{}]*\}', _re.DOTALL)
+
+
+def _extract_json_command(text: str) -> str:
+    """
+    LLM 응답에서 {"command": "..."} 형태의 JSON을 추출한다.
+    0.5B 모델이 지시를 어기고 JSON 형식으로 답변할 때 방어.
+    """
+    for m in _JSON_PATTERN.finditer(text):
+        try:
+            obj = json.loads(m.group())
+            cmd = obj.get("command") or obj.get("cmd") or obj.get("action")
+            if cmd and isinstance(cmd, str):
+                return cmd.strip()
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return ""
 
 
 def _clean_llm_output(raw: str) -> str:
-    """마크다운, sudo, 영문 산문을 제거하고 첫 번째 유효 셸 명령어만 반환."""
+    """
+    LLM 응답에서 첫 번째 유효한 셸 명령어만 추출한다.
+    처리 순서:
+      1. JSON 형태 응답 → _extract_json_command
+      2. 마크다운 코드블록 → 블록 안 첫 줄
+      3. 줄 단위 산문 필터 → 첫 번째 비산문 줄
+      4. 인라인 주석(#) 제거, sudo 제거
+    """
+    if not raw:
+        return ""
+
+    # 1. JSON 형태로 답한 경우
+    if "{" in raw:
+        extracted = _extract_json_command(raw)
+        if extracted:
+            raw = extracted  # JSON에서 꺼낸 명령어를 이후 정제에 통과
+
+    # 2. 마크다운 코드블록 내부 추출
+    code_block = _re.search(r'```[a-z]*\n(.*?)```', raw, _re.DOTALL)
+    if code_block:
+        raw = code_block.group(1)
+
     for line in raw.strip().splitlines():
         line = line.strip()
-        if not line or line.startswith("```") or line.startswith("#"):
+        if not line:
             continue
-        line = line.removeprefix("bash").strip()
+        # 코드블록 경계선, 주석 헤더 제거
+        if line.startswith("```") or line.startswith("===") or line.startswith("---"):
+            continue
+        # bash/shell 언어 태그 제거
+        line = _re.sub(r'^(bash|sh|shell|zsh)\s+', '', line, flags=_re.IGNORECASE)
+        # sudo 제거
         if line.startswith("sudo "):
             line = line[5:].strip()
-        first_token = line.split()[0] if line.split() else ""
-        if first_token.startswith("**") or first_token[:-1].isdigit():
+        # 번호 매기기 제거: "1. cmd", "1) cmd", "- cmd", "* cmd"
+        line = _re.sub(r'^(\d+[\.\)]\s*|[-*]\s+)', '', line)
+        if not line:
             continue
-        if first_token.lower().rstrip(".,:") in _PROSE_STARTERS:
+        # 인라인 주석 제거: "cmd arg  # 설명"
+        line = _re.sub(r'\s+#\s+.*$', '', line).strip()
+
+        tokens = line.split()
+        if not tokens:
+            continue
+        first = tokens[0].lower().rstrip(".,:;")
+        # 굵은글씨(**word**) 또는 순수 숫자는 산문
+        if first.startswith("**") or first.isdigit():
+            continue
+        if first in _PROSE_STARTERS:
             continue
         return line
+
     return ""
 
 
@@ -168,10 +236,14 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 result = json.loads(resp.read())
-                command = _clean_llm_output(result.get("response", ""))
+                raw = result.get("response", "")
+                command = _clean_llm_output(raw)
+                if not command:
+                    logging.warning(f"[Ollama] 유효 명령어 추출 실패. 원본 응답: {raw!r:.120}")
+                    return "ERROR: Ollama returned unparseable response"
                 if attempt > 1:
                     logging.info(f"[Ollama] {attempt}번째 시도에서 성공")
-                return command if command else "ERROR: Ollama returned empty response"
+                return command
 
         except urllib.error.URLError as e:
             last_error = str(e)
