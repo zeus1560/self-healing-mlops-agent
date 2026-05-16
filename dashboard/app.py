@@ -305,6 +305,67 @@ with tab1:
 
         st.divider()
 
+        # ── MTTR 비교 (수동 vs 에이전트) ────────────────────────────────
+        st.markdown('<p class="section-title">MTTR — 평균 장애 복구 시간 비교 (수동 On-Call vs 에이전트 자동복구)</p>',
+                    unsafe_allow_html=True)
+
+        # 수동 기준: 온콜 페이징(5분) + 로그인/이동(3분) + 진단(15분) + 조치(7분) = 30분
+        MANUAL_MTTR_SEC = 1800.0
+        agent_mttr_sec  = df["latency_sec"].mean()
+        reduction_pct   = (1 - agent_mttr_sec / MANUAL_MTTR_SEC) * 100
+        l1_avg_ms = df[df["resolution_source"] == "L1_CACHE"]["latency_sec"].mean() * 1000
+        l2_mask   = df["resolution_source"] == "L2_LLM"
+        l2_avg_ms = df[l2_mask]["latency_sec"].mean() * 1000 if l2_mask.any() else None
+
+        mc1, mc2 = st.columns([6, 4])
+
+        with mc1:
+            fig_mttr = go.Figure()
+            fig_mttr.add_trace(go.Bar(
+                x=[MANUAL_MTTR_SEC],
+                y=["수동 복구 (On-Call)"],
+                orientation="h",
+                marker_color="#e74c3c",
+                text=["30분 (1,800초)"],
+                textposition="inside",
+                insidetextanchor="middle",
+            ))
+            fig_mttr.add_trace(go.Bar(
+                x=[agent_mttr_sec],
+                y=["에이전트 자동복구"],
+                orientation="h",
+                marker_color="#2ecc71",
+                text=[f"{agent_mttr_sec * 1000:.0f} ms"],
+                textposition="outside",
+            ))
+            fig_mttr.update_layout(
+                xaxis=dict(
+                    type="log",
+                    title="복구 소요 시간 (초, 로그 스케일)",
+                    tickvals=[0.001, 0.01, 0.1, 1, 10, 60, 600, 1800],
+                    ticktext=["1ms", "10ms", "100ms", "1s", "10s", "1분", "10분", "30분"],
+                ),
+                template=THEME,
+                showlegend=False,
+                margin=dict(t=10, b=40, l=10, r=90),
+                height=170,
+                bargap=0.4,
+            )
+            st.plotly_chart(fig_mttr, use_container_width=True)
+
+        with mc2:
+            st.metric(
+                "MTTR 단축률",
+                f"{reduction_pct:.1f} %",
+                f"1,800초 → {agent_mttr_sec * 1000:.0f} ms",
+            )
+            st.caption(f"⚡ L1 Cache 평균: {l1_avg_ms:.0f} ms")
+            if l2_avg_ms is not None:
+                st.caption(f"🧠 L2 LLM 평균: {l2_avg_ms:.0f} ms")
+            st.caption("※ 수동 기준: 온콜 페이징+진단+조치 30분 (업계 평균)")
+
+        st.divider()
+
         # ── 시각화 Row 1: 도넛 차트 + 에러 타입 바 차트 ─────────────────
         v1, v2 = st.columns([4, 6])
 
