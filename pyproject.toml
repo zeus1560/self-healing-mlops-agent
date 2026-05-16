@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "self-healing-mlops-agent"
+version = "0.2.0"
+description = "Self-Healing MLOps Agent — L1/L2/Rule resolution pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.5.23,<1.0",
+    "watchdog>=3.0",
+    "requests>=2.31",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "streamlit>=1.33",
+    "pandas>=2.0",
+    "plotly>=5.18",
+    "python-json-logger>=2.0",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

@@ -1,0 +1,6 @@
+window_sec,burst_count,processed_same,defense_rate_pct,different_errors_total,different_errors_passed,miss_rate_pct
+1,20,1,95.0,3,3,0.0
+3,20,1,95.0,3,3,0.0
+5,20,1,95.0,3,3,0.0
+10,20,1,95.0,3,3,0.0
+30,20,1,95.0,3,3,0.0

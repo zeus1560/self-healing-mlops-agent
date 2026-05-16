@@ -1,0 +1,78 @@
+# ──────────────────────────────────────────────────────────────────────
+# Self-Healing MLOps Agent — Docker Compose (인프라 전용)
+#
+# ⚠️  에이전트(Agent) 본체는 여기서 실행하지 않는다.
+#     에이전트는 호스트 OS에서 네이티브(venv + systemd)로 구동해야
+#     systemctl / pkill / 메모리 회수 등 커널 수준 제어가 가능하다.
+#
+# 이 파일의 역할:
+#   - approval-server : Slack ChatOps 승인 콜백 수신 (FastAPI)
+#   - dashboard       : 모니터링 대시보드 (Streamlit)
+#   - ollama          : L2 추론 LLM 서버 (선택)
+#
+# 실행 순서:
+#   1. docker compose up -d                    # 인프라 기동
+#   2. sudo systemctl start self-healing-agent # 에이전트 기동 (호스트)
+#
+# 서비스 포트:
+#   대시보드   → http://localhost:8501
+#   승인 서버  → http://localhost:8000
+#   Ollama    → http://localhost:11434  (--profile llm 시)
+# ──────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── 1. 대시보드 (Streamlit) ───────────────────────────────────────────
+  dashboard:
+    build: .
+    container_name: mlops_dashboard
+    command: >
+      streamlit run dashboard/app.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+    env_file: .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./experiments:/app/experiments
+    restart: unless-stopped
+
+  # ── 2. Human-in-the-Loop 승인 서버 (FastAPI) ─────────────────────────
+  approval-server:
+    build: .
+    container_name: mlops_approval
+    command: uvicorn src.approval_server:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── 3. Ollama LLM 서버 (선택 — L2 추론 필요 시만 활성화) ──────────────
+  # 활성화: docker compose --profile llm up -d
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mlops_ollama
+    profiles: ["llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  ollama_models:
+    name: mlops_ollama_models
