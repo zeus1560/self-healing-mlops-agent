@@ -150,7 +150,34 @@ src/
 
 ## 빠른 시작
 
-### 환경 설정
+### 원클릭 실행 (Makefile)
+
+```bash
+make install   # 패키지 설치 + 환경 초기화 (최초 1회)
+make start     # Docker 인프라 + 에이전트 한 번에 기동
+make stop      # 전체 종료
+make status    # 컨테이너 + 에이전트 상태 확인
+```
+
+### 데모 시연
+
+```bash
+# 장애 주입 전체 시나리오 (OOM → DB → Disk → Crash → Auth 순서 자동 실행)
+make demo
+
+# 또는 개별 장애 선택 주입
+python demo/inject_failure.py                        # 인터랙티브 메뉴
+python demo/inject_failure.py --type oom             # OOM 단일 주입
+python demo/inject_failure.py --type disk_full       # Disk Full 단일 주입
+python demo/inject_failure.py --scenario full        # 전체 5개 시나리오 자동 실행
+
+# 에이전트 실시간 로그 확인
+make logs
+```
+
+지원 장애 유형: `oom` / `memory_leak` / `disk_full` / `process_crash` / `port_conflict` / `auth_error` / `db_timeout` / `network_timeout` / `permission_denied` / `config_error`
+
+### 수동 환경 설정
 
 ```bash
 # 1. 가상환경 생성 및 패키지 설치
@@ -176,7 +203,7 @@ python scripts/split_dataset.py
 python -m src.etl_vector_sync
 ```
 
-### 에이전트 실행
+### 에이전트 수동 실행
 
 ```bash
 # 로그 감시 에이전트 시작
