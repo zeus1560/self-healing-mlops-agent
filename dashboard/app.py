@@ -140,7 +140,7 @@ with st.sidebar:
     st.markdown("## 🛡️ MLOps Monitor")
     st.divider()
 
-    auto_refresh = st.toggle("🔄 자동 새로고침 (30초)", value=True)
+    auto_refresh = st.toggle("🔄 자동 새로고침 (10초)", value=True)
     if st.button("⟳  지금 새로고침", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -962,5 +962,5 @@ with tab3:
 
 # ── 자동 새로고침 ─────────────────────────────────────────────────────────────
 if auto_refresh:
-    time.sleep(30)
+    time.sleep(10)
     st.rerun()
