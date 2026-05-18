@@ -351,7 +351,7 @@ with tab1:
                 height=170,
                 bargap=0.4,
             )
-            st.plotly_chart(fig_mttr, use_container_width=True)
+            st.plotly_chart(fig_mttr, width='stretch')
 
         with mc2:
             st.metric(
@@ -394,7 +394,7 @@ with tab1:
                 margin=dict(t=10, b=30, l=10, r=10),
                 height=330,
             )
-            st.plotly_chart(fig_donut, use_container_width=True)
+            st.plotly_chart(fig_donut, width='stretch')
 
         with v2:
             st.markdown('<p class="section-title">에러 카테고리별 발생 빈도</p>',
@@ -424,7 +424,7 @@ with tab1:
                 margin=dict(t=10, b=10, l=10, r=60),
                 height=330,
             )
-            st.plotly_chart(fig_etype, use_container_width=True)
+            st.plotly_chart(fig_etype, width='stretch')
 
         st.divider()
 
@@ -454,7 +454,7 @@ with tab1:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.plotly_chart(fig_scatter, width='stretch')
 
         with v4:
             st.markdown('<p class="section-title">해결 소스별 결과 분류</p>',
@@ -484,7 +484,7 @@ with tab1:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_stk, use_container_width=True)
+            st.plotly_chart(fig_stk, width='stretch')
 
         st.divider()
 
@@ -517,7 +517,7 @@ with tab1:
 
         st.dataframe(
             log_df,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             column_config={
                 "소요(ms)":  st.column_config.NumberColumn(format="%.1f ms"),
@@ -566,7 +566,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=340,
             )
-            st.plotly_chart(fig_bl, use_container_width=True)
+            st.plotly_chart(fig_bl, width='stretch')
         with bc2:
             if len(bdf) >= 2:
                 kw  = bdf.iloc[0]
@@ -625,7 +625,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=320,
             )
-            st.plotly_chart(fig_prompt, use_container_width=True)
+            st.plotly_chart(fig_prompt, width='stretch')
 
         with pc2:
             fig_lat_p = px.bar(
@@ -644,7 +644,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=320,
             )
-            st.plotly_chart(fig_lat_p, use_container_width=True)
+            st.plotly_chart(fig_lat_p, width='stretch')
 
     st.divider()
 
@@ -677,7 +677,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_deb, use_container_width=True)
+            st.plotly_chart(fig_deb, width='stretch')
         with dc2:
             best_d = ddf.loc[ddf["defense_rate_pct"].idxmax()]
             st.metric("최고 방어율",    f"{ddf['defense_rate_pct'].max():.1f}%")
@@ -726,7 +726,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=330,
             )
-            st.plotly_chart(fig_thr, use_container_width=True)
+            st.plotly_chart(fig_thr, width='stretch')
         with tc2:
             if "f1" in tdf.columns:
                 best_t = tdf.loc[tdf["f1"].idxmax()]
@@ -769,7 +769,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_k, use_container_width=True)
+            st.plotly_chart(fig_k, width='stretch')
         with kc2:
             best_k = kdf.loc[kdf["accuracy"].idxmax()]
             st.metric("최고 정확도 Top-K", f"K = {int(best_k['k'])}")
@@ -803,7 +803,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_sc, use_container_width=True)
+            st.plotly_chart(fig_sc, width='stretch')
         with sc2:
             fig_scl = px.line(
                 scdf,
@@ -819,7 +819,7 @@ with tab2:
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=300,
             )
-            st.plotly_chart(fig_scl, use_container_width=True)
+            st.plotly_chart(fig_scl, width='stretch')
 
     st.divider()
 
@@ -858,7 +858,7 @@ with tab2:
                     margin=dict(t=10, b=30, l=10, r=10),
                     height=260,
                 )
-                st.plotly_chart(fig_sec, use_container_width=True)
+                st.plotly_chart(fig_sec, width='stretch')
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -912,7 +912,7 @@ with tab3:
                 yaxis=dict(autorange="reversed", title=None),
                 margin=dict(t=10, b=10, l=10, r=60), height=380,
             )
-            st.plotly_chart(fig_cat, use_container_width=True)
+            st.plotly_chart(fig_cat, width='stretch')
 
         with v2:
             st.markdown('<p class="section-title">벡터 구성 비율 (원본 vs 학습)</p>',
@@ -931,7 +931,7 @@ with tab3:
                 legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center"),
                 margin=dict(t=10, b=30, l=10, r=10), height=380,
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width='stretch')
 
         st.divider()
 
@@ -940,7 +940,7 @@ with tab3:
                     unsafe_allow_html=True)
         cat_df["비율(%)"] = (cat_df["count"] / vq["total"] * 100).round(1)
         cat_df.columns = ["에러 카테고리", "벡터 수", "비율(%)"]
-        st.dataframe(cat_df, use_container_width=True, hide_index=True)
+        st.dataframe(cat_df, width='stretch', hide_index=True)
 
 
 # ── 자동 새로고침 ─────────────────────────────────────────────────────────────
