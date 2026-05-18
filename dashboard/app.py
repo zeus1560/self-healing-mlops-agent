@@ -36,9 +36,9 @@ st.markdown("""
 
     /* 섹션 제목 */
     .section-title {
-        font-size: 0.78rem;
+        font-size: 0.92rem;
         font-weight: 700;
-        color: #7f8ea8;
+        color: #a0aec0;
         text-transform: uppercase;
         letter-spacing: 0.1em;
         margin: 0 0 10px 2px;
