@@ -1,0 +1,101 @@
+round,category,source,latency,success
+Cold (첫 발생),Auth_Error,L1_CACHE,0.37500697600080457,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.0380585870007053,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.038442267999926116,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.03232576599930326,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.033996307000052184,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.033476792000328714,True
+Cold (첫 발생),Configuration_Error,L2_LLM,4.162013760999798,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.07152676500027155,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03349793900088116,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.031166248999397794,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.040055507000033685,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.035700921999705315,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03742717800014361,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.037386811999567726,True
+Cold (첫 발생),DB_Connection,L2_LLM,2.176881438000237,False
+Cold (첫 발생),Disk_Full,L1_CACHE,0.19176549300027546,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,2.2851589050005714,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.11359131399967737,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.09628786000030232,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.09643935599979159,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.09343298100066022,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03823116300009133,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.035555998999370786,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.036755193999852054,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03803561000040645,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.038248853999903076,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.09955408000041643,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.08984070000042266,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.08674036999946111,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.104678683000202,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.09885581599974103,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.027407003000007535,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.028904714999953285,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.02767782699993404,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03051345699986996,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.028695062000224425,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.034566245999485545,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.04616330800035939,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.054300619999594346,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.046209330999772646,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.041238844999497815,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.11198816399974021,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.031057147999490553,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03266272699966066,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.041737067999747524,False
+Cold (첫 발생),Auth_Error,L1_CACHE,0.029750248999334872,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.02484769199963921,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.031867295999290945,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.09392673000002105,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.0333780700002535,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.05240893199970742,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.029739472000073874,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.027419220999945537,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.027159141000083764,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.031198709999443963,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.028713250999317097,True
+Warm (재발생 — L1 캐시),Configuration_Error,L2_LLM,3.303252665999935,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.09168612599933113,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.0296420640006545,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.028037564999976894,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.034257134999279515,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.031310499999563035,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.0343844689996331,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.035237848999713606,True
+Warm (재발생 — L1 캐시),DB_Connection,L2_LLM,2.2550722040004985,False
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.060329940999508835,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09774281799946039,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.0943219130003854,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.10000675300034345,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.1012223380002979,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09853090199976577,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.030346488000759564,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03310607900039031,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03290402300081041,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03405369000029168,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03278808100003516,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09379830100078834,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10129799800051842,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.0925945299995874,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09096598600081052,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09838440499970602,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.029828458000338287,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02729265900052269,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028471070000705367,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028488005000326666,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.0306747960003122,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03249088800021127,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03990354099914839,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03815178500008187,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.037649285000043164,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03958071800025209,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.10188442899925576,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.025869735999549448,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.02639058600016142,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03718659299920546,False
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03115200999945955,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03125510199970449,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03624521100027778,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09906087999934243,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04496956599996338,True
