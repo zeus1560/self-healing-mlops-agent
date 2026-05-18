@@ -140,7 +140,7 @@ with st.sidebar:
     st.markdown("## 🛡️ MLOps Monitor")
     st.divider()
 
-    auto_refresh = st.toggle("🔄 자동 새로고침 (30초)", value=False)
+    auto_refresh = st.toggle("🔄 자동 새로고침 (30초)", value=True)
     if st.button("⟳  지금 새로고침", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -159,6 +159,23 @@ with st.sidebar:
     st.markdown("**ℹ️ 시스템 정보**")
     db_exists  = DB_PATH.exists()
     csv_count  = len(list(RESULTS_DIR.glob("*.csv"))) if RESULTS_DIR.exists() else 0
+
+    import subprocess, shutil
+    agent_running = False
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "src.log_watcher"],
+            capture_output=True, text=True
+        )
+        agent_running = result.returncode == 0
+    except Exception:
+        pass
+
+    if agent_running:
+        st.success("🟢 에이전트 실행 중")
+    else:
+        st.error("🔴 에이전트 중지됨")
+
     st.caption(f"DB 상태: {'✅ 연결됨' if db_exists else '❌ 없음'}")
     st.caption(f"실험 CSV: {csv_count}개")
     st.caption(f"DB 경로: `{DB_PATH.name}`")
