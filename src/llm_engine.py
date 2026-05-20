@@ -3,6 +3,7 @@ import json
 import logging
 import multiprocessing as mp
 import os
+import re as _re
 import threading
 import time
 import traceback
@@ -23,6 +24,14 @@ _OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))
 _OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 # L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
 _RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "1.2"))
+
+# ── 정규식 프리컴파일 ──────────────────────────────────────────────────────────
+# 모듈 임포트 시 1회만 컴파일해 _clean_llm_output() 반복 호출 비용을 절감한다.
+_JSON_PATTERN    = _re.compile(r'\{[^{}]*\}', _re.DOTALL)
+_RE_CODE_BLOCK   = _re.compile(r'```[a-z]*\n(.*?)```', _re.DOTALL)
+_RE_SHELL_TAG    = _re.compile(r'^(bash|sh|shell|zsh)\s+', _re.IGNORECASE)
+_RE_LIST_PREFIX  = _re.compile(r'^(\d+[\.\)]\s*|[-*]\s+)')
+_RE_INLINE_CMT   = _re.compile(r'\s+#\s+.*$')
 
 # ── ChromaDB Singleton ────────────────────────────────────────────────────────
 # 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
@@ -101,10 +110,6 @@ _PROSE_STARTERS = {
     "however", "therefore", "because", "also", "simply",
 }
 
-import re as _re
-
-_JSON_PATTERN = _re.compile(r'\{[^{}]*\}', _re.DOTALL)
-
 
 def _extract_json_command(text: str) -> str:
     """
@@ -130,6 +135,7 @@ def _clean_llm_output(raw: str) -> str:
       2. 마크다운 코드블록 → 블록 안 첫 줄
       3. 줄 단위 산문 필터 → 첫 번째 비산문 줄
       4. 인라인 주석(#) 제거, sudo 제거
+    모든 정규식은 모듈 레벨에서 프리컴파일(_RE_*)되어 반복 호출 비용을 최소화한다.
     """
     if not raw:
         return ""
@@ -141,7 +147,7 @@ def _clean_llm_output(raw: str) -> str:
             raw = extracted  # JSON에서 꺼낸 명령어를 이후 정제에 통과
 
     # 2. 마크다운 코드블록 내부 추출
-    code_block = _re.search(r'```[a-z]*\n(.*?)```', raw, _re.DOTALL)
+    code_block = _RE_CODE_BLOCK.search(raw)
     if code_block:
         raw = code_block.group(1)
 
@@ -153,16 +159,16 @@ def _clean_llm_output(raw: str) -> str:
         if line.startswith("```") or line.startswith("===") or line.startswith("---"):
             continue
         # bash/shell 언어 태그 제거
-        line = _re.sub(r'^(bash|sh|shell|zsh)\s+', '', line, flags=_re.IGNORECASE)
+        line = _RE_SHELL_TAG.sub('', line)
         # sudo 제거
         if line.startswith("sudo "):
             line = line[5:].strip()
         # 번호 매기기 제거: "1. cmd", "1) cmd", "- cmd", "* cmd"
-        line = _re.sub(r'^(\d+[\.\)]\s*|[-*]\s+)', '', line)
+        line = _RE_LIST_PREFIX.sub('', line)
         if not line:
             continue
         # 인라인 주석 제거: "cmd arg  # 설명"
-        line = _re.sub(r'\s+#\s+.*$', '', line).strip()
+        line = _RE_INLINE_CMT.sub('', line).strip()
 
         tokens = line.split()
         if not tokens:
@@ -342,7 +348,17 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
     p.start()
 
     if parent_conn.poll(timeout):
-        response = parent_conn.recv()
+        # OOM Killer 등으로 자식 프로세스가 강제 종료된 경우, 파이프 쓰기 쪽이
+        # 닫히면서 poll()이 True를 반환하지만 recv()에서 EOFError가 발생한다.
+        try:
+            response = parent_conn.recv()
+        except EOFError:
+            logging.error(
+                "[ipex_llm] 자식 프로세스 비정상 종료 — 응답 없음 (EOFError). "
+                "OOM Killer에 의한 강제 종료일 가능성이 높습니다."
+            )
+            p.join()
+            return "ERROR: ipex worker crashed without response (OOM or fatal signal)"
         p.join()
         return response["result"] if response["status"] == "success" else f"ERROR: {response['reason']}"
     else:
