@@ -39,16 +39,32 @@ _ROLLBACK_MAP: dict[str, str | None] = {
 }
 
 
+def _result(ok: bool, fail_type: str, detail: str | None = None) -> dict:
+    """표준 실행 결과 딕셔너리 생성 헬퍼. 성공 시 error_type=None."""
+    return {
+        "success": ok,
+        "result_category": "SUCCESS" if ok else "FAILURE",
+        "error_type": fail_type if not ok else None,
+        "error_detail": detail,
+    }
+
+
 class ActionExecutor:
     def __init__(self, slack_webhook_url: Optional[str] = None):
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
 
-        # 허용 명령어 화이트리스트. 빈 set = 어떤 인자도 허용.
+        # 허용 명령어 화이트리스트.
+        # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 허용).
+        # 비어있지 않은 set = 첫 번째 인자를 집합 내 값으로만 제한.
+        # [보안] pkill·kill은 신호 플래그 인젝션(-9, -SIGKILL 등)을 방지하기 위해
+        #         명시적 허용 집합으로 제한. 빈 set을 사용하면 _validate_command()의
+        #         인자 검증이 생략되어 'kill -9 1' 같은 파괴적 명령이 통과하는 취약점이
+        #         발생하므로 반드시 비어있지 않은 집합을 사용해야 한다.
         # python/perl/node 등 인터프리터는 의도적으로 제외 (arbitrary code exec 위험).
         self.ALLOWED_COMMANDS = {
-            "pkill":      set(),
-            "kill":       set(),
+            "pkill":      {"-f", "-x"},              # 패턴 매칭 플래그만 허용, 신호 플래그(-9/-SIGKILL) 차단
+            "kill":       {"-TERM", "-HUP"},          # 소프트 신호만 허용, -9/-KILL 등 강제 종료 차단
             "systemctl":  {"restart", "status", "stop", "start"},
             "echo":       set(),
             "ulimit":     set(),
@@ -77,55 +93,38 @@ class ActionExecutor:
 
         if decision.action_type == ActionType.CLEAR_MEMORY:
             ok, err = self._clear_memory()
-            result = {
-                "success": ok,
-                "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": "MemoryClearFailed" if not ok else None,
-                "error_detail": err,
-            }
+            result = _result(ok, "MemoryClearFailed", err)
+
         elif decision.action_type == ActionType.RESTART_SERVICE:
             ok, err = self._restart_service(decision.target_process)
-            result = {
-                "success": ok,
-                "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": "ServiceRestartFailed" if not ok else None,
-                "error_detail": err,
-            }
+            result = _result(ok, "ServiceRestartFailed", err)
+
         elif decision.action_type == ActionType.ESCALATE_TO_HUMAN:
             self._escalate_to_human(decision.reasoning)
+            # ESCALATE는 실행 자체는 성공이지만 result_category를 IMPOSSIBLE로 표기한다.
             result = {
                 "success": True,
                 "result_category": "IMPOSSIBLE",
                 "error_type": "EscalatedToHuman",
                 "error_detail": decision.reasoning[:300],
             }
+
         elif decision.action_type == ActionType.KILL_PROCESS:
             ok, err = self._kill_process(decision.target_process)
-            result = {
-                "success": ok,
-                "result_category": "SUCCESS" if ok else "FAILURE",
-                "error_type": "ProcessKillFailed" if not ok else None,
-                "error_detail": err,
-            }
+            result = _result(ok, "ProcessKillFailed", err)
+
         elif decision.action_type == ActionType.ALERT_ONLY:
             logging.warning(f"[ALERT_ONLY] 조치 없음, 관찰만 기록: {decision.reasoning[:200]}")
-            result = {
-                "success": True,
-                "result_category": "SUCCESS",
-                "error_type": None,
-                "error_detail": None,
-            }
+            result = _result(True, "")
+
         elif decision.action_type in (ActionType.EXECUTE_LLM_COMMAND,
                                        ActionType.EXECUTE_RULE_COMMAND):
             result = self._execute_llm_command(decision.command or "", original_error_log)
+
         else:
             logging.warning(f"수행 불가 액션: {decision.action_type}")
-            result = {
-                "success": False,
-                "result_category": "IMPOSSIBLE",
-                "error_type": "UnknownActionType",
-                "error_detail": str(decision.action_type),
-            }
+            result = _result(False, "UnknownActionType", str(decision.action_type))
+            result["result_category"] = "IMPOSSIBLE"
 
         logging.info(
             f"===> [ActionExecutor] 완료 | 결과:{result['result_category']}"
@@ -230,7 +229,10 @@ class ActionExecutor:
             return err
 
         auto_approve   = os.getenv("AUTO_APPROVE", "false").lower() == "true"
-        is_interactive = sys.stdin.isatty()
+        try:
+            is_interactive = sys.stdin.isatty()
+        except Exception:
+            is_interactive = False
 
         if auto_approve:
             logging.info(f"  [AUTO_APPROVE] 자동 승인 모드. 커맨드: {command}")
@@ -293,33 +295,31 @@ class ActionExecutor:
             )
             if proc.returncode == 0:
                 logging.info(f"  [실행성공] 결과: {proc.stdout.strip()}")
-                return {"success": True, "result_category": "SUCCESS",
-                        "error_type": None, "error_detail": None}
+                return _result(True, "")
             detail = proc.stderr.strip() or f"returncode={proc.returncode}"
             logging.error(f"  [실행실패] {detail}")
             self._try_rollback(command)
-            return {"success": False, "result_category": "FAILURE",
-                    "error_type": "CalledProcessError", "error_detail": detail}
+            return _result(False, "CalledProcessError", detail)
 
         except subprocess.TimeoutExpired:
             logging.error(f"  [타임아웃]\n{traceback.format_exc()}")
-            return {"success": False, "result_category": "FAILURE",
-                    "error_type": "TimeoutExpired", "error_detail": f"15초 초과: {command}"}
+            return _result(False, "TimeoutExpired", f"15초 초과: {command}")
 
         except PermissionError:
             logging.error(f"  [권한 거부]\n{traceback.format_exc()}")
-            return {"success": False, "result_category": "IMPOSSIBLE",
-                    "error_type": "PermissionError", "error_detail": traceback.format_exc()}
+            result = _result(False, "PermissionError", traceback.format_exc())
+            result["result_category"] = "IMPOSSIBLE"
+            return result
 
         except MemoryError:
             logging.error(f"  [메모리 부족]\n{traceback.format_exc()}")
-            return {"success": False, "result_category": "IMPOSSIBLE",
-                    "error_type": "MemoryError", "error_detail": traceback.format_exc()}
+            result = _result(False, "MemoryError", traceback.format_exc())
+            result["result_category"] = "IMPOSSIBLE"
+            return result
 
         except Exception as e:
             logging.error(f"  [실행실패]\n{traceback.format_exc()}")
-            return {"success": False, "result_category": "FAILURE",
-                    "error_type": type(e).__name__, "error_detail": traceback.format_exc()}
+            return _result(False, type(e).__name__, traceback.format_exc())
 
     def _clear_memory(self) -> tuple[bool, str | None]:
         logging.warning("[조치] 시스템 메모리 최적화 시작...")
