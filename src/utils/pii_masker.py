@@ -1,13 +1,19 @@
 """
-PII(개인식별정보) 마스킹 유틸리티.
+pii_masker — PII(개인식별정보) 마스킹 유틸리티.
 
 에러 로그를 SQLite에 저장하기 전에 민감 정보를 치환한다.
+
 마스킹 대상:
   - IPv4 / IPv6 주소
   - 이메일 주소
   - /home/*, /root/*, /Users/* 경로
-  - AWS/GCP 토큰 패턴 (AKIA*, ya29.*, AIza*)
-  - 비밀번호·토큰 key=value 패턴
+  - AWS Access Key (AKIA 접두사)
+  - GCP OAuth token (ya29.*) / GCP API Key (AIza*)
+  - password=, token=, secret=, api_key= 등 key=value 패턴
+
+성능:
+  _RULES 리스트의 패턴은 모듈 임포트 시 1회만 컴파일돼
+  mask() 반복 호출 비용을 최소화한다.
 """
 import re
 
@@ -27,10 +33,12 @@ _RULES: list[tuple[re.Pattern, str]] = [
     # GCP API Key
     (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "<GCP_API_KEY>"),
     # password=, token=, secret=, key= 뒤 값 (따옴표 포함)
-    (re.compile(
-        r"(?i)(password|passwd|token|secret|api_?key|auth)\s*[=:]\s*['\"]?([^\s'\"]{4,})['\"]?",
-        re.IGNORECASE,
-    ), r"\1=<REDACTED>"),
+    (
+        re.compile(
+            r"(?i)(password|passwd|token|secret|api_?key|auth)\s*[=:]\s*['\"]?([^\s'\"]{4,})['\"]?",
+        ),
+        r"\1=<REDACTED>",
+    ),
 ]
 
 
