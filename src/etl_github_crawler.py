@@ -8,20 +8,25 @@ from dotenv import load_dotenv
 
 from src.etl_ingest import load_data_to_pg
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
 load_dotenv()
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-if not GITHUB_TOKEN:
-    raise ValueError("🚨 .env 파일에 GITHUB_TOKEN이 설정되지 않았습니다!")
+_log = logging.getLogger(__name__)
 
-HEADERS = {
-    "Accept": "application/vnd.github.v3+json",
-    "Authorization": f"token {GITHUB_TOKEN}",
-}
+
+def _get_headers() -> dict:
+    """GITHUB_TOKEN을 런타임에 읽어 헤더를 구성한다.
+
+    모듈 임포트 시점이 아닌 함수 호출 시점에 토큰을 읽으므로,
+    토큰이 없는 환경에서 임포트해도 크래시가 발생하지 않는다.
+    토큰 미설정 시 경고를 남기고 인증 없이 헤더를 반환한다.
+    """
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        _log.warning("GITHUB_TOKEN이 설정되지 않았습니다. API 호출이 실패하거나 Rate Limit이 낮게 적용됩니다.")
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
 
 TARGET_QUERIES = [
     # ── 기존 3개 ───────────────────────────────────────────────────────────
@@ -123,11 +128,12 @@ _RATE_LIMIT_SLEEP = 60  # 429 응답 시 대기 시간(초)
 
 def _get_with_retry(url: str, max_retries: int = 3) -> requests.Response | None:
     """429 Rate Limit 시 지수 백오프 후 재시도."""
+    headers = _get_headers()
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=15)
+            response = requests.get(url, headers=headers, timeout=15)
         except Exception:
-            logging.error(f"HTTP 요청 실패 (시도 {attempt + 1}/{max_retries}):\n{traceback.format_exc()}")
+            _log.error(f"HTTP 요청 실패 (시도 {attempt + 1}/{max_retries}):\n{traceback.format_exc()}")
             if attempt < max_retries - 1:
                 time.sleep(5 * (attempt + 1))
             continue
@@ -136,13 +142,13 @@ def _get_with_retry(url: str, max_retries: int = 3) -> requests.Response | None:
             return response
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", _RATE_LIMIT_SLEEP))
-            logging.warning(f"Rate Limit 도달. {retry_after}초 대기 후 재시도...")
+            _log.warning(f"Rate Limit 도달. {retry_after}초 대기 후 재시도...")
             time.sleep(retry_after)
             continue
-        logging.error(f"API 호출 실패 (HTTP {response.status_code}): {response.text[:200]}")
+        _log.error(f"API 호출 실패 (HTTP {response.status_code}): {response.text[:200]}")
         return None
 
-    logging.error(f"최대 재시도 횟수 초과: {url}")
+    _log.error(f"최대 재시도 횟수 초과: {url}")
     return None
 
 
@@ -150,7 +156,7 @@ def fetch_github_issues(limit_per_query: int = 50) -> list[tuple]:
     all_extracted_data: list[tuple] = []
 
     for target in TARGET_QUERIES:
-        logging.info(f"[{target['name']}] 데이터 수집 시작...")
+        _log.info(f"[{target['name']}] 데이터 수집 시작...")
         url = (
             f"https://api.github.com/search/issues"
             f"?q={target['query']}&per_page={limit_per_query}"
@@ -163,7 +169,7 @@ def fetch_github_issues(limit_per_query: int = 50) -> list[tuple]:
         try:
             items = response.json().get("items", [])
         except Exception:
-            logging.error(
+            _log.error(
                 f"[{target['name']}] JSON 파싱 실패:\n{traceback.format_exc()}"
             )
             continue
@@ -191,18 +197,24 @@ def fetch_github_issues(limit_per_query: int = 50) -> list[tuple]:
             ))
             valid_count += 1
 
-        logging.info(f"[{target['name']}] 유효 고유 데이터 {valid_count}건 추출 완료.")
+        _log.info(f"[{target['name']}] 유효 고유 데이터 {valid_count}건 추출 완료.")
         time.sleep(2)  # API Rate Limit 보호
 
     return all_extracted_data
 
 
 if __name__ == "__main__":
-    logging.info("--- GitHub 타겟팅 크롤러 시작 ---")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+    if not os.getenv("GITHUB_TOKEN"):
+        raise SystemExit("🚨 .env 파일에 GITHUB_TOKEN이 설정되지 않았습니다!")
+
+    _log.info("--- GitHub 타겟팅 크롤러 시작 ---")
     crawled_data = fetch_github_issues(limit_per_query=50)
 
     if crawled_data:
-        logging.info(f"총 {len(crawled_data)}건의 데이터를 DB에 적재합니다.")
+        _log.info(f"총 {len(crawled_data)}건의 데이터를 DB에 적재합니다.")
         load_data_to_pg(crawled_data)
     else:
-        logging.warning("수집된 데이터가 없습니다.")
+        _log.warning("수집된 데이터가 없습니다.")
