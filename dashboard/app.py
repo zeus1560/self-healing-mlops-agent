@@ -411,10 +411,11 @@ def load_vector_quality() -> dict:
 
 
 # ── 탭 레이아웃 ───────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs([
-    "📡  실시간 에이전트 모니터링",
-    "🔬  아키텍처 실험 및 성능 평가",
-    "🧬  Vector DB 품질 모니터링",
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🏆  핵심 성과 요약",
+    "📡  실시간 장애 조치",
+    "🔬  아키텍처 성능 검증",
+    "🧬  지식 저장소(Vector DB)",
 ])
 
 
@@ -587,21 +588,22 @@ with tab1:
 
         st.divider()
 
-        # ── MTTR 비교 (수동 vs 에이전트) ────────────────────────────────
-        st.markdown('<p class="section-title">⏱️ 장애 복구 시간 비교 — 사람이 직접 처리 vs AI 에이전트 자동복구</p>',
-                    unsafe_allow_html=True)
+        # ── 핵심 차트 2종 — 나란히 배치 ──────────────────────────────────────
+        main_c1, main_c2 = st.columns([1, 1])
 
-        # 수동 기준: 온콜 페이징(5분) + 로그인/이동(3분) + 진단(15분) + 조치(7분) = 30분
-        MANUAL_MTTR_SEC = 1800.0
-        agent_mttr_sec  = df["latency_sec"].mean()
-        reduction_pct   = (1 - agent_mttr_sec / MANUAL_MTTR_SEC) * 100
-        l1_avg_ms = df[df["resolution_source"] == "L1_CACHE"]["latency_sec"].mean() * 1000
-        l2_mask   = df["resolution_source"] == "L2_LLM"
-        l2_avg_ms = df[l2_mask]["latency_sec"].mean() * 1000 if l2_mask.any() else None
+        with main_c1:
+            st.markdown(
+                '<p class="section-title">⏱️ 장애 복구 시간 비교 — 사람이 직접 처리 vs AI 에이전트 자동복구</p>',
+                unsafe_allow_html=True,
+            )
+            # 수동 기준: 온콜 페이징(5분) + 로그인/이동(3분) + 진단(15분) + 조치(7분) = 30분
+            MANUAL_MTTR_SEC = 1800.0
+            agent_mttr_sec  = df["latency_sec"].mean()
+            reduction_pct   = (1 - agent_mttr_sec / MANUAL_MTTR_SEC) * 100
+            l1_avg_ms = df[df["resolution_source"] == "L1_CACHE"]["latency_sec"].mean() * 1000
+            l2_mask   = df["resolution_source"] == "L2_LLM"
+            l2_avg_ms = df[l2_mask]["latency_sec"].mean() * 1000 if l2_mask.any() else None
 
-        mc1, mc2 = st.columns([6, 4])
-
-        with mc1:
             fig_mttr = go.Figure()
             fig_mttr.add_trace(go.Bar(
                 x=[MANUAL_MTTR_SEC],
@@ -634,8 +636,6 @@ with tab1:
                 bargap=0.4,
             )
             st.plotly_chart(fig_mttr, width='stretch')
-
-        with mc2:
             st.metric(
                 "MTTR 단축률",
                 f"{reduction_pct:.1f} %",
@@ -650,73 +650,8 @@ with tab1:
                 st.caption(f"🧠 L2 LLM 평균: {l2_avg_ms:.0f} ms")
             st.caption("※ 수동 기준: 온콜 페이징+진단+조치 30분 (업계 평균)")
 
-        st.divider()
-
-        # ── L1 Cache vs L2 LLM 속도 비교 ─────────────────────────────────
-        st.markdown(
-            '<p class="section-title">⚡ L1 Cache vs 🧠 L2 LLM — 추론 속도 실측 비교</p>',
-            unsafe_allow_html=True,
-        )
-        st.caption(
-            "에이전트가 같은 유형의 에러를 다시 만났을 때 **과거 경험(L1)**을 바로 꺼내 쓰면 얼마나 빠른지, "
-            "처음 보는 에러를 **AI가 직접 생각(L2)**해서 해결할 때와 얼마나 차이 나는지 실제 측정한 결과입니다. "
-            "막대가 짧을수록 빠른 것입니다."
-        )
-        if _bm_df is not None:
-            _sp1, _sp2 = st.columns([7, 3])
-            with _sp1:
-                # 선형 스케일 수평 바 — 37배 차이를 직관적으로 시각화
-                _bar_y    = ["⚡ L1 Cache", "🧠 L2 LLM"]
-                _bar_x    = [_bm_l1ms, _bm_l2ms if _bm_l2ms else 0]
-                _bar_clr  = [SOURCE_COLORS["L1_CACHE"], SOURCE_COLORS["L2_LLM"]]
-                _bar_txt  = [f"{_bm_l1ms:.0f} ms"]
-                if _bm_l2ms:
-                    _bar_txt.append(f"{_bm_l2ms:.0f} ms")
-
-                _fig_spd = go.Figure(go.Bar(
-                    x=_bar_x,
-                    y=_bar_y,
-                    orientation="h",
-                    marker_color=_bar_clr,
-                    text=_bar_txt,
-                    textposition="outside",
-                    textfont=dict(size=14),
-                    width=0.5,
-                ))
-                _xmax = (_bm_l2ms or _bm_l1ms) * 1.55
-                _fig_spd.update_layout(
-                    template=THEME,
-                    xaxis=dict(title="평균 응답시간 (ms)", range=[0, _xmax]),
-                    yaxis=dict(title=None, tickfont=dict(size=13)),
-                    margin=dict(t=10, b=40, l=10, r=130),
-                    height=200,
-                    showlegend=False,
-                )
-                _n_l1 = len(_bm_df[_bm_df["source"] == "L1_CACHE"])
-                _n_l2 = len(_bm_df[_bm_df["source"] == "L2_LLM"])
-                st.plotly_chart(_fig_spd, width='stretch')
-                st.caption(f"실험 데이터 기준 — 과거 경험(L1) {_n_l1}건, AI 추론(L2) {_n_l2}건 실측")
-
-            with _sp2:
-                if _bm_ratio:
-                    st.metric(
-                        "과거 경험이 AI 추론보다 빠른 배율",
-                        f"{_bm_ratio} 배",
-                        f"L1 {_bm_l1ms:.0f}ms vs L2 {_bm_l2ms:.0f}ms",
-                    )
-                if _bm_l1sr is not None:
-                    st.metric("과거 경험 기반 자동 복구율", f"{_bm_l1sr:.1f}%",
-                              f"{_n_l1}건 실측")
-        else:
-            st.info("벤치마크 CSV 없음 (`experiments/results/benchmark_l1_vs_l2.csv`)")
-
-        st.divider()
-
-        # ── 시각화 Row 1: 도넛 차트 + 에러 타입 바 차트 ─────────────────
-        v1, v2 = st.columns([4, 6])
-
-        with v1:
-            st.markdown('<p class="section-title">결과 분류 비율</p>',
+        with main_c2:
+            st.markdown('<p class="section-title">🎯 자동 복구 성공 / 실패 비율</p>',
                         unsafe_allow_html=True)
             cat_df = df["result_category"].value_counts().reset_index()
             cat_df.columns = ["category", "count"]
@@ -742,43 +677,19 @@ with tab1:
             )
             st.plotly_chart(fig_donut, width='stretch')
 
-        with v2:
-            st.markdown('<p class="section-title">에러 카테고리별 발생 빈도</p>',
-                        unsafe_allow_html=True)
-            with st.expander("📖 에러 카테고리 용어 설명", expanded=False):
-                for key, (label, desc) in _CATEGORY_DESC.items():
-                    if desc:
-                        st.markdown(f"- **{label}** (`{key}`): {desc}")
-            etype_df = df["error_category"].value_counts().reset_index()
-            etype_df.columns = ["error_category", "count"]
-            fig_etype = px.bar(
-                etype_df,
-                x="count",
-                y="error_category",
-                orientation="h",
-                color="count",
-                color_continuous_scale="Blues",
-                text="count",
-                template=THEME,
-                labels={"count": "발생 건수", "error_category": "에러 카테고리"},
-            )
-            fig_etype.update_traces(
-                textposition="outside",
-                marker_line_width=0,
-            )
-            fig_etype.update_layout(
-                showlegend=False,
-                coloraxis_showscale=False,
-                yaxis=dict(autorange="reversed", title=None),
-                xaxis=dict(title="발생 건수"),
-                margin=dict(t=10, b=10, l=10, r=60),
-                height=330,
-            )
-            st.plotly_chart(fig_etype, width='stretch')
 
-        st.divider()
 
-        # ── 서킷 브레이커 실시간 상태 (안전장치 상세) ────────────────────
+# ════════════════════════════════════════════════════════════════════════════════
+# TAB 2 — 실시간 조치 로그
+# ════════════════════════════════════════════════════════════════════════════════
+with tab2:
+    if df.empty:
+        st.info(
+            "📊 아직 수집된 메트릭 데이터가 없습니다. "
+            "Agent가 에러를 처리하면 여기에 자동으로 표시됩니다."
+        )
+    else:
+        # ── 서킷 브레이커 실시간 상태 ────────────────────────────────────────
         cb_df = load_circuit_breaker_status()
         open_cnt      = int((cb_df["state"] == "OPEN").sum())      if not cb_df.empty else 0
         half_open_cnt = int((cb_df["state"] == "HALF_OPEN").sum()) if not cb_df.empty else 0
@@ -799,24 +710,22 @@ with tab1:
                 "CLOSED — 모든 패턴 정상 자동 처리 중",
             )
 
-        with st.expander(
-            f"🔌 서킷 브레이커 안전장치 상태 — {_cb_icon} {_cb_label}",
-            expanded=(open_cnt > 0 or half_open_cnt > 0),
-        ):
-            st.markdown(
-                f'<div class="status-banner {_cb_cls}">'
-                f'<span style="font-size:1.4em">{_cb_icon}</span>'
-                f'<span style="font-size:1.05em;font-weight:700">서킷 브레이커: {_cb_label}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
+        st.markdown(
+            f'<div class="status-banner {_cb_cls}">'
+            f'<span style="font-size:1.4em">{_cb_icon}</span>'
+            f'<span style="font-size:1.05em;font-weight:700">안전장치(서킷 브레이커) 상태: {_cb_label}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if not cb_df.empty:
+            _cb_show = cb_df[["error_sig", "state", "consecutive_failures", "last_updated"]].copy()
+            _cb_show["state"] = _cb_show["state"].replace(
+                {"CLOSED": "🟢 CLOSED", "OPEN": "🔴 OPEN", "HALF_OPEN": "🟡 HALF-OPEN"}
             )
-            if not cb_df.empty:
-                _cb_show = cb_df[["error_sig", "state", "consecutive_failures", "last_updated"]].copy()
-                _cb_show["state"] = _cb_show["state"].replace(
-                    {"CLOSED": "🟢 CLOSED", "OPEN": "🔴 OPEN", "HALF_OPEN": "🟡 HALF-OPEN"}
-                )
-                _cb_show.columns = ["에러 시그니처(MD5 앞 8자)", "상태", "연속 실패 횟수", "마지막 업데이트"]
-                st.dataframe(_cb_show, hide_index=True, use_container_width=True)
+            _cb_show.columns = ["에러 시그니처(MD5 앞 8자)", "상태", "연속 실패 횟수", "마지막 업데이트"]
+            st.dataframe(_cb_show, hide_index=True, use_container_width=True)
+
+        with st.expander("ℹ️ 서킷 브레이커란?", expanded=False):
             st.markdown("""
 **서킷 브레이커란?** 동일 에러 조치가 **3번 연속 실패**하면 AI 자동 판단을 멈추고 관리자를 호출하는 '비상 정지' 안전장치입니다.
 
@@ -829,50 +738,160 @@ with tab1:
 
         st.divider()
 
-        # ── 최근 에러 처리 로그 ───────────────────────────────────────────
-        st.markdown('<p class="section-title">📋 최근 에러 처리 로그 — 건별 상세 보기</p>',
+        # ── 발생한 에러 유형별 빈도 ───────────────────────────────────────────
+        st.markdown('<p class="section-title">📊 발생한 에러 유형별 빈도</p>',
                     unsafe_allow_html=True)
-        st.caption("각 항목을 클릭하면 에러 원인·조치 과정·성공/실패 이유를 상세히 확인할 수 있습니다.")
+        with st.expander("📖 에러 카테고리 용어 설명", expanded=False):
+            for key, (label, desc) in _CATEGORY_DESC.items():
+                if desc:
+                    st.markdown(f"- **{label}** (`{key}`): {desc}")
+        etype_df = df["error_category"].value_counts().reset_index()
+        etype_df.columns = ["error_category", "count"]
+        fig_etype = px.bar(
+            etype_df,
+            x="count",
+            y="error_category",
+            orientation="h",
+            color="count",
+            color_continuous_scale="Blues",
+            text="count",
+            template=THEME,
+            labels={"count": "발생 건수", "error_category": "에러 카테고리"},
+        )
+        fig_etype.update_traces(
+            textposition="outside",
+            marker_line_width=0,
+        )
+        fig_etype.update_layout(
+            showlegend=False,
+            coloraxis_showscale=False,
+            yaxis=dict(autorange="reversed", title=None),
+            xaxis=dict(title="발생 건수"),
+            margin=dict(t=10, b=10, l=10, r=60),
+            height=330,
+        )
+        st.plotly_chart(fig_etype, width='stretch')
 
-        _LOG_COLS = ["timestamp", "error_category", "result_category", "resolution_source",
-                     "action_type", "latency_ms", "error_log", "command",
-                     "error_type", "error_detail", "success"]
-        _LOG_COLS = [c for c in _LOG_COLS if c in df.columns]
-        log_rows  = df[_LOG_COLS].head(10)
+        st.divider()
 
-        for _, row in log_rows.iterrows():
-            icon, narrative, detail = _make_story(row)
-            ts_str  = str(row.get("timestamp", ""))[:19]
-            cat_raw = str(row.get("error_category", ""))
-            cat_label = _CATEGORY_DESC.get(cat_raw, (cat_raw, ""))[0]
-            result  = str(row.get("result_category", ""))
-            result_icon = {"SUCCESS": "✅", "FAILURE": "⚠️", "IMPOSSIBLE": "🚫"}.get(result, "❓")
-            header  = f"{icon} [{ts_str}] {cat_label} → {result_icon} {result}"
+        # ── 해결 소스별 처리 결과 누적 막대 ──────────────────────────────────
+        _tw1, _tw2 = st.columns(2)
+        with _tw1:
+            st.markdown('<p class="section-title">📦 해결 소스별 처리 결과 분포</p>',
+                        unsafe_allow_html=True)
+            _src_df = (
+                df.groupby(["resolution_source", "result_category"])
+                .size()
+                .reset_index(name="count")
+            )
+            _fig_src = px.bar(
+                _src_df,
+                x="resolution_source",
+                y="count",
+                color="result_category",
+                color_discrete_map=RESULT_COLORS,
+                barmode="stack",
+                template=THEME,
+                labels={
+                    "resolution_source": "해결 소스",
+                    "count": "처리 건수",
+                    "result_category": "처리 결과",
+                },
+            )
+            _fig_src.update_layout(
+                height=320,
+                margin=dict(t=10, b=10, l=10, r=10),
+                legend=dict(
+                    title="처리 결과",
+                    orientation="h",
+                    yanchor="bottom", y=1.02,
+                    xanchor="right", x=1,
+                ),
+            )
+            st.plotly_chart(_fig_src, use_container_width=True)
 
-            with st.expander(header, expanded=False):
-                src_raw  = str(row.get("resolution_source", ""))
-                src_desc = _SOURCE_DESC.get(src_raw, src_raw)
-                st.info(f"**에러 유형:** {cat_label}  |  **해결 경로:** {src_desc}")
-                st.markdown(narrative)
-                if detail:
-                    st.warning(f"**실패 원인 상세:** {detail}")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("소요 시간", f"{row.get('latency_ms', 0):.0f} ms")
-                c2.metric("해결 소스", src_raw)
-                c3.metric("결과", result)
-                cmd = row.get("command") or row.get("action_type", "")
-                if cmd and str(cmd) not in ("nan", "None", ""):
-                    st.code(str(cmd), language="bash")
-                raw_log = str(row.get("error_log", "")).strip()
-                if raw_log and raw_log != "nan":
-                    with st.expander("🔍 원본 에러 로그 보기", expanded=False):
-                        st.code(raw_log, language="text")
+        with _tw2:
+            st.markdown('<p class="section-title">⏱️ 장애 조치 응답 시간 추이</p>',
+                        unsafe_allow_html=True)
+            _lat_df = df[["timestamp", "latency_ms", "resolution_source"]].dropna(
+                subset=["latency_ms"]
+            ).copy()
+            _fig_lat = px.scatter(
+                _lat_df,
+                x="timestamp",
+                y="latency_ms",
+                color="resolution_source",
+                color_discrete_map=SOURCE_COLORS,
+                template=THEME,
+                labels={
+                    "timestamp": "시간",
+                    "latency_ms": "응답 시간 (ms)",
+                    "resolution_source": "해결 소스",
+                },
+            )
+            _fig_lat.update_layout(
+                height=320,
+                margin=dict(t=10, b=10, l=10, r=10),
+                yaxis=dict(title="응답 시간 (ms)"),
+                legend=dict(
+                    title="해결 소스",
+                    orientation="h",
+                    yanchor="bottom", y=1.02,
+                    xanchor="right", x=1,
+                ),
+            )
+            st.plotly_chart(_fig_lat, use_container_width=True)
+
+        st.divider()
+
+        # ── 서사형 실시간 로그 ────────────────────────────────────────────────
+        with st.expander(
+            "📝 에이전트가 처리한 최근 10건의 실제 장애 조치 기록 보기 (클릭)",
+            expanded=True,
+        ):
+            st.caption("각 항목을 클릭하면 에러 원인·조치 과정·성공/실패 이유를 상세히 확인할 수 있습니다.")
+
+            _LOG_COLS = ["timestamp", "error_category", "result_category", "resolution_source",
+                         "action_type", "latency_ms", "error_log", "command",
+                         "error_type", "error_detail", "success"]
+            _LOG_COLS = [c for c in _LOG_COLS if c in df.columns]
+            log_rows  = df[_LOG_COLS].head(10)
+
+            for _, row in log_rows.iterrows():
+                icon, narrative, detail = _make_story(row)
+                ts_str  = str(row.get("timestamp", ""))[:19]
+                cat_raw = str(row.get("error_category", ""))
+                cat_label = _CATEGORY_DESC.get(cat_raw, (cat_raw, ""))[0]
+                result  = str(row.get("result_category", ""))
+                result_icon = {"SUCCESS": "✅", "FAILURE": "⚠️", "IMPOSSIBLE": "🚫"}.get(result, "❓")
+                header  = f"{icon} [{ts_str}] {cat_label} → {result_icon} {result}"
+
+                with st.expander(header, expanded=False):
+                    src_raw  = str(row.get("resolution_source", ""))
+                    src_desc = _SOURCE_DESC.get(src_raw, src_raw)
+                    st.info(f"**에러 유형:** {cat_label}  |  **해결 경로:** {src_desc}")
+                    st.markdown(narrative)
+                    if detail:
+                        st.warning(f"**실패 원인 상세:** {detail}")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("소요 시간", f"{row.get('latency_ms', 0):.0f} ms")
+                    _src_kor = {"L1_CACHE": "⚡ 빠른 기억(L1)", "L2_LLM": "🧠 AI 추론(L2)"}
+                    c2.metric("해결 경로", _src_kor.get(src_raw, src_raw))
+                    _res_kor = {"SUCCESS": "✅ 성공", "FAILURE": "⚠️ 실패", "IMPOSSIBLE": "🚫 불가"}
+                    c3.metric("처리 결과", _res_kor.get(result, result))
+                    cmd = row.get("command") or row.get("action_type", "")
+                    if cmd and str(cmd) not in ("nan", "None", ""):
+                        st.code(str(cmd), language="bash")
+                    raw_log = str(row.get("error_log", "")).strip()
+                    if raw_log and raw_log != "nan":
+                        with st.expander("🔍 원본 에러 로그 보기", expanded=False):
+                            st.code(raw_log, language="text")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# TAB 2 — 아키텍처 실험 및 성능 평가
+# TAB 3 — 아키텍처 성능 검증
 # ════════════════════════════════════════════════════════════════════════════════
-with tab2:
+with tab3:
     st.markdown(
         "Self-Healing Agent의 핵심 아키텍처 결정을 뒷받침하는 **8가지 실증 실험 결과**입니다. "
         "각 실험은 '왜 이렇게 설계했는가'에 대한 데이터 기반 근거를 제공합니다."
@@ -881,7 +900,7 @@ with tab2:
 
     # ── 1. Baseline vs RAG ───────────────────────────────────────────────
     st.markdown("#### 🏆 1. Baseline vs RAG 시스템 성능 비교")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "단순 키워드 검색(Baseline)과 AI 벡터 유사도 검색(RAG)을 직접 비교합니다. "
         "RAG가 얼마나 더 많은 에러를 정확히 인식하는지, 놓치지 않고 처리하는지를 수치로 보여줍니다."
@@ -892,9 +911,17 @@ with tab2:
     else:
         bc1, bc2 = st.columns([6, 4])
         with bc1:
-            melted_b = bdf[["system", "accuracy", "coverage"]].melt(
+            _b_cols = ["accuracy", "coverage"]
+            if "action_accuracy" in bdf.columns:
+                _b_cols = ["accuracy", "action_accuracy", "coverage"]
+            melted_b = bdf[["system"] + _b_cols].melt(
                 id_vars="system", var_name="지표", value_name="점수"
             )
+            melted_b["지표"] = melted_b["지표"].replace({
+                "accuracy":        "카테고리 정확도",
+                "action_accuracy": "액션 정확도",
+                "coverage":        "커버리지",
+            })
             fig_bl = px.bar(
                 melted_b,
                 x="system",
@@ -904,7 +931,7 @@ with tab2:
                 text_auto=".1%",
                 template=THEME,
                 labels={"system": "시스템"},
-                color_discrete_sequence=["#3498db", "#2ecc71"],
+                color_discrete_sequence=["#3498db", "#9b59b6", "#2ecc71"],
             )
             fig_bl.update_traces(textposition="outside", texttemplate="%{y:.1%}")
             fig_bl.update_layout(
@@ -921,10 +948,16 @@ with tab2:
                 rag = bdf.iloc[1]
                 st.metric("키워드 기반 정확도", f"{kw['accuracy']*100:.1f}%")
                 st.metric(
-                    "RAG 시스템 정확도",
+                    "RAG 카테고리 정확도",
                     f"{rag['accuracy']*100:.1f}%",
                     f"+{(rag['accuracy'] - kw['accuracy'])*100:.1f}%p 향상",
                 )
+                if "action_accuracy" in bdf.columns:
+                    st.metric(
+                        "RAG 액션 정확도",
+                        f"{rag['action_accuracy']*100:.1f}%",
+                        f"+{rag['action_accuracy']*100:.1f}%p (키워드=0%)",
+                    )
                 st.metric("RAG 커버리지",     f"{rag['coverage']*100:.1f}%")
                 st.metric("RAG 평균 지연시간", f"{rag['avg_latency_ms']:.0f} ms")
 
@@ -932,7 +965,7 @@ with tab2:
 
     # ── 2. 보안 감사 ─────────────────────────────────────────────────────────
     st.markdown("#### 🔒 2. 보안 감사 — AI 위험 명령어 차단율")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "AI가 잘못된 명령어(`rm -rf /`, `curl | bash` 등)를 생성했을 때 보안 필터가 100% 차단하는지 검증합니다. "
         "악성 패턴 30개를 직접 투입해 단 1건도 실행되지 않았음을 증명합니다."
@@ -973,7 +1006,7 @@ with tab2:
 
     # ── 3. Prompt A/B/C 비교 ─────────────────────────────────────────────
     st.markdown("#### 🔤 3. Prompt 템플릿 A/B/C 성능 비교")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "AI에게 질문하는 방식(프롬프트)에 따라 답변의 정확도가 크게 달라집니다. "
         "세 가지 질문 방식 중 어느 것이 가장 올바른 Linux 명령어를 만들어내는지 비교합니다."
@@ -1044,7 +1077,7 @@ with tab2:
 
     # ── 3. Debouncer 분석 ────────────────────────────────────────────────
     st.markdown("#### 🛡️ 4. Debouncer 타임윈도우별 중복 에러 방어율")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "실제 서버에서는 같은 에러가 1초 안에 수백 번 쏟아지기도 합니다. "
         "Debouncer는 에이전트가 당황하지 않고 이를 '하나'로 묶어 처리하는 능력입니다. "
@@ -1089,7 +1122,7 @@ with tab2:
 
     # ── 4. Threshold 검색 성능 평가 곡선 ─────────────────────────────────
     st.markdown("#### 📈 5. Retrieval Threshold 구간별 성능 평가 (F1 / Precision / Recall)")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "에이전트가 '과거 기억'에서 답을 꺼내려면 '얼마나 비슷해야 같은 에러로 볼 것인가'의 기준(Threshold)이 필요합니다. "
         "기준이 너무 높으면 엉뚱한 해결책을, 너무 낮으면 아무것도 못 찾습니다. "
@@ -1147,7 +1180,7 @@ with tab2:
 
     # ── 5. Top-K 실험 ────────────────────────────────────────────────────
     st.markdown("#### 🔢 6. RAG Top-K 설정별 검색 정확도")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "에이전트가 과거 사례 중 '가장 비슷한 K개'를 가져와 다수결로 조치를 결정합니다. "
         "K가 너무 작으면 정보가 부족하고, 너무 크면 관계없는 사례까지 포함됩니다. "
@@ -1159,9 +1192,17 @@ with tab2:
     else:
         kc1, kc2 = st.columns([6, 4])
         with kc1:
-            melted_k = kdf[["k", "accuracy", "coverage"]].melt(
+            _k_cols = ["accuracy", "coverage"]
+            if "f1" in kdf.columns:
+                _k_cols = ["accuracy", "f1", "coverage"]
+            melted_k = kdf[["k"] + _k_cols].melt(
                 id_vars="k", var_name="지표", value_name="점수"
             )
+            melted_k["지표"] = melted_k["지표"].replace({
+                "accuracy": "정확도",
+                "f1":       "F1 Score",
+                "coverage": "커버리지",
+            })
             fig_k = px.bar(
                 melted_k,
                 x="k",
@@ -1171,7 +1212,7 @@ with tab2:
                 text_auto=".1%",
                 template=THEME,
                 labels={"k": "Top-K"},
-                color_discrete_sequence=["#3498db", "#2ecc71"],
+                color_discrete_sequence=["#3498db", "#9b59b6", "#2ecc71"],
             )
             fig_k.update_traces(textposition="outside", texttemplate="%{y:.1%}")
             fig_k.update_layout(
@@ -1183,17 +1224,21 @@ with tab2:
             )
             st.plotly_chart(fig_k, width='stretch')
         with kc2:
-            best_k = kdf.loc[kdf["accuracy"].idxmax()]
-            st.metric("최고 정확도 Top-K", f"K = {int(best_k['k'])}")
-            st.metric("Accuracy",          f"{best_k['accuracy']*100:.1f}%")
-            st.metric("Coverage",          f"{best_k['coverage']*100:.1f}%")
-            st.metric("평균 지연시간",      f"{best_k['avg_latency_ms']:.0f} ms")
+            _k_best_col = "f1" if "f1" in kdf.columns else "accuracy"
+            best_k = kdf.loc[kdf[_k_best_col].idxmax()]
+            st.metric("최적 Top-K (F1 기준)", f"K = {int(best_k['k'])}")
+            st.metric("Accuracy",             f"{best_k['accuracy']*100:.1f}%")
+            if "f1" in kdf.columns:
+                st.metric("F1 Score",         f"{best_k['f1']*100:.1f}%")
+            if "action_accuracy" in kdf.columns:
+                st.metric("Action Accuracy",  f"{best_k['action_accuracy']*100:.1f}%")
+            st.metric("평균 지연시간",         f"{best_k['avg_latency_ms']:.0f} ms")
 
     st.divider()
 
     # ── 6. Dataset Scale (Learning Curve) ────────────────────────────────
     st.markdown("#### 📚 7. 학습 데이터 규모별 성능 변화 (Learning Curve)")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "에이전트는 해결 사례가 많을수록 똑똑해집니다. "
         "학습 데이터가 몇 건일 때부터 성능이 안정되는지(포화 지점)를 보여주는 그래프입니다. "
@@ -1245,7 +1290,7 @@ with tab2:
 
     # ── 8. FeedbackLoop — L2→L1 자동 학습 ──────────────────────────────────
     st.markdown("#### 🔄 8. FeedbackLoop — L2가 해결하면 L1이 자동 학습")
-    st.caption(
+    st.info(
         "**이 실험이 왜 중요한가요?** "
         "처음 보는 에러를 L2(AI 추론)가 해결하면, 다음번 동일 에러는 L1(즉시 기억)으로 자동 전환됩니다. "
         "이 메커니즘이 에이전트를 '사용할수록 빨라지게' 만드는 핵심 학습 루프입니다."
@@ -1315,7 +1360,7 @@ with tab2:
         )
         st.markdown("**L1 재처리 실측값 (ms)**")
         st.caption(", ".join(f"{round(v)}" for v in _samples) + " ms")
-        st.caption(f"평균 **{_l1_avg:.0f} ms** — 임계치 1.2 이하로 즉시 처리")
+        st.caption(f"평균 **{_l1_avg:.0f} ms** — 임계치 0.6 이하로 즉시 처리")
     st.caption(
         "실측 데이터: `experiments/results/l2_l1_transition_*.json` "
         f"| 파일: `{_fl_files[-1].split('/')[-1] if _fl_files else 'N/A'}`"
@@ -1324,12 +1369,12 @@ with tab2:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# TAB 3 — Vector DB 품질 모니터링
+# TAB 4 — 지식 저장소(Vector DB)
 # ════════════════════════════════════════════════════════════════════════════════
-with tab3:
+with tab4:
     vq = load_vector_quality()
     st.markdown(
-        "에이전트의 **장기 기억(Vector DB)** 상태를 모니터링합니다. "
+        "에이전트의 **장기 기억(지식 저장소, Vector DB)** 품질을 검증합니다. "
         "실제 오픈소스 프로젝트 이슈에서 수집한 에러 해결 사례가 학습되어 있으며, "
         "합성 데이터는 한 건도 포함되지 않습니다."
     )
@@ -1344,16 +1389,16 @@ with tab3:
         )
     else:
         # ── KPI ──────────────────────────────────────────────────────────
-        st.markdown('<p class="section-title">Vector DB 핵심 지표</p>',
+        st.markdown('<p class="section-title">지식 저장소 핵심 지표</p>',
                     unsafe_allow_html=True)
         vk1, vk2, vk3, vk4 = st.columns(4)
         vk1.metric(
-            "총 벡터 수 (dedup)",
+            "🧠 저장된 총 장애 해결 지식 수",
             f"{vq['total']:,} 개",
             help="에이전트가 학습한 에러 해결 사례의 수입니다. 많을수록 더 많은 상황을 즉시(L1) 처리할 수 있습니다.",
         )
         vk2.metric(
-            "피드백 학습 건수",
+            "🔄 추가로 피드백 학습된 건수",
             f"{vq['learned']:,} 개",
             "FeedbackLoop 재학습",
             help="AI 추론(L2)이 성공한 후, 다음번에는 빠르게(L1) 처리할 수 있도록 자동으로 기억에 추가한 건수입니다.",

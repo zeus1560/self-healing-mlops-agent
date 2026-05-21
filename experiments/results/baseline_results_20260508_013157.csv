@@ -1,3 +1,0 @@
-system,accuracy,coverage,correct,unknown,total,avg_latency_ms
-Keyword Baseline,0.2209,0.5233,19,41,86,0.017
-RAG (threshold=0.8),0.7326,0.7442,63,22,86,190.005

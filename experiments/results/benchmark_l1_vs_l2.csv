@@ -1,101 +1,815 @@
 round,category,source,latency,success
-Cold (첫 발생),Auth_Error,L1_CACHE,0.37500697600080457,True
-Cold (첫 발생),Auth_Error,L1_CACHE,0.0380585870007053,True
-Cold (첫 발생),Auth_Error,L1_CACHE,0.038442267999926116,True
-Cold (첫 발생),Auth_Error,L1_CACHE,0.03232576599930326,True
-Cold (첫 발생),Auth_Error,L1_CACHE,0.033996307000052184,True
-Cold (첫 발생),Configuration_Error,L1_CACHE,0.033476792000328714,True
-Cold (첫 발생),Configuration_Error,L2_LLM,4.162013760999798,False
-Cold (첫 발생),Configuration_Error,L1_CACHE,0.07152676500027155,True
-Cold (첫 발생),Configuration_Error,L1_CACHE,0.03349793900088116,True
-Cold (첫 발생),Configuration_Error,L1_CACHE,0.031166248999397794,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.040055507000033685,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.035700921999705315,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.03742717800014361,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.037386811999567726,True
-Cold (첫 발생),DB_Connection,L2_LLM,2.176881438000237,False
-Cold (첫 발생),Disk_Full,L1_CACHE,0.19176549300027546,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,2.2851589050005714,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,0.11359131399967737,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,0.09628786000030232,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,0.09643935599979159,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,0.09343298100066022,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.03823116300009133,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.035555998999370786,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.036755193999852054,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.03803561000040645,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.038248853999903076,True
-Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.09955408000041643,True
-Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.08984070000042266,True
-Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.08674036999946111,True
-Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.104678683000202,True
-Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.09885581599974103,True
-Cold (첫 발생),Permission_Denied,L1_CACHE,0.027407003000007535,True
-Cold (첫 발생),Permission_Denied,L1_CACHE,0.028904714999953285,True
-Cold (첫 발생),Permission_Denied,L1_CACHE,0.02767782699993404,True
-Cold (첫 발생),Permission_Denied,L1_CACHE,0.03051345699986996,True
-Cold (첫 발생),Permission_Denied,L1_CACHE,0.028695062000224425,True
-Cold (첫 발생),Port_Conflict,L1_CACHE,0.034566245999485545,True
-Cold (첫 발생),Process_Crash,L1_CACHE,0.04616330800035939,False
-Cold (첫 발생),Process_Crash,L1_CACHE,0.054300619999594346,False
-Cold (첫 발생),Process_Crash,L1_CACHE,0.046209330999772646,False
-Cold (첫 발생),Process_Crash,L1_CACHE,0.041238844999497815,False
-Cold (첫 발생),Process_Crash,L1_CACHE,0.11198816399974021,True
-Cold (첫 발생),Configuration_Error,L1_CACHE,0.031057147999490553,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.03266272699966066,True
-Cold (첫 발생),Process_Crash,L1_CACHE,0.041737067999747524,False
-Cold (첫 발생),Auth_Error,L1_CACHE,0.029750248999334872,True
-Cold (첫 발생),Auth_Error,L1_CACHE,0.02484769199963921,True
-Cold (첫 발생),DB_Connection,L1_CACHE,0.031867295999290945,True
-Cold (첫 발생),Memory_Leak,L1_CACHE,0.09392673000002105,True
-Cold (첫 발생),Network_Timeout,L1_CACHE,0.0333780700002535,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.05240893199970742,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.029739472000073874,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.027419220999945537,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.027159141000083764,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.031198709999443963,True
-Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.028713250999317097,True
-Warm (재발생 — L1 캐시),Configuration_Error,L2_LLM,3.303252665999935,False
-Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.09168612599933113,True
-Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.0296420640006545,True
-Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.028037564999976894,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.034257134999279515,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.031310499999563035,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.0343844689996331,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.035237848999713606,True
-Warm (재발생 — L1 캐시),DB_Connection,L2_LLM,2.2550722040004985,False
-Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.060329940999508835,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09774281799946039,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.0943219130003854,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.10000675300034345,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.1012223380002979,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09853090199976577,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.030346488000759564,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03310607900039031,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03290402300081041,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03405369000029168,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03278808100003516,True
-Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09379830100078834,True
-Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10129799800051842,True
-Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.0925945299995874,True
-Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09096598600081052,True
-Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09838440499970602,True
-Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.029828458000338287,True
-Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02729265900052269,True
-Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028471070000705367,True
-Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028488005000326666,True
-Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.0306747960003122,True
-Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03249088800021127,True
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03990354099914839,False
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03815178500008187,False
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.037649285000043164,False
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03958071800025209,False
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.10188442899925576,True
-Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.025869735999549448,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.02639058600016142,True
-Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03718659299920546,False
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03115200999945955,True
-Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03125510199970449,True
-Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03624521100027778,True
-Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09906087999934243,True
-Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04496956599996338,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.07365051600027073,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.04356326699962665,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.04457709599955706,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.039152288998593576,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.042551903001367464,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.0691198099993926,False
+Cold (첫 발생),Auth_Error,L1_CACHE,0.02971652999985963,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.02490045000013197,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.030863330999636673,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.030480807999992976,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.03246768200006045,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.033512289001009776,True
+Cold (첫 발생),Auth_Error,L2_LLM,4.195759053000074,False
+Cold (첫 발생),Auth_Error,L1_CACHE,0.021723285999541986,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.020225303000188433,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.020597931999873254,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.021728310000980855,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.03139450299931923,False
+Cold (첫 발생),Auth_Error,L1_CACHE,0.02865516900055809,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.025869057999443612,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.029349544000069727,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.03076872799829289,True
+Cold (첫 발생),Auth_Error,L1_CACHE,2.151058010998895,True
+Cold (첫 발생),Auth_Error,L1_CACHE,0.027407958999901894,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03002231700156699,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02444980699874577,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02822851099881518,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028923879999638302,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.041575409999495605,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03167683900028351,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02526622299956216,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03122685500056832,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02638497199950507,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02657677400020475,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02557560300010664,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.027059486999860383,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.025108616000579786,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03335131800122326,True
+Cold (첫 발생),Configuration_Error,L2_LLM,1.9687408299996605,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.020953351999196457,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028817610000260174,False
+Cold (첫 발생),Configuration_Error,L2_LLM,4.461184136000156,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.029691683999772067,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.04217677100132278,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03437954999935755,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.030370561000381713,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028527139000289026,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03018038499976683,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.042921493000903865,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03139218800060917,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02779473800001142,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028907779000292066,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03023839399975259,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03991349900024943,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02930023800035997,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.029038329999821144,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028093924000131665,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03333060899967677,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,2.1590853510006127,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.020582074001140427,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.02584229100102675,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.027159793999089743,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.025662549000116996,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.025809328999457648,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03710455199870921,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04407256199920084,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03790834800020093,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.040623507999043795,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04270711000026495,False
+Cold (첫 발생),DB_Connection,L2_LLM,4.758461883000564,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.030528219000188983,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.037809589000971755,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03778185000010126,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.037711491000663955,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.040036342999883345,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03702319699914369,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03995263300021179,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03990500700092525,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.040287280000484316,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03810591100045713,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03777828599959321,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03540967099979753,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03697053600080835,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.041866059998938,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.042166973998973845,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04081364200101234,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.040424913000606466,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04102726099881693,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.0398761390006257,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03928972900030203,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03961611399972753,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.037610630999552086,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.042334199000833905,False
+Cold (첫 발생),DB_Connection,L2_LLM,2.203927990000011,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03005905600002734,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03960142200048722,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03879140600110986,False
+Cold (첫 발생),DB_Connection,L1_CACHE,2.1306396489999315,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.035245446999397245,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.037596850999761955,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.036439229999814415,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04199533100108965,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04054570599873841,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03770762400017702,False
+Cold (첫 발생),Disk_Full,L1_CACHE,0.09514960500018788,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.0311709690013231,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.03186503500000981,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.030649778000224615,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.0380781259991636,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.03777087300113635,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.040257702999952016,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.02943472199876851,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04517816899897298,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04145314800007327,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.0439403010004753,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04181499799960875,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.046974598000815604,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.05109051100043871,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.03612127400083409,True
+Cold (첫 발생),Disk_Full,L1_CACHE,2.1182182829998055,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.03175731400006043,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.030321301999720163,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.022619293000389007,False
+Cold (첫 발생),Disk_Full,L1_CACHE,0.028889553001135937,False
+Cold (첫 발생),Disk_Full,L1_CACHE,0.033723073998771724,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.03362147299958451,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.025761929999134736,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.11128341699986777,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04197218300032546,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.040128976999767474,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.0422481740006333,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04576366400033294,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.045896362000348745,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.04160436600068351,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.0361644240001624,True
+Cold (첫 발생),Disk_Full,L1_CACHE,0.045831797000573715,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.05041746200004127,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.04284433399880072,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.037335685001380625,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.035725657000512,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03702153999984148,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.04072067400011292,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03390377899995656,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.12010263500087603,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03982512999937171,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.11227907499960565,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03878339500079164,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03766826999890327,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.033561227000973304,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03631671500079392,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03692529700128944,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.0373109869997279,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03384146299868007,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.09655672200096888,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03148286199939321,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03529238400005852,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.036060079000890255,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.035448464999717544,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.10236795499986329,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.037474453001777874,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.037255254999763565,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.11795823300053598,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.04000303099928715,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03700018500057922,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.033868933000121615,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.035254336000434705,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03105399000014586,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03993767000065418,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03815677799866535,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.1037731670003268,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03602973499982909,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03599501999997301,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03681591600070533,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.12167840899928706,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.039887992999865673,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03410443199936708,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03586883699972532,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03933439699903829,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04131780399984564,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04324198399990564,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04279183100152295,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03914373500083457,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03865567199864017,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03979815799903008,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03888169499987271,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03814153399980569,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03887759000099322,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04134519299987005,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.031048658000145224,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03983464500015543,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04362903399851348,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03802724799970747,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.038656970998999896,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.038323606000631116,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04126498400000855,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.039021917998979916,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03659783600051014,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04028239099898201,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04051383600017289,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.034493662000386394,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03992792099961662,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03698364199954085,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.035415071000898024,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03012085900081729,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04154981899955601,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.0380150050004886,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.037490032000278006,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.041473920000498765,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.037703703999795835,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.041317201999845565,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03866029299933871,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.040984035998917534,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.038681117999658454,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.038764019998779986,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.042012074000012944,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03788152200104378,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.10795106499972462,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.10993568300000334,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11244856899975275,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.1324587859999156,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.09623727299913298,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.10038258399981714,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.10034370900029899,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.1091040920000523,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.088625567001145,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14230642400070792,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11958569499984151,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.1321603690012125,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.030623945000115782,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1063943270000891,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12608064500091132,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.13628858999982185,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1541118599998299,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1482250089993613,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14663557200037758,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14051118799943652,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14072310799929255,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.1647966489999817,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12909275699894351,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12351352199948451,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1203242859992315,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12509638499977882,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.13052613100080634,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12774203100161685,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12916405600117287,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.13561267200020666,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.04237203400043654,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14582742499987944,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.13176951300010842,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.040020034999542986,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1484807910001109,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.05193060600140598,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,2.133447446998616,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14534417200047756,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.14189139600057388,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.13835335800104076,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03861863899874152,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03943686200000229,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.038221307999265264,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.06816317999982857,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.0419668440008536,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.05374538999967626,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04234479399929114,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04715972100166255,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04657618399869534,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04693851599949994,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04421066100076132,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04941049599983671,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04711710899937316,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,2.172005894000904,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.02731232200130762,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.026135441001315485,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.030854380000164383,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.025683361998744658,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03779676699923584,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.030576294999264064,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.030499357999360655,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.031394473000545986,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.033746352999514784,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.047976818999813986,False
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03362844700131973,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03713436700127204,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03588088700053049,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,2.155679269000757,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.028339620999759063,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.027247615000305814,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.02877070199974696,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.029053947999273078,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.038459438999780104,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.027717458000552142,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.02874303800126654,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03450500199869566,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.032848548000401934,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.033443352998801856,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03663584800051467,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.039317183998718974,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04589669300003152,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03240306899897405,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04026593399976264,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03833358099836914,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04069358299966552,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04178773000057845,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.042747636000058264,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03550586700112035,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04021300699969288,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04320463700059918,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03519167200101947,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.038417064999521244,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04206332399917301,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,2.134253495998564,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03206423099982203,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.035503478000464384,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03706918100033363,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03970639699946332,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03884964800090529,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04037130000142497,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04245642800015048,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04328139399876818,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.039385227999446215,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03851618800035794,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,2.1572248339998623,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.026922080000076676,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03978793299938843,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,2.158547708999322,True
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03212070100016717,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.03363992599952326,False
+Cold (첫 발생),Port_Conflict,L1_CACHE,0.04171056799896178,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.042659652999645914,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.12784683999962,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.030136554001728655,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1151453299989953,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03208652400098799,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1301604679993034,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.123367706000863,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.123008566999488,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.11662343199896,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.02810895099901245,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.103684087998772,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1296554430009564,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1026056569990033,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1029076670001814,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.02997027699893806,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.122270836000098,True
+Cold (첫 발생),Process_Crash,L1_CACHE,3.107941522999681,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1332057530016755,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03952572200068971,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.124683791998905,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.02754647700021451,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.127867952998713,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.11758431199996267,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.02542929599985655,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.138154921000023,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03335185700052534,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1283071220004786,True
+Cold (첫 발생),Process_Crash,L1_CACHE,3.155114262999632,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1439169440000114,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1324967649998143,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.02889420700012124,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03350593200048024,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1365762209989043,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1247350400008145,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.1212795629999164,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03516868299993803,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.037700147000578,False
+Cold (첫 발생),Process_Crash,L1_CACHE,0.1234472989999631,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.03773253999861481,False
+Cold (첫 발생),Process_Crash,L1_CACHE,2.14378650099934,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.033134549999886076,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04278715899999952,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1198773779997282,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.04133177599942428,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.12356932100010454,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04582420400038245,False
+Cold (첫 발생),Configuration_Error,L1_CACHE,2.141409049001595,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.028014950001306715,True
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.024027897999985726,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11511289600093733,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.03646723400015617,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.10736496599929524,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.03867810200063104,False
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03215739599909284,True
+Cold (첫 발생),Process_Crash,L1_CACHE,0.045488578000004054,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.0382184629997937,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1191907890006405,True
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03993613300008292,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04272044800018193,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03722043200104963,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11030592399947636,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.03191343499929644,True
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04544291599995631,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04173452099894348,False
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03771069700087537,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.05369305299973348,False
+Cold (첫 발생),Memory_Leak,L1_CACHE,0.03726262000054703,False
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04281865099983406,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.04426977100047225,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.040595882001071004,False
+Cold (첫 발생),Network_Timeout,L1_CACHE,0.041632030999608105,False
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.04460279299928516,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.1096633600009227,True
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11103562899916142,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.046260731000074884,False
+Cold (첫 발생),Permission_Denied,L1_CACHE,0.03260405699984403,True
+Cold (첫 발생),DB_Connection,L1_CACHE,0.04463281700009247,False
+Cold (첫 발생),Out_Of_Memory,L1_CACHE,0.11883057100021688,True
+Cold (첫 발생),Process_Crash,L1_CACHE,2.14071276300092,True
+Cold (첫 발생),Configuration_Error,L1_CACHE,0.0370360939996317,False
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.026405725999211427,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03467312800057698,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.0267034810003679,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.031187501999738743,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.046707106001122156,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.04631386599976395,False
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.0329604090002249,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03398397199998726,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03032480799993209,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03308785099943634,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03452425400064385,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.037322878999475506,True
+Warm (재발생 — L1 캐시),Auth_Error,L2_LLM,4.932019912999749,False
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.027994733000014094,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.0259021740002936,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03179438200095319,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.032155584998690756,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.043970518998321495,False
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.033830114000011235,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03098295100062387,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03535015600027691,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03814975200111803,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,2.1367825609995634,True
+Warm (재발생 — L1 캐시),Auth_Error,L1_CACHE,0.03433258599943656,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.025690514001325937,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.026116241999261547,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.02642246000141313,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.030744403000426246,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04343657400022494,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03697236100015289,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.0337716010017175,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04190457000004244,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03182405799998378,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03347194400157605,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03358613199998217,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.032810210999741685,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.037520165999012534,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.036505202999251196,True
+Warm (재발생 — L1 캐시),Configuration_Error,L2_LLM,2.3208887520013377,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03147463700042863,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04262311799902818,False
+Warm (재발생 — L1 캐시),Configuration_Error,L2_LLM,4.773937017000208,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03745784700004151,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04263564099892392,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.041391753000425524,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03437979699992866,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03405741899950954,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03672602500046196,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04489449100037746,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03470995200041216,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.036458120001043426,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.036477878000368946,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.04135859000052733,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.052502143998935935,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03560144200127979,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03451124700040964,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03739494100045704,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.041673145000459044,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,2.150234979999368,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.020453332999750273,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03289675999985775,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.027826077999634435,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.025571370999387,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.027597043001151178,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04102861700084759,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.040008435000345344,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.046186470999600715,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04536675899908005,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.041424078999625635,False
+Warm (재발생 — L1 캐시),DB_Connection,L2_LLM,4.771570224998868,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.031089797001186525,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.040642470001330366,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.038752721000491874,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.039663188999838894,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.041657609999674605,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03790282299996761,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.040476968000803026,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04051151699968614,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04586312799983716,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.038957838998612715,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03947269400123332,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.0340332159994432,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03809823099982168,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04465326100034872,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.043765377000454464,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.042810201999600395,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04070186899843975,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.0371620840014657,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04368836499997997,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03929630799939332,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04072910899958515,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03860216499924718,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03783457899953646,False
+Warm (재발생 — L1 캐시),DB_Connection,L2_LLM,2.1575672579983802,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.034364879998975084,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04101819600145973,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.0445745729994087,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,2.114570134999667,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.029792872001053183,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03579475399965304,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.037105789000634104,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03693356800067704,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03844510999988415,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.035108115000184625,False
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03726828300023044,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.033333864999804064,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.032787524000013946,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.034738369000479,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03499122900029761,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03792704000079539,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04462495799998578,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03019350199974724,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.042944675000399,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.043982027998936246,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04742394799905014,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04535571299857111,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04420723899966106,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04725324399987585,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03511354600050254,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.15184509600112506,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.05014571200081264,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04827572000067448,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04275134500130662,False
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.030396681000638637,False
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03953604999878735,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.03682001099878107,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.030245201000070665,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.1231913949995942,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04200514900003327,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04216720699878351,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.044167698000819655,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.047421954999663285,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04281979900042643,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.05118471599962504,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.036392746998899383,True
+Warm (재발생 — L1 캐시),Disk_Full,L1_CACHE,0.04682044399851293,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.04832989299939072,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.038974914999926114,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03943573100150388,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03806926099969132,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.04013166599906981,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03730560999974841,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03770233700015524,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.11225235699930636,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.0413184219996765,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.1108897549984249,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.037548622998656356,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03255169100157218,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03572106299907318,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.035224638999352464,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03747820199896523,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.039299620999372564,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03636864500003867,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.09554826400017191,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.02860055599921907,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03314045499973872,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.030580462000216357,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03491193599984399,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.11064115600129298,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03906749099951412,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.035522698000931996,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.11507553400042525,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.035786287000519224,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03740698299952783,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03778135500033386,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03756972500013944,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03645485900051426,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.04187487200033502,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03489162900041265,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.11382056299953547,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03738799600068887,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.035511984999175183,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03695195500040427,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.11128650300088339,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03599170999950729,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03509461100111366,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04175087099974917,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.038546649000636535,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04038273200058029,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03746483099894249,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.040335683999728644,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03934807299992826,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04227784700015036,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04021155099871976,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03611267000087537,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03778150799917057,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04038782200041169,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03577403400049661,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.030061374000069918,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04950204200031294,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03823001000091608,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03882979300033185,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.042270239000572474,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.036397133000718895,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03718616299920541,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04341781900075148,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04698873899906175,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.045233728998937295,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04052976999992097,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.033253038998736884,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.039604540999789606,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03752204999909736,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.040068591999443015,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.02949587700095435,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03207318300155748,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03610306200062041,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03808837199903792,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03941478000160714,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.040688946000955184,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.0429820759982249,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.04412043699994683,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.042810417000509915,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.036849870999503764,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03729534100057208,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.042280435998691246,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.039292445000683074,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11364672999843606,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.12292409600013343,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1275293030012108,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.1405980910003564,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09533852499953355,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10237314699952549,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1004670319998695,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.106819407999865,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.1092537170006835,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10179209400121181,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10310545099855517,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.102134187000047,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.031371895000120276,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1124391180001112,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10706743899936555,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11525586800053134,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11129690300003858,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10660848100087605,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11119510400021682,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10584486200059473,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1045304950002901,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.102443220999703,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10099886100033473,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09676338700046472,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1111650050006574,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10198949400000856,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11137243899975147,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09648730300068564,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10225951299980807,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.106779670000833,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.029088991999742575,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09347377599988249,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09658735700031684,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.026154594001127407,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.0914066740006092,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.032706243999200524,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,2.1407490840010723,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09683454599871766,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11508235700057412,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10898742599965772,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02812091300074826,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02609296499940683,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02360893800141639,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.03617002499959199,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.026339561998611316,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028601542000615154,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.026402444000268588,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02543602399964584,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02420527199865319,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02501015300003928,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.024935375000495696,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.027074494000771665,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.029605443000036757,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,2.1174443939999037,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.0205531269984931,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.020691030998932547,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.020848101999945357,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.12841553499856673,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02906016700035252,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.026758357000289834,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.031151454000792,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028905388000566745,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02512608500001079,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.03013094000016281,False
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.029132716999811237,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02837765699950978,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02392729700113705,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,2.1012763639992045,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.020721251001305063,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.019813979000900872,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.023052720000123372,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.022744290999980876,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.02344137900036003,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.021727593000832712,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.028302925000389223,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.026614195998263313,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.026227316000586143,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.025429290000829496,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.027451623000160907,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.030555727000319166,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03848077900147473,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.025259633001041948,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03466081299848156,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03231254199999967,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03589796999949613,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03749297400099749,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.04303780000009283,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.02934604300025967,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.037689924998630886,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03890936200150463,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.027722950000679702,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03246952799963765,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03471044499929121,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,2.125432089998867,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.0258901839988539,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.029429624000840704,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.0320690509997803,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03656855000008363,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.036493818000963074,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03521093000017572,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.033853059001557995,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03641477000019222,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03613331700034905,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03467117500076711,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,2.112704192999445,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.02533169399976032,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03838850300053309,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,2.107148088000031,True
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03205572400111123,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.03342421799970907,False
+Warm (재발생 — L1 캐시),Port_Conflict,L1_CACHE,0.04222368499904405,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.04000137599905429,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1102192039998044,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.02757581599871628,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.096223682998243,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.02776484099922527,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.113343316999817,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1198810650002997,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.107094417000553,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1093337689999316,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.027090444000350544,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1171488809995935,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1084005949996936,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1012084770009096,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.106362665999768,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.020390776000567712,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1030410470011702,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.099958188000528,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.095048047000091,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.025814394999542856,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1224650479998672,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.02461344800030929,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1052517279986205,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.09912996499951987,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.019778532998316223,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1025831709994236,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.02739820399983728,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.093096313999922,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.093279179000092,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.0916660799994133,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.099161402000391,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.030222689998481655,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.02426620799997181,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.10911819499961,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1056374429990683,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.102218856000036,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.026331033999667852,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.03222187900064455,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.09657424099896161,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.030545089999577613,False
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.1095712590013136,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.029310694999367115,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03689302099883207,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.11439764199894853,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03440181399855646,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10779376500067883,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03480056400076137,False
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,2.109976089999691,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.02105771599963191,True
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.019294219000585144,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09262311000020418,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.030669330999444355,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10086860999945202,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03227005600092525,False
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.03167240400034643,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,0.041117531998679624,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.033939572000235785,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10797245499998098,True
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.03560257200115302,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.04103728199879697,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.034592346999488655,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.09773340699939581,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.027978211001027375,True
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03394599300008849,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03356308599904878,False
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.03197234400067828,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.034901095999885,False
+Warm (재발생 — L1 캐시),Memory_Leak,L1_CACHE,0.039636502000576,False
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03875376299947675,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.037315425999622676,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03343824100011261,False
+Warm (재발생 — L1 캐시),Network_Timeout,L1_CACHE,0.03855645499970706,False
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.035510091000105604,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10372756900142122,True
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.10430168000129925,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.03377023700159043,False
+Warm (재발생 — L1 캐시),Permission_Denied,L1_CACHE,0.03263482200054568,True
+Warm (재발생 — L1 캐시),DB_Connection,L1_CACHE,0.03356905900000129,False
+Warm (재발생 — L1 캐시),Out_Of_Memory,L1_CACHE,0.1051802330002829,True
+Warm (재발생 — L1 캐시),Process_Crash,L1_CACHE,2.105563125998742,True
+Warm (재발생 — L1 캐시),Configuration_Error,L1_CACHE,0.032560370998908184,False

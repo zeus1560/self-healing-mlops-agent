@@ -60,7 +60,7 @@ def run():
     import chromadb
     from chromadb.config import Settings
     client = chromadb.PersistentClient(
-        path="data/chroma_db", settings=Settings(anonymized_telemetry=False)
+        path=str(Path(__file__).parent.parent / "data" / "chroma_db"), settings=Settings(anonymized_telemetry=False)
     )
     col = client.get_collection("error_playbook_vectors")
     res = col.query(query_texts=[NOVEL_ERROR], n_results=1)

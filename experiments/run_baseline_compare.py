@@ -15,8 +15,9 @@ import chromadb
 from chromadb.config import Settings
 
 TEST_SET_PATH = Path("data/test_set.json")
+CHROMA_PATH   = Path("data/chroma_db")
 RESULTS_DIR   = Path("experiments/results")
-RAG_THRESHOLD = 1.20  # 현재 운영 threshold (threshold sweep 최적값)
+RAG_THRESHOLD = 0.60  # threshold sweep 최적값 (run_threshold_sweep.py Auto-apply 결과)
 
 
 # ── 베이스라인: 키워드 매칭 ────────────────────────────────────────────
@@ -52,42 +53,58 @@ def keyword_classify(log_text: str) -> str:
     return "Unknown"
 
 
-def rag_classify(collection, log_text: str, threshold: float) -> tuple[str, float]:
+def rag_classify(collection, log_text: str, threshold: float) -> tuple[str, float, str]:
     result   = collection.query(query_texts=[log_text], n_results=1)
     distance = result["distances"][0][0]
-    category = result["metadatas"][0][0].get("error_category", "Unknown")
+    meta     = result["metadatas"][0][0]
+    category = meta.get("error_category", "Unknown")
+    action   = meta.get("action_type", "")
     if distance >= threshold:
-        return "Unknown", distance
-    return category, distance
+        return "Unknown", distance, ""
+    return category, distance, action
 
 
 def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
-    correct = 0
+    correct = action_correct = 0
     unknown = 0
     latencies = []
 
     for s in test_samples:
         t0  = time.perf_counter()
-        pred = predict_fn(s["log_text"])
+        result = predict_fn(s["log_text"])
         latencies.append((time.perf_counter() - t0) * 1000)
+
+        # predict_fn may return (category, dist, action) tuple or plain string
+        if isinstance(result, tuple):
+            pred, _, pred_action = result
+        else:
+            pred, pred_action = result, ""
 
         if pred == s["error_category"]:
             correct += 1
         if pred == "Unknown":
             unknown += 1
 
+        true_action = s.get("action_type", "")
+        if pred_action and true_action:
+            norm = lambda x: x.lower().replace("-", "_")
+            if norm(pred_action) == norm(true_action):
+                action_correct += 1
+
     total    = len(test_samples)
     accuracy = correct / total
-    coverage = (total - unknown) / total  # Unknown이 아닌 비율
+    coverage = (total - unknown) / total
 
     return {
-        "system":         name,
-        "accuracy":       round(accuracy, 4),
-        "coverage":       round(coverage, 4),
-        "correct":        correct,
-        "unknown":        unknown,
-        "total":          total,
-        "avg_latency_ms": round(sum(latencies) / len(latencies), 3),
+        "system":          name,
+        "accuracy":        round(accuracy, 4),
+        "action_accuracy": round(action_correct / total, 4),
+        "coverage":        round(coverage, 4),
+        "correct":         correct,
+        "action_correct":  action_correct,
+        "unknown":         unknown,
+        "total":           total,
+        "avg_latency_ms":  round(sum(latencies) / len(latencies), 3),
     }
 
 
@@ -96,7 +113,7 @@ def main():
     test_samples = json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))["data"]
 
     client = chromadb.PersistentClient(
-        path=str(Path("data/chroma_db")),
+        path=str(CHROMA_PATH),
         settings=Settings(anonymized_telemetry=False),
     )
     collection = client.get_collection("error_playbook_vectors")
@@ -109,15 +126,15 @@ def main():
         ),
         evaluate_system(
             f"RAG (threshold={RAG_THRESHOLD})",
-            lambda txt: rag_classify(collection, txt, RAG_THRESHOLD)[0],
+            lambda txt: rag_classify(collection, txt, RAG_THRESHOLD),
             test_samples,
         ),
     ]
 
-    print(f"\n{'System':<30} {'Accuracy':>9} {'Coverage':>9} {'Correct':>8} {'Unknown':>8} {'Latency(ms)':>12}")
-    print("-" * 80)
+    print(f"\n{'System':<30} {'Cat Acc':>8} {'Act Acc':>8} {'Coverage':>9} {'Correct':>8} {'Unknown':>8} {'Latency(ms)':>12}")
+    print("-" * 90)
     for r in results:
-        print(f"{r['system']:<30} {r['accuracy']:>9.3f} {r['coverage']:>9.3f} "
+        print(f"{r['system']:<30} {r['accuracy']:>8.3f} {r['action_accuracy']:>8.3f} {r['coverage']:>9.3f} "
               f"{r['correct']:>8} {r['unknown']:>8} {r['avg_latency_ms']:>12.1f}")
 
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
