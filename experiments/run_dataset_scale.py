@@ -1,6 +1,6 @@
 """
 데이터셋 규모별 성능 실험 (Learning Curve)
-50 → 100 → 150 → 200 → 350(전체) 단계별 L1 정확도 측정
+ChromaDB 전체 데이터 기준으로 scale 단계를 동적 생성
 같은 test_set.json으로 고정 평가
 결과: experiments/results/dataset_scale_results.csv
 """
@@ -18,13 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import chromadb
 from chromadb.config import Settings
 
-TRAIN_PATH    = Path("data/train_set.json")
+CHROMA_PATH   = Path("data/chroma_db")
 TEST_SET_PATH = Path("data/test_set.json")
 RESULTS_DIR   = Path("experiments/results")
-THRESHOLD     = 0.80
+THRESHOLD     = 0.60
 SEED          = 42
-# 전체 350개 이하 단계만 포함
-SCALE_STEPS   = [50, 100, 150, 200, 350]
 
 
 def build_temp_collection(client, train_subset: list[dict], name: str):
@@ -72,24 +70,35 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     random.seed(SEED)
 
-    train_all    = json.loads(TRAIN_PATH.read_text(encoding="utf-8"))["data"]
     test_samples = json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))["data"]
+
+    # ChromaDB 전체 데이터를 읽어서 학습곡선 데이터로 사용
+    src_client = chromadb.PersistentClient(
+        path=str(CHROMA_PATH),
+        settings=Settings(anonymized_telemetry=False),
+    )
+    src_col = src_client.get_collection("error_playbook_vectors")
+    raw = src_col.get(include=["documents", "metadatas"])
+    train_all = [
+        {"log_text": doc, **meta}
+        for doc, meta in zip(raw["documents"], raw["metadatas"])
+    ]
+
+    # 전체 크기 기준으로 scale 단계 동적 생성
+    n = len(train_all)
+    scale_steps = [s for s in [50, 100, 200, 300, 500, 700, 900, 1100] if s < n] + [n]
 
     client = chromadb.PersistentClient(
         path=str(Path("data/chroma_db_scale_tmp")),
         settings=Settings(anonymized_telemetry=False),
     )
 
-    print(f"테스트 샘플 고정: {len(test_samples)}개 | threshold={THRESHOLD}")
+    print(f"전체 학습 데이터: {n}개 | 테스트 샘플 고정: {len(test_samples)}개 | threshold={THRESHOLD}")
     print(f"{'Scale':>8} {'Accuracy':>10} {'Coverage':>10} {'Latency(ms)':>12}")
     print("-" * 44)
 
     rows = []
-    for scale in SCALE_STEPS:
-        if scale > len(train_all):
-            print(f"  scale={scale} 스킵 (train 전체={len(train_all)}개)")
-            continue
-
+    for scale in scale_steps:
         subset = random.sample(train_all, scale)
         col    = build_temp_collection(client, subset, "scale_tmp")
         m      = evaluate_col(col, test_samples, THRESHOLD)

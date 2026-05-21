@@ -17,10 +17,11 @@ import chromadb
 from chromadb.config import Settings
 
 TEST_SET_PATH = Path("data/test_set.json")
+CHROMA_PATH   = Path("data/chroma_db")
 RESULTS_DIR   = Path("experiments/results")
 # ChromaDB는 L2 '거리(Distance)'를 반환 — 0에 가까울수록 동일한 에러.
-# 0.8에서 F1이 아직 오르는 추세이므로 1.5까지 확장해서 진짜 최적점을 탐색한다.
-THRESHOLDS    = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.50]
+# 실험 결과 0.6에서 action_f1 최적, 0.8 이상은 수치가 동일하게 수렴(plateau).
+THRESHOLDS    = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.20, 1.50]
 
 
 def load_test_set():
@@ -30,7 +31,7 @@ def load_test_set():
 
 def get_collection():
     client = chromadb.PersistentClient(
-        path=str(Path("data/chroma_db")),
+        path=str(CHROMA_PATH),
         settings=Settings(anonymized_telemetry=False),
     )
     return client.get_collection("error_playbook_vectors")
@@ -206,17 +207,17 @@ def _apply_best_threshold(threshold: float) -> None:
         print(f"[Auto-apply] llm_engine.py 없음: {engine_path}")
         return
     text = engine_path.read_text(encoding="utf-8")
-    # "if distance > 숫자:" 패턴만 교체 — 줄 시작 공백 + if 로 범위를 좁혀 리스트 숫자 오탐 방지
+    # _RAG_THRESHOLD = float(os.getenv("RAG_THRESHOLD", "숫자")) 패턴의 기본값 교체
     new_text, n = _re.subn(
-        r"([ \t]+if distance\s*[><=]+\s*)\d+\.\d+",
-        lambda m: f"{m.group(1)}{threshold}",
+        r'(_RAG_THRESHOLD\s*=\s*float\(os\.getenv\("RAG_THRESHOLD",\s*")\d+\.\d+(")',
+        lambda m: f"{m.group(1)}{threshold}{m.group(2)}",
         text,
     )
     if n == 0:
         print("[Auto-apply] llm_engine.py에서 distance 임계값 패턴을 찾지 못했습니다.")
         return
     engine_path.write_text(new_text, encoding="utf-8")
-    print(f"[Auto-apply] llm_engine.py distance 임계값 → {threshold} (변경 {n}곳)")
+    print(f"[Auto-apply] llm_engine.py _RAG_THRESHOLD 기본값 → {threshold} (변경 {n}곳)")
 
 
 if __name__ == "__main__":

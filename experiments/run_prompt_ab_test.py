@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL    = "qwen2.5:0.5b"
 TIMEOUT         = 60
-SAMPLE_SIZE     = 30   # test_set에서 사용할 샘플 수
+SAMPLE_SIZE     = None  # main()에서 test_set.json 전체 크기로 동적 설정
 MAX_LOG_CHARS   = 300  # LLM에 전달할 최대 로그 길이
 
 TEST_SET_PATH = Path("data/test_set.json")
@@ -194,17 +194,18 @@ def main():
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     all_samples = json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))["data"]
+    sample_size = len(all_samples)
 
-    # 카테고리 균형 샘플링 (각 카테고리에서 최대 5개, 총 SAMPLE_SIZE 내)
+    # 카테고리 균형 샘플링 (전체 test_set 사용)
     from collections import defaultdict
     buckets: dict[str, list] = defaultdict(list)
     for s in all_samples:
         buckets[s["error_category"]].append(s)
     samples: list[dict] = []
-    per_cat = max(1, SAMPLE_SIZE // len(buckets))
+    per_cat = max(1, sample_size // len(buckets))
     for cat_samples in buckets.values():
         samples.extend(cat_samples[:per_cat])
-    samples = samples[:SAMPLE_SIZE]
+    samples = samples[:sample_size]
 
     system_ctx = "CPU: 45% | MEM: 6.2GB/15.6GB | DISK: 78% | LOAD: 1.2"
 
@@ -254,17 +255,23 @@ def main():
         writer.writerows(rows)
 
     # ── 집계 출력 ────────────────────────────────────────────────────────
+    import math
     n = len(samples)
-    print(f"\n{'Variant':<20} {'Format%':>8} {'Valid%':>8} {'Aligned%':>9} {'AvgLat(ms)':>11}")
-    print("-" * 60)
+    print(f"\n{'Variant':<20} {'Format%':>8} {'Valid%':>8} {'Aligned%':>9} {'Avg(ms)':>8} {'P95(ms)':>8} {'Std(ms)':>8}")
+    print("-" * 75)
     for vname, st in summary.items():
-        avg_lat = sum(st["latencies"]) / len(st["latencies"])
+        lats    = sorted(st["latencies"])
+        avg_lat = sum(lats) / len(lats)
+        p95_lat = lats[int(len(lats) * 0.95)]
+        std_lat = math.sqrt(sum((x - avg_lat) ** 2 for x in lats) / len(lats))
         print(
             f"{vname:<20} "
             f"{st['format_ok']/n*100:>7.1f}% "
             f"{st['cmd_valid']/n*100:>7.1f}% "
             f"{st['aligned']/n*100:>8.1f}% "
-            f"{avg_lat:>10.1f}"
+            f"{avg_lat:>7.1f} "
+            f"{p95_lat:>7.1f} "
+            f"{std_lat:>7.1f}"
         )
 
     print(f"\nCSV 저장: {csv_path}")

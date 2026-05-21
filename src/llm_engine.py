@@ -23,7 +23,7 @@ _OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
 _OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))
 _OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 # L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
-_RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "1.2"))
+_RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "0.6"))
 
 # ── 정규식 프리컴파일 ──────────────────────────────────────────────────────────
 # 모듈 임포트 시 1회만 컴파일해 _clean_llm_output() 반복 호출 비용을 절감한다.
