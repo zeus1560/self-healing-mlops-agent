@@ -66,7 +66,7 @@ src/
 │   ├── vram_profiler.py    # Intel Arc VRAM 사용량 측정
 │   └── log_monitor.py      # 로그 파일 모니터링 유틸리티
 └── utils/
-    ├── debouncer.py        # LRU 기반 중복 에러 쿨다운 (MD5 해시)
+    ├── debouncer.py        # LRU 기반 중복 에러 쿨다운 (MD5 해시, thread-safe)
     ├── logging_config.py   # JSON 구조화 로깅 설정
     ├── pii_masker.py       # 로그 내 개인정보 마스킹
     ├── profiler.py         # 성능 프로파일링 데코레이터
@@ -121,7 +121,7 @@ src/
 
 ## 보안 아키텍처
 
-`executor.py`의 `_validate_command()`는 3단계 방어를 순서대로 적용합니다.
+`executor.py`의 `_validate_command()`는 4단계 방어를 순서대로 적용합니다.
 
 | 단계 | 검사 | 차단 예시 |
 |------|------|-----------|
@@ -129,6 +129,12 @@ src/
 | 2. 메타문자 전수 검사 | `\|><;&\`$(){}*?!\\~` | `systemctl restart nginx; rm -rf /` |
 | 3. BANNED_TOKENS | 인터프리터·파괴적 명령 차단 | `python3`, `bash`, `rm`, `curl` |
 | 4. ALLOWED_COMMANDS | 명시적 화이트리스트만 통과 | 목록 외 모든 명령어 |
+
+`_validate_process_name()`은 `kill_process` / `restart_service` 액션의 대상 프로세스 이름을 별도로 검증합니다.
+
+| 검사 | 규칙 | 차단 예시 |
+|------|------|-----------|
+| 프로세스 이름 정규식 | `^[a-zA-Z0-9][a-zA-Z0-9_\-.]` | `pkill -9`의 `-9` (플래그 인젝션), `nginx&&rm` |
 
 **Human-in-the-Loop**: 보안 필터 통과 후 Slack 승인 요청 발송 → `y/n` 대기  
 `AUTO_APPROVE=true` 환경변수로 실험/테스트 모드 자동 승인 전환
