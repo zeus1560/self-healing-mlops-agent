@@ -26,9 +26,10 @@ EXPERIMENTS = [
     (11, "run_debouncer_sweep",  "Debouncer Window Sweep",          False),
     (12, "run_security_audit",   "Security Audit (악성커맨드 30개)", False),
     (13, "run_prompt_ab_test",   "Prompt A/B/C 비교",              True),
+    (14, "run_benchmark",        "L1 vs L2 연속학습 벤치마크",      True),
 ]
 
-DEFAULT_TIMEOUT = 300  # 실험 하나당 최대 대기 시간(초)
+DEFAULT_TIMEOUT = 600  # 실험 하나당 최대 대기 시간(초)
 WIDTH = 50
 
 

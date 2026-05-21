@@ -1,6 +1,6 @@
 """
 etl_backup.json → data/train_set.json + data/test_set.json
-error_category 기준 stratified 80/20 split.
+error_category 기준 stratified 70/30 split.
 """
 import json
 import random
@@ -11,7 +11,7 @@ from pathlib import Path
 BACKUP_PATH = Path("data/etl_backup.json")
 TRAIN_PATH  = Path("data/train_set.json")
 TEST_PATH   = Path("data/test_set.json")
-TEST_RATIO  = 0.2
+TEST_RATIO  = 0.3
 SEED        = 42
 
 

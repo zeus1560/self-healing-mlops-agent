@@ -100,13 +100,13 @@ src/
   train_set.json 우선, 없으면 etl_backup.json 폴백
 ```
 
-### 훈련 데이터 파이프라인 (ChromaDB 총 **977건**, 합성 데이터 0건)
+### 훈련 데이터 파이프라인 (ChromaDB 총 **1,275건**, 합성 데이터 0건)
 
 | 소스 | ChromaDB 적재 | 수집 방법 |
 |------|------|---------|
-| ETL GitHub Issues + Demo | 504건 | GitHub API 크롤링 + 데모 시나리오 |
+| ETL GitHub Issues + Demo (`etl_vector_sync`) | 436건 | GitHub API 크롤링 + 데모 시나리오 (MD5 dedup 후) |
 | `scripts/loghub_pipeline.py --keyword-only` | 226건 | Loghub 공개 연구 데이터셋 (키워드 분류) |
-| `scripts/etl_github_to_chroma.py` | 247건 | **공식 레포 30개 쿼리** — pytorch/tensorflow/elasticsearch/celery/gunicorn/sqlalchemy/psycopg2/redis-py/aiohttp/grpc/vault/paramiko/ansible/kubernetes/helm 등 |
+| `scripts/etl_github_to_chroma.py` | 613건 | **공식 레포 30개 쿼리** — pytorch/tensorflow/elasticsearch/celery/gunicorn/sqlalchemy/psycopg2/redis-py/aiohttp/grpc/vault/paramiko/ansible/kubernetes/helm 등 |
 
 **ETL 전략**: Extract(GitHub 공식 이슈) → 에러 스니펫 regex 추출 → 전처리(노이즈 제거·길이 제한·액션 검증) → Load(ChromaDB 직접 upsert)  
 합성 데이터 없음 — 모든 항목이 실제 오픈소스 프로젝트 이슈에서 수집된 원본 에러 메시지

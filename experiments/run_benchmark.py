@@ -2,8 +2,8 @@
 Continuous Learning 벤치마크 — L1 vs L2 속도 비교
 
 시나리오:
-  Round 1 (Cold) : test_set에서 50건을 처음 처리 → 대부분 L2 LLM 추론
-  Round 2 (Warm) : 동일 50건 재처리 → learn_from_feedback으로 쌓인 L1 캐시 적중
+  Round 1 (Cold) : test_set 전체를 처음 처리 → 대부분 L2 LLM 추론
+  Round 2 (Warm) : 동일 샘플 재처리 → learn_from_feedback으로 쌓인 L1 캐시 적중
 
 목표 수치:
   "Continuous Learning을 통해 재발 에러 해결 속도를 N% 단축"
@@ -26,7 +26,7 @@ from src.observability import AgentObserver
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
 BENCHMARK_DB   = "./data/benchmark_metrics.db"   # 기존 운영 DB와 분리
-N_SAMPLES      = 50
+N_SAMPLES      = None  # main()에서 test_set.json 전체 크기로 동적 설정
 ROUND1_LABEL   = "Cold (첫 발생)"
 ROUND2_LABEL   = "Warm (재발생 — L1 캐시)"
 RESULTS_DIR    = "./experiments/results"
@@ -159,15 +159,18 @@ def save_csv(all_results: list[dict]) -> None:
 
 
 def main():
+    import json
+    n_samples = len(json.load(open("data/test_set.json"))["data"])
+
     print("Self-Healing Agent — L1 vs L2 연속 학습 벤치마크")
-    print(f"샘플: {N_SAMPLES}건 | DB: {BENCHMARK_DB}\n")
+    print(f"샘플: {n_samples}건 | DB: {BENCHMARK_DB}\n")
 
     # 컴포넌트 초기화 (벤치마크 전용 DB 사용)
     engine   = RAGEngine()
     executor = ActionExecutor()
     observer = AgentObserver(db_path=BENCHMARK_DB)
 
-    samples = load_benchmark_samples(N_SAMPLES)
+    samples = load_benchmark_samples(n_samples)
     print(f"샘플 로드 완료: {len(samples)}건")
 
     # ── Round 1: Cold ─────────────────────────────────────────────────────────
