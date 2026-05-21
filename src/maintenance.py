@@ -1,23 +1,40 @@
 """
-Maintenance — SQLite 오래된 레코드 정리 + VACUUM.
+MaintenanceRunner — SQLite 오래된 레코드 정리 + VACUUM.
 
-- metrics 테이블에서 30일 초과 레코드 삭제
-- circuit_breaker 테이블에서 30일 초과 CLOSED 레코드 삭제
-- VACUUM 으로 디스크 공간 반환
-- 마지막 실행 시각을 maintenance_log 테이블에 기록 (하루 1회 제한)
+수행 작업:
+  - metrics 테이블에서 RETENTION_DAYS 초과 레코드 삭제
+  - circuit_breaker 테이블에서 오래된 CLOSED 레코드 삭제
+  - VACUUM으로 디스크 공간 반환 (트랜잭션 외부에서 실행)
+  - 마지막 실행 시각을 maintenance_log 테이블에 기록 (하루 1회 제한)
+
+타임존 안전성:
+  저장 타임스탬프는 항상 UTC-aware ISO 형식. 구형 naive 레코드가
+  혼재할 경우를 대비해 fromisoformat() 결과에 tzinfo를 보정한다.
 """
-
 import logging
 import os
 import sqlite3
 import traceback
 from datetime import datetime, timezone, timedelta
 
-RETENTION_DAYS   = 30
+RETENTION_DAYS    = 30
 _RUN_INTERVAL_SEC = 86400  # 24시간
 
 
+def _parse_utc(iso_str: str) -> datetime:
+    """
+    ISO 8601 문자열을 UTC-aware datetime으로 파싱한다.
+    tzinfo 없는 구형 레코드는 UTC로 간주해 TypeError를 방지한다.
+    """
+    dt = datetime.fromisoformat(iso_str)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class MaintenanceRunner:
+    """SQLite 메트릭 DB의 오래된 레코드를 주기적으로 정리한다."""
+
     def __init__(self, db_path: str = "./data/agent_metrics.db"):
         self.db_path = db_path
         self._init_log_table()
@@ -26,9 +43,9 @@ class MaintenanceRunner:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS maintenance_log (
-                    id         INTEGER PRIMARY KEY CHECK (id = 1),
-                    last_run   TEXT NOT NULL,
-                    deleted    INTEGER NOT NULL DEFAULT 0
+                    id       INTEGER PRIMARY KEY CHECK (id = 1),
+                    last_run TEXT NOT NULL,
+                    deleted  INTEGER NOT NULL DEFAULT 0
                 )
             """)
             conn.commit()
@@ -42,15 +59,17 @@ class MaintenanceRunner:
             ).fetchone()
         if row is None:
             return True
-        last = datetime.fromisoformat(row[0])
-        elapsed = (datetime.now(timezone.utc) - last).total_seconds()
-        return elapsed >= _RUN_INTERVAL_SEC
+        try:
+            last    = _parse_utc(row[0])
+            elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+            return elapsed >= _RUN_INTERVAL_SEC
+        except (ValueError, TypeError):
+            # 파싱 실패 시 실행 허용 (보수적)
+            logging.warning("[Maintenance] last_run 파싱 실패 — 강제 실행.")
+            return True
 
     def run(self) -> dict:
-        """
-        정리 실행. should_run() 확인 없이 즉시 수행.
-        반환: {"deleted": int, "size_before_kb": int, "size_after_kb": int}
-        """
+        """정리 실행. should_run() 확인 없이 즉시 수행."""
         try:
             return self._run_inner()
         except Exception:
@@ -58,7 +77,7 @@ class MaintenanceRunner:
             return {"deleted": 0, "size_before_kb": 0, "size_after_kb": 0}
 
     def run_if_due(self) -> None:
-        """should_run() 이 True일 때만 run() 호출. 메인 루프에서 사용."""
+        """should_run()이 True일 때만 run() 호출. 메인 루프에서 사용."""
         if self.should_run():
             result = self.run()
             logging.info(
@@ -69,22 +88,20 @@ class MaintenanceRunner:
     # ── 내부 구현 ──────────────────────────────────────────────────────
     def _run_inner(self) -> dict:
         size_before = os.path.getsize(self.db_path) // 1024
-
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)).isoformat()
+        cutoff      = (
+            datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
+        ).isoformat()
         deleted = 0
 
         with sqlite3.connect(self.db_path) as conn:
-            # metrics: timestamp 컬럼 기준
-            cur = conn.execute(
-                "DELETE FROM metrics WHERE timestamp < ?", (cutoff,)
-            )
+            cur      = conn.execute("DELETE FROM metrics WHERE timestamp < ?", (cutoff,))
             deleted += cur.rowcount
 
-            # circuit_breaker: 오래된 CLOSED 항목 정리 (last_updated 기준)
             if self._table_exists(conn, "circuit_breaker"):
-                cur = conn.execute(
-                    "DELETE FROM circuit_breaker WHERE state = 'CLOSED' AND last_updated < ?",
-                    (cutoff,)
+                cur      = conn.execute(
+                    "DELETE FROM circuit_breaker "
+                    "WHERE state = 'CLOSED' AND last_updated < ?",
+                    (cutoff,),
                 )
                 deleted += cur.rowcount
 
@@ -100,7 +117,7 @@ class MaintenanceRunner:
 
         # VACUUM은 트랜잭션 밖에서 실행해야 함
         with sqlite3.connect(self.db_path) as conn:
-            conn.isolation_level = None   # autocommit
+            conn.isolation_level = None  # autocommit
             conn.execute("VACUUM")
 
         size_after = os.path.getsize(self.db_path) // 1024
