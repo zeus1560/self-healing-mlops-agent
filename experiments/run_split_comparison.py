@@ -83,7 +83,6 @@ def sweep(cached: list[dict], label: str) -> list[dict]:
                     tp += 1
                 else:
                     fp += 1
-                fn += 1
                 if r["pred_act"] == r["true_act"]:
                     a_correct += 1
             else:
