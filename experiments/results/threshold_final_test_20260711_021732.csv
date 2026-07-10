@@ -1,0 +1,2 @@
+threshold,precision,recall,f1,action_f1,l1_hit_rate,avg_latency_ms,tp,fp,fn,tn
+0.5,0.6802,0.9571,0.7953,0.8385,0.9517,36.689,134,63,6,4

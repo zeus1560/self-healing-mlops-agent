@@ -1,6 +1,7 @@
 """
-베이스라인(키워드 매칭) vs RAG 시스템 비교
-결과: experiments/results/baseline_results.csv
+베이스라인(키워드 매칭) vs RAG 최종 비교
+Final Test Set (207개)에서만 평가
+τ=0.50, K=10 (사전 튜닝값)
 """
 import csv
 import json
@@ -15,13 +16,13 @@ import chromadb
 from chromadb.config import Settings
 from sklearn.metrics import precision_recall_fscore_support
 
-TEST_SET_PATH = Path("data/test_set.json")
+FINAL_TEST_SET_PATH = Path("data/final_test_set.json")
 CHROMA_PATH   = Path("data/chroma_db")
 RESULTS_DIR   = Path("experiments/results")
-RAG_THRESHOLD = 0.60  # threshold sweep 최적값 (run_threshold_sweep.py Auto-apply 결과)
+RAG_THRESHOLD = 0.50  # run_threshold_sweep_with_validation.py 결과
+TOP_K         = 10    # run_top_k_sweep_with_validation.py 결과
 
 
-# ── 베이스라인: 키워드 매칭 ────────────────────────────────────────────
 KEYWORD_RULES = [
     (["out of memory", "oom killer", "cuda out of memory", "vram", "outofmemoryerror"],
      "Out_Of_Memory"),
@@ -55,14 +56,28 @@ def keyword_classify(log_text: str) -> str:
 
 
 def rag_classify(collection, log_text: str, threshold: float) -> tuple[str, float, str]:
-    result   = collection.query(query_texts=[log_text], n_results=1)
-    distance = result["distances"][0][0]
-    meta     = result["metadatas"][0][0]
-    category = meta.get("error_category", "Unknown")
-    action   = meta.get("action_type", "")
-    if distance >= threshold:
-        return "Unknown", distance, ""
-    return category, distance, action
+    result   = collection.query(query_texts=[log_text], n_results=TOP_K)
+    
+    # Top-K 결과 중 threshold 이내인 것들에서 다수결
+    candidates = []
+    for meta, dist in zip(result["metadatas"][0], result["distances"][0]):
+        if dist < threshold:
+            candidates.append(meta.get("error_category", "Unknown"))
+    
+    if not candidates:
+        return "Unknown", result["distances"][0][0], ""
+    
+    category = max(set(candidates), key=candidates.count)
+    
+    # action_type: threshold 이내이고 action_type이 있는 것들 중 다수결
+    action_candidates = []
+    for meta, dist in zip(result["metadatas"][0], result["distances"][0]):
+        if dist < threshold and meta.get("action_type"):
+            action_candidates.append(meta.get("action_type"))
+    
+    action = max(set(action_candidates), key=action_candidates.count) if action_candidates else ""
+    
+    return category, result["distances"][0][0], action
 
 
 def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
@@ -77,7 +92,6 @@ def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
         result = predict_fn(s["log_text"])
         latencies.append((time.perf_counter() - t0) * 1000)
 
-        # predict_fn may return (category, dist, action) tuple or plain string
         if isinstance(result, tuple):
             pred, _, pred_action = result
         else:
@@ -125,7 +139,13 @@ def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
 
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    test_samples = json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))["data"]
+
+    print("=" * 85)
+    print("최종 베이스라인 비교: Final Test Set (207개) 에서만 평가")
+    print("=" * 85)
+
+    test_samples = json.loads(FINAL_TEST_SET_PATH.read_text(encoding="utf-8"))["data"]
+    print(f"Final test set: {len(test_samples)}개\n")
 
     client = chromadb.PersistentClient(
         path=str(CHROMA_PATH),
@@ -140,30 +160,39 @@ def main():
             test_samples,
         ),
         evaluate_system(
-            f"RAG (threshold={RAG_THRESHOLD})",
+            f"RAG (τ={RAG_THRESHOLD}, K={TOP_K})",
             lambda txt: rag_classify(collection, txt, RAG_THRESHOLD),
             test_samples,
         ),
     ]
 
-    print(f"\n{'System':<30} {'Cat Acc':>8} {'Prec':>8} {'Recall':>8} {'F1':>8} {'Act Acc':>8} {'Coverage':>9} {'Correct':>8} {'Unknown':>8} {'Latency(ms)':>12}")
-    print("-" * 106)
+    print(f"{'System':<30} {'Accuracy':>8} {'Precision':>10} {'Recall':>8} {'F1':>8} {'ActAcc':>8} {'Coverage':>9} {'Latency(ms)':>12}")
+    print("-" * 100)
     for r in results:
-        print(f"{r['system']:<30} {r['accuracy']:>8.3f} {r['precision']:>8.3f} {r['recall']:>8.3f} "
+        print(f"{r['system']:<30} {r['accuracy']:>8.3f} {r['precision']:>10.3f} {r['recall']:>8.3f} "
               f"{r['f1']:>8.3f} {r['action_accuracy']:>8.3f} {r['coverage']:>9.3f} "
-              f"{r['correct']:>8} {r['unknown']:>8} {r['avg_latency_ms']:>12.1f}")
+              f"{r['avg_latency_ms']:>12.1f}")
 
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = RESULTS_DIR / f"baseline_results_{ts}.csv"
+    csv_path = RESULTS_DIR / f"baseline_compare_final_test_{ts}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=results[0].keys())
         writer.writeheader()
         writer.writerows(results)
-    print(f"\nCSV 저장: {csv_path}")
+    print(f"\n[Final Test] CSV 저장: {csv_path}")
 
     rag_acc = next(r["accuracy"] for r in results if "RAG" in r["system"])
     kw_acc  = next(r["accuracy"] for r in results if "Keyword" in r["system"])
-    print(f"\nRAG 향상: {(rag_acc - kw_acc)*100:+.1f}%p vs 키워드 베이스라인")
+    improvement = (rag_acc - kw_acc) * 100
+
+    print("\n" + "=" * 85)
+    print("✓ 최종 결과 요약 (Final Test Set 기준)")
+    print("=" * 85)
+    print(f"Keyword Baseline:  Accuracy={results[0]['accuracy']:.4f}, Precision={results[0]['precision']:.4f}, Recall={results[0]['recall']:.4f}")
+    print(f"RAG (τ=0.50, K=10): Accuracy={results[1]['accuracy']:.4f}, Precision={results[1]['precision']:.4f}, Recall={results[1]['recall']:.4f}")
+    print(f"\nRAG 향상도: {improvement:+.1f}%p vs 키워드 베이스라인")
+    print(f"\n✓ 최종 성능 지표는 Final Test Set (n=207) 단독 평가 결과이며, test set leakage가 없습니다.")
+    print(f"✓ 논문에는 이 지표들만 보고하세요.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+chromadb>=0.5.0
+watchdog>=3.0
+requests>=2.31
+fastapi>=0.110
+uvicorn>=0.29
+streamlit>=1.33
+pandas>=2.0
+plotly>=5.18
+python-json-logger>=2.0
+scikit-learn>=1.4

@@ -6,16 +6,30 @@ AgentObserver — Self-Healing Agent 활동 메트릭 수집 및 Slack 경보 �
   - 모든 타임스탬프는 UTC-aware ISO 형식 저장 (naive/aware 혼용 방지).
   - PII 마스킹 후 저장 (pii_masker.mask).
   - 조치 실패 및 에스컬레이션 시 Slack 경보 자동 발송.
+  - 스키마 마이그레이션 컬럼 이름은 _SAFE_COL_RE 로 검증 후 SQL에 삽입한다.
 """
 import json
 import logging
 import os
+import re
 import traceback
 import urllib.request
 from datetime import datetime, timezone
 
 from src.utils.sqlite_pool import get_conn
 from src.utils.pii_masker import mask as _mask_pii
+
+# 스키마 마이그레이션 컬럼 정의.
+# 컬럼 이름은 소문자 영문자·밑줄만 허용한다(_SAFE_COL_RE 로 검증).
+# 이 목록에만 f-string SQL이 사용되므로, 새 컬럼 추가 시 이곳에만 등록하면 된다.
+_SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    ("result_category", "TEXT DEFAULT 'SUCCESS'"),
+    ("error_type",      "TEXT"),
+    ("error_detail",    "TEXT"),
+    ("error_category",  "TEXT"),
+)
+# 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
+_SAFE_COL_RE = re.compile(r'^[a-z_]+$')
 
 
 class AgentObserver:
@@ -35,6 +49,12 @@ class AgentObserver:
 
     # ── 초기화 ──────────────────────────────────────────────────────────
     def _init_db(self) -> None:
+        """
+        metrics 테이블을 생성하고 누락 컬럼을 마이그레이션한다.
+
+        _SCHEMA_MIGRATIONS의 컬럼 이름은 _SAFE_COL_RE 로 사전 검증해
+        f-string SQL 구성 시 비안전 식별자가 삽입되지 않도록 보장한다.
+        """
         conn = get_conn(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS metrics (
@@ -52,12 +72,11 @@ class AgentObserver:
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
-        for col, definition in [
-            ("result_category", "TEXT DEFAULT 'SUCCESS'"),
-            ("error_type",      "TEXT"),
-            ("error_detail",    "TEXT"),
-            ("error_category",  "TEXT"),
-        ]:
+        for col, definition in _SCHEMA_MIGRATIONS:
+            # 소문자 영문자·밑줄 외 문자가 포함된 컬럼 이름은 건너뛴다.
+            if not _SAFE_COL_RE.match(col):
+                logging.error(f"[Observer] 비안전 컬럼 이름 건너뜀: {col!r}")
+                continue
             if col not in existing:
                 conn.execute(f"ALTER TABLE metrics ADD COLUMN {col} {definition}")
                 logging.info(f"[Observer] 컬럼 추가: {col}")
@@ -78,9 +97,9 @@ class AgentObserver:
         error_category: str | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다."""
-        safe_log = _mask_pii(error_log)
+        safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now().isoformat()
         try:
             conn = get_conn(self.db_path)
             conn.execute(

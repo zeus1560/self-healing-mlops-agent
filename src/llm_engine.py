@@ -14,11 +14,17 @@ RAGEngine — L1 Cache(ChromaDB) + L2 Fallback(Ollama → ipex_llm → Rule) 투
 ChromaDB 싱글톤:
   Double-Checked Locking으로 프로세스 내 클라이언트를 하나만 유지.
   파일 락 경합 및 중복 연결 방지.
+  초기화 실패 시 _chroma_client를 None으로 유지해 다음 호출에서 재시도 가능.
 
 ipex_llm 메모리 설계:
   spawn 방식으로 격리된 자식 프로세스에서 모델을 로드하고,
   추론 완료 후 os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다.
   parent_conn은 finally 블록에서 반드시 닫힌다.
+
+디렉터리 경로:
+  CHROMA_PERSIST_DIR 환경 변수로 재정의 가능.
+  미설정 시 __file__ 기준 2레벨 상위의 data/chroma_db를 사용.
+  os.getcwd() 의존을 제거해 실행 디렉터리 변경에 독립적이다.
 """
 import hashlib
 import json
@@ -48,6 +54,16 @@ _OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 # L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
 _RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "0.6"))
 
+# ChromaDB 퍼시스턴트 디렉터리.
+# __file__ 기준 경로를 사용해 os.getcwd() 변경에 독립적으로 동작한다.
+CHROMA_PERSIST_DIR = os.getenv(
+    "CHROMA_PERSIST_DIR",
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "chroma_db",
+    ),
+)
+
 # ── 정규식 프리컴파일 ──────────────────────────────────────────────────────────
 # 모듈 임포트 시 1회만 컴파일해 _clean_llm_output() 반복 호출 비용을 절감한다.
 _JSON_PATTERN   = _re.compile(r'\{[^{}]*\}', _re.DOTALL)
@@ -67,24 +83,41 @@ _PROSE_STARTERS = {
 }
 
 # ── ChromaDB Singleton ────────────────────────────────────────────────────────
-# 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
 # Double-Checked Locking: 1차 검사(락 없이)는 초기화 완료 후 빠른 경로.
+# 초기화 실패 시 _chroma_client = None 이 유지되어 다음 호출에서 재시도된다.
 _chroma_client = None
 _chroma_lock   = threading.Lock()
 
 
 def _get_chroma_client() -> chromadb.PersistentClient:
-    """프로세스 내 ChromaDB 싱글톤 클라이언트를 반환한다."""
+    """
+    프로세스 내 ChromaDB 싱글톤 클라이언트를 반환한다.
+
+    CHROMA_PERSIST_DIR 디렉터리가 없으면 자동 생성한다.
+    초기화 실패 시 예외를 로깅하고 그대로 전파한다.
+    (_chroma_client 는 None으로 유지되어 다음 호출에서 재시도 가능)
+    """
     global _chroma_client
     if _chroma_client is None:
         with _chroma_lock:
             if _chroma_client is None:
-                persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
-                _chroma_client = chromadb.PersistentClient(
-                    path=persist_dir,
-                    settings=Settings(anonymized_telemetry=False),
-                )
-                logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
+                os.makedirs(CHROMA_PERSIST_DIR, exist_ok=True)
+                try:
+                    _chroma_client = chromadb.PersistentClient(
+                        path=CHROMA_PERSIST_DIR,
+                        settings=Settings(anonymized_telemetry=False),
+                    )
+                    logging.info(
+                        f"[ChromaDB] Singleton 클라이언트 초기화 완료. "
+                        f"(경로: {CHROMA_PERSIST_DIR})"
+                    )
+                except Exception:
+                    # _chroma_client 를 None으로 유지 → 다음 호출에서 재시도
+                    logging.error(
+                        f"[ChromaDB] 초기화 실패 — 다음 호출에서 재시도됩니다:\n"
+                        f"{traceback.format_exc()}"
+                    )
+                    raise
     return _chroma_client
 
 
@@ -294,7 +327,7 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
 
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     """
-    자가 반성 루프 — LLM이 생성한 명령어의 안전성을 동일 LLM으로 재검증.
+    자가 반성 루프 — LLM이 생성한 명령어의 안전성을 동일 LLM으로 재검증한다.
 
     YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
@@ -342,7 +375,9 @@ mp_ctx = mp.get_context("spawn")
 def _ipex_inference_worker(conn, error_log: str, system_context: str) -> None:
     """
     spawn 자식 프로세스에서 ipex_llm 모델을 로드하고 추론한다.
-    os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다 (sys.exit은 finalizer를 거침).
+
+    os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다.
+    sys.exit은 atexit finalizer를 거치므로 VRAM 해제가 지연될 수 있어 사용하지 않는다.
     """
     import warnings
     warnings.filterwarnings("ignore")
@@ -450,7 +485,6 @@ def _ensemble_vote(candidates: list[tuple[dict, float]]) -> dict:
     action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
     top_action   = action_votes.most_common(1)[0][0]
 
-    # 동일 action_type 후보 중 거리 최소 항목 선택 (인덱스 기반, is 비교 불필요)
     best_meta, best_dist = None, float("inf")
     for meta, dist in candidates:
         if meta.get("action_type") == top_action and dist < best_dist:
