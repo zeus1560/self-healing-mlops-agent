@@ -133,10 +133,24 @@ class AgentObserver:
                 f"• *판단 소스*: `{source}`\n"
                 f"• *시도한 액션*: `{action_type}`\n"
                 f"• *실패 유형*: `{error_type or 'N/A'}`\n"
-                f"• *실패 상세*: {('`' + error_detail[:200] + '`') if error_detail else '없음'}\n"
+                f"• *실패 상세*: {('`' + (error_detail or '')[:200] + '`') if error_detail else '없음'}\n"
                 f"⚠️ *관리자의 즉각적인 확인이 필요합니다!*"
             )
-            self._send_slack_alert(message)
+            # Prefer Telegram notifications when configured, fallback to Slack webhook
+            try:
+                from src.telegram_bot import get_chatops_client
+                tg = get_chatops_client()
+            except Exception:
+                tg = None
+
+            if tg:
+                # Telegram client present — send a short HTML message
+                try:
+                    tg.send_notification("Self-Healing Agent 경보", message)
+                except Exception:
+                    logging.error("[Observer] Telegram 알림 전송 실패:\n" + traceback.format_exc())
+            else:
+                self._send_slack_alert(message)
 
     def print_performance_report(self) -> None:
         """성능 리포트를 콘솔에 출력한다. 실패 시 에러 로그만 남기고 계속."""
@@ -201,3 +215,32 @@ class AgentObserver:
                     logging.info("🔔 [Slack Alert] 경보 전송 완료.")
         except Exception:
             logging.error(f"❌ [Slack Alert] 전송 실패:\n{traceback.format_exc()}")
+
+    def export_csv(self, days: int = 90, out_path: str | None = None) -> str:
+        """
+        Export metrics for the last `days` days to CSV and return the output path.
+        If out_path is None, writes to ./data/metrics_export_<iso>.csv
+        """
+        import csv
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_iso = cutoff.isoformat()
+        conn = get_conn(self.db_path)
+        rows = conn.execute(
+            "SELECT * FROM metrics WHERE timestamp >= ? ORDER BY timestamp",
+            (cutoff_iso,),
+        ).fetchall()
+        if not out_path:
+            os.makedirs("./data", exist_ok=True)
+            out_path = f"./data/metrics_export_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.csv"
+
+        with open(out_path, "w", newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # write a simple header from PRAGMA table_info
+            header = [r[1] for r in conn.execute("PRAGMA table_info(metrics)")]
+            writer.writerow(header)
+            for r in rows:
+                writer.writerow([r[col] for col in r.keys()])
+        logging.info(f"[Observer] Exported {len(rows)} rows to {out_path}")
+        return out_path

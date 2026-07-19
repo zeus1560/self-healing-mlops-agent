@@ -1,0 +1,70 @@
+#cloud-config
+# Cloud-init for Oracle Cloud Free Tier (Ubuntu 22.04 ARM/AMD)
+# Placeholders that MUST be replaced after instance creation:
+#   ADMIN_CIDR: placeholder for admin SSH CIDR (e.g. 203.0.113.5/32)
+#   GITHUB_REPO_URL: git clone URL for this repository (HTTPS)
+#   ENV_CONTENT: newline-separated key=value pairs for the .env file (do NOT include secrets in source control)
+#
+# Usage: provide this file as user-data when creating the OCI instance, then run `sudo cloud-init status --wait`.
+
+package_update: true
+package_upgrade: true
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - python3-venv
+  - python3-pip
+  - git
+write_files:
+  - path: /root/bootstrap_vars.sh
+    permissions: '0640'
+    content: |
+      # Edit these placeholders AFTER instance creation or inject via metadata
+      ADMIN_CIDR="<ADMIN_CIDR_PLACEHOLDER>"
+      GITHUB_REPO_URL="<GITHUB_REPO_URL_PLACEHOLDER>"
+      # ENV_CONTENT must contain the required runtime secrets (GROQ_API_KEY=..., TELEGRAM_BOT_TOKEN=..., TELEGRAM_CHAT_ID=...)
+      ENV_CONTENT='\n# Add environment variables here\n# Example:\n# GROQ_API_KEY=your_key_here\n'
+
+runcmd:
+  # Basic system configuration
+  - [ bash, -lc, 'set -euo pipefail' ]
+  - [ bash, -lc, 'echo "Setting up iptables to allow only ADMIN_CIDR and block external access to services"' ]
+  - [ bash, -lc, 'apt-get install -y --no-install-recommends iptables-persistent || true' ]
+  - [ bash, -lc, 'iptables -F; iptables -X' ]
+  - [ bash, -lc, 'iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp -s "$ADMIN_CIDR" --dport 22 -j ACCEPT' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 22 -j DROP' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 8000 -s "$ADMIN_CIDR" -j ACCEPT || true' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 8501 -s "$ADMIN_CIDR" -j ACCEPT || true' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 9000 -s "$ADMIN_CIDR" -j ACCEPT || true' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 8000 -j DROP || true' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 8501 -j DROP || true' ]
+  - [ bash, -lc, 'iptables -A INPUT -p tcp --dport 9000 -j DROP || true' ]
+  - [ bash, -lc, 'netfilter-persistent save || true' ]
+
+  # Install Docker (official) and docker-compose plugin
+  - [ bash, -lc, 'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg' ]
+  - [ bash, -lc, 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list' ]
+  - [ bash, -lc, 'apt-get update' ]
+  - [ bash, -lc, 'apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin' ]
+  - [ bash, -lc, 'systemctl enable --now docker' ]
+
+  # Create application directory and clone repo
+  - [ bash, -lc, 'mkdir -p /root/agent && cd /root/agent' ]
+  - [ bash, -lc, 'if [ -n "$GITHUB_REPO_URL" ]; then git clone "$GITHUB_REPO_URL" . || git -C . pull || true; fi' ]
+
+  # Create .env from placeholder content (do NOT store secrets in repo)
+  - [ bash, -lc, 'mkdir -p /root/agent && echo -e "$ENV_CONTENT" > /root/agent/.env && chmod 600 /root/agent/.env || true' ]
+
+  # Start docker-compose services (approval-server, target-app). Use env_file to inject secrets.
+  - [ bash, -lc, 'cd /root/agent && if [ -f docker-compose.yml ]; then docker compose up -d --pull always; fi' ]
+
+  # Setup Python virtualenv for host agent and systemd service
+  - [ bash, -lc, 'cd /root/agent && python3 -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt || true' ]
+  - [ bash, -lc, 'cat > /etc/systemd/system/self-healing-agent.service <<"EOF"\n[Unit]\nDescription=Self-Healing MLOps Agent\nAfter=network.target docker.service\n\n[Service]\nType=simple\nWorkingDirectory=/root/agent\nEnvironmentFile=/root/agent/.env\nExecStart=/root/agent/.venv/bin/python -m src.log_watcher\nRestart=always\nUser=root\n\n[Install]\nWantedBy=multi-user.target\nEOF' ]
+  - [ bash, -lc, 'systemctl daemon-reload && systemctl enable --now self-healing-agent.service || true' ]
+
+final_message: "Oracle cloud-init completed. Edit /root/bootstrap_vars.sh to set ADMIN_CIDR, GITHUB_REPO_URL and ENV_CONTENT; then re-run cloud-init steps if needed or reboot."
