@@ -56,6 +56,28 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── 4. Target app (simulated workload for deployment tests) ─────────────
+  target-app:
+    build: .
+    container_name: mlops_target_app
+    command: uvicorn deploy.target_app.main:app --host 0.0.0.0 --port 9000
+    env_file: .env
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./deploy/target-app:/app
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
   # ── 3. Ollama LLM 서버 (선택 — L2 추론 필요 시만 활성화) ──────────────
   # 활성화: docker compose --profile llm up -d
   ollama:
