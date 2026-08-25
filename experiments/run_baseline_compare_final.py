@@ -114,6 +114,9 @@ def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
     total    = len(test_samples)
     accuracy = correct / total
     coverage = (total - unknown) / total
+    # Macro average: 각 클래스별 Precision/Recall/F1를 먼저 계산한 뒤 평균함.
+    # 따라서 macro-precision과 macro-recall에서 계산한 2PR/(P+R)와
+    # macro-F1 값이 일치하지 않을 수 있다.
     precision, recall, f1, _ = precision_recall_fscore_support(
         true_categories,
         pred_categories,
