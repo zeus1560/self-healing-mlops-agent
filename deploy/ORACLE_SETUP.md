@@ -12,6 +12,15 @@ Prerequisites
 - SSH key pair for instance access
 - Basic familiarity with OCI console
 
+0) Account signup & known gotchas (read this first)
+
+- Sign up at https://www.oracle.com/cloud/free/ — requires a phone number and a credit card for identity verification, but the Always Free resources used here (Ampere A1 4 OCPU/24GB, block storage) are never billed as long as you stay within Always Free limits.
+- **"Out of host capacity" error**: the Always Free Ampere A1 shape is extremely popular and many regions run out of capacity constantly. If instance creation fails with this error:
+  - Try a different region at signup time (avoid the busiest ones; ap-chuncheon-1 (Korea) is frequently full — ap-osaka-1, ap-tokyo-1, or US/EU regions often have more headroom).
+  - Retry creation periodically (capacity frees up as other free-tier users release instances), or split into two smaller shapes (e.g. 2 OCPU/12GB each) instead of one 4/24 instance — smaller requests succeed more often.
+  - You cannot switch region after account creation without opening a new tenancy, so pick carefully.
+- SSH key pair: OCI's instance-creation wizard can auto-generate one and hand you a `.pem` to download — take that if you don't already have a key. Otherwise generate your own on your laptop (`ssh-keygen -t ed25519 -f ~/.ssh/oracle_gx10 -N ""`) and paste the **public** key (`.pub`) into the "SSH keys" field during instance creation. Only the public key ever goes to Oracle; keep the private key file safe, `chmod 600` it.
+
 1) Create an instance
 
 - Image: Canonical Ubuntu 22.04 (ARM)
@@ -19,6 +28,14 @@ Prerequisites
 - Boot volume: choose at least 50GB if you will store logs / WAL files
 - Networking: place instance in a VCN with a public subnet and an ephemeral public IP (or a NAT gateway + private subnet if you prefer)
 - Add the SSH public key to the instance for access
+
+1.5) Open ports at the cloud network level (VCN Security List) — easy to miss
+
+`iptables` on the host (step 6 below) is only the **second** firewall layer. Oracle's Virtual Cloud Network has its own **Security List**, which by default only allows inbound SSH (22). Any port you open with `iptables` still gets dropped upstream unless you also add it here:
+
+- OCI Console → Networking → Virtual Cloud Networks → (your VCN) → Security Lists → (the list attached to your subnet) → Ingress Rules → Add Ingress Rules
+- Add one rule per port you need reachable from your admin IP (or `0.0.0.0/0` if you accept the risk), e.g. TCP 8501 (dashboard), TCP 8000 (approval-server), TCP 9000 (target-app). Leave the rest closed — you don't need to expose the dashboard/approval-server publicly if Telegram is your only interface.
+- Only open what you actually need remote access to. SSH (22) restricted to your own IP is enough for day-to-day operation since Telegram handles alerts/approvals.
 
 2) Initial host setup (run as root / sudo)
 
