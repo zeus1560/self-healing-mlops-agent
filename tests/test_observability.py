@@ -75,7 +75,7 @@ def test_observability_integration():
         success=execution_success,
     )
 
-    print(f"\n⏱️  처리 완료!")
+    print("\n⏱️  처리 완료!")
     print(f"  - 소요 시간: {latency:.4f}초")
     print(f"  - 해결 출처: {resolution_source}")
     print(f"  - 성공 여부: {'✅ 성공' if execution_success else '❌ 실패'}")

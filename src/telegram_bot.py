@@ -20,11 +20,11 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("ALLOWED_USER_ID")
 
 try:
-    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
     from telegram.ext import ApplicationBuilder, CallbackQueryHandler, ContextTypes
     DEFAULT_CONTEXT_TYPE = ContextTypes.DEFAULT_TYPE
 except ImportError:  # pragma: no cover
-    Bot = InlineKeyboardButton = InlineKeyboardMarkup = ApplicationBuilder = CallbackQueryHandler = None
+    Bot = InlineKeyboardButton = InlineKeyboardMarkup = ApplicationBuilder = CallbackQueryHandler = Update = None
     DEFAULT_CONTEXT_TYPE = object
 
 

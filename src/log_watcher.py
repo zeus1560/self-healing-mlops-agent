@@ -24,6 +24,22 @@ import time
 import traceback
 from collections import deque
 
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from src.circuit_breaker import CircuitBreaker
+from src.error_clusterer import ErrorClusterer
+from src.etl_scheduler import ETLScheduler
+from src.executor import ActionExecutor, set_shutdown_event
+from src.llm_engine import RAGEngine
+from src.maintenance import MaintenanceRunner
+from src.observability import AgentObserver
+from src.proactive_monitor import ProactiveMonitor
+from src.slack_bot import SlackChatOps
+from src.utils.debouncer import LogDebouncer
+from src.vector_db_purger import VectorDBPurger
+from src.utils.logging_config import setup_json_logging
+
 # ── 종료 이벤트 ───────────────────────────────────────────────────────────────
 # SIGTERM/SIGINT 수신 시 set() → 메인 루프와 executor 승인 대기 루프가 동시에 감지.
 _shutdown_event = threading.Event()
@@ -40,22 +56,6 @@ def _handle_shutdown(signum, frame) -> None:
     )
     _shutdown_event.set()
 
-
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-
-from src.circuit_breaker import CircuitBreaker
-from src.error_clusterer import ErrorClusterer
-from src.etl_scheduler import ETLScheduler
-from src.executor import ActionExecutor, set_shutdown_event
-from src.llm_engine import RAGEngine
-from src.maintenance import MaintenanceRunner
-from src.observability import AgentObserver
-from src.proactive_monitor import ProactiveMonitor
-from src.slack_bot import SlackChatOps
-from src.utils.debouncer import LogDebouncer
-from src.vector_db_purger import VectorDBPurger
-from src.utils.logging_config import setup_json_logging
 
 _CLUSTER_INTERVAL_SEC  = int(os.getenv("CLUSTER_INTERVAL_SEC",  "86400"))
 _DEBOUNCE_COOLDOWN_SEC = int(os.getenv("DEBOUNCE_COOLDOWN_SEC", "30"))
@@ -107,7 +107,7 @@ class LogTailHandler(FileSystemEventHandler):
 
         # 배치 처리 전 컨텍스트 스냅샷 — 에러 줄 제외(이전 배치 오염 방지)
         pre_batch_context = [
-            l for l in self._line_buf if not self.error_pattern.search(l)
+            ln for ln in self._line_buf if not self.error_pattern.search(ln)
         ]
 
         for idx, raw in enumerate(new_lines):
@@ -120,8 +120,8 @@ class LogTailHandler(FileSystemEventHandler):
                     return
                 if self.debouncer.should_process(line):
                     after_lines = [
-                        l.strip() for l in new_lines[idx + 1: idx + 11]
-                        if not self.error_pattern.search(l)
+                        ln.strip() for ln in new_lines[idx + 1: idx + 11]
+                        if not self.error_pattern.search(ln)
                     ]
                     context = self._build_context_window(
                         line,
@@ -141,9 +141,9 @@ class LogTailHandler(FileSystemEventHandler):
         """
         parts         = [error_line]
         context_lines = (
-            [l for l in before if l]
+            [ln for ln in before if ln]
             + [f">>> {error_line}"]
-            + [l for l in after if l]
+            + [ln for ln in after if ln]
         )
         if context_lines:
             parts.append("[LOG CONTEXT]\n" + "\n".join(context_lines))

@@ -30,7 +30,7 @@ def test_1_debouncer():
     # 모니터가 몇 개를 읽어오는지 확인
     errors = monitor.get_recent_errors()
 
-    logging.info(f"👉 파일에 쓰인 에러 수: 3개")
+    logging.info("👉 파일에 쓰인 에러 수: 3개")
     logging.info(f"👉 모니터가 파이프라인으로 넘긴 에러 수: {len(errors)}개")
 
     if len(errors) == 1:
