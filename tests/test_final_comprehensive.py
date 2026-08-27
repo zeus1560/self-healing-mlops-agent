@@ -9,7 +9,6 @@ import os
 import sys
 import tempfile
 import threading
-import time
 import unittest
 import sqlite3
 
@@ -48,8 +47,10 @@ class TestSQLitePool(unittest.TestCase):
             results[name] = get_conn(self.tf)  # 레퍼런스 유지 (id() 후 GC로 주소 재사용 방지)
         t1 = threading.Thread(target=worker, args=("t1",))
         t2 = threading.Thread(target=worker, args=("t2",))
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
         self.assertIsNot(results["t1"], results["t2"],
                          "다른 스레드는 다른 연결을 가져야 한다")
 
@@ -87,7 +88,7 @@ class TestCircuitBreaker(unittest.TestCase):
 
     def test_half_open_only_one_test_request(self):
         """여러 스레드가 동시에 HALF_OPEN 진입 시 단 1개만 허용"""
-        from src.circuit_breaker import FAILURE_THRESHOLD, STATE_OPEN, STATE_HALF_OPEN
+        from src.circuit_breaker import FAILURE_THRESHOLD, STATE_HALF_OPEN
         sig = self.cb._sig(self.err)
         # 강제로 HALF_OPEN 상태 + test_in_progress=0 세팅
         past = "2000-01-01T00:00:00+00:00"
@@ -98,8 +99,10 @@ class TestCircuitBreaker(unittest.TestCase):
             results.append(self.cb._try_claim_half_open(sig, elapsed=None))
 
         threads = [threading.Thread(target=try_proceed) for _ in range(10)]
-        for t in threads: t.start()
-        for t in threads: t.join()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
         self.assertEqual(results.count(True), 1,
                          "HALF_OPEN에서 정확히 1개 스레드만 허용돼야 한다")
@@ -195,7 +198,7 @@ class TestLogTailHandlerDI(unittest.TestCase):
 
     def test_default_objects_when_no_injection(self):
         """실 DB·ChromaDB 접근 없이 기본 타입 인스턴스화만 검증."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from src.utils.debouncer import LogDebouncer
         from src.log_watcher import LogTailHandler
 
@@ -284,10 +287,16 @@ class TestExecutorSecurity(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(tokens, ["systemctl", "restart", "nginx"])
 
-    def test_pkill_any_arg_allowed(self):
-        # pkill은 빈 set → 어떤 인자도 허용
-        tokens, err = self.ex._validate_command("pkill nginx")
+    def test_pkill_requires_flag(self):
+        # pkill은 신호 플래그 인젝션 방지를 위해 -f/-x 중 하나를 명시해야 통과한다.
+        tokens, err = self.ex._validate_command("pkill -x nginx")
         self.assertIsNone(err)
+        self.assertEqual(tokens, ["pkill", "-x", "nginx"])
+
+    def test_pkill_bare_arg_blocked(self):
+        # 플래그 없는 "pkill nginx"는 허용 인자({-f, -x}) 밖이라 차단된다.
+        tokens, err = self.ex._validate_command("pkill nginx")
+        self.assertIsNotNone(err)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -423,9 +432,11 @@ class TestThresholdApplied(unittest.TestCase):
         import re
         with open("src/llm_engine.py", encoding="utf-8") as f:
             content = f.read()
-        # "THRESHOLD = 1.2" 형태 또는 "if distance > 1.2" 형태 모두 허용
+        # "THRESHOLD = 1.2", "if distance > 1.2", 또는 환경변수 기본값
+        # "_RAG_THRESHOLD = float(os.getenv('RAG_THRESHOLD', '0.6'))" 형태 모두 허용
         m = (re.search(r"THRESHOLD\s*=\s*(\d+\.\d+)", content) or
-             re.search(r"if distance\s*[><=]+\s*(\d+\.\d+)", content))
+             re.search(r"if distance\s*[><=]+\s*(\d+\.\d+)", content) or
+             re.search(r"RAG_THRESHOLD[\"']\s*,\s*[\"'](\d+\.\d+)[\"']", content))
         self.assertIsNotNone(m, "THRESHOLD 정의 또는 distance 비교 구문을 찾지 못했다")
         threshold = float(m.group(1))
         self.assertGreater(threshold, 0.0)
@@ -501,7 +512,6 @@ class TestEnsembleQuery(unittest.TestCase):
         self.assertEqual(int(m.group(1)), 5)
 
     def test_threshold_constant_defined(self):
-        import re
         with open("src/llm_engine.py", encoding="utf-8") as f:
             content = f.read()
         self.assertIn("THRESHOLD", content)
@@ -512,7 +522,7 @@ class TestEnsembleQuery(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────
 class TestErrorClusterer(unittest.TestCase):
     def test_returns_none_when_sklearn_missing_or_empty(self):
-        from src.error_clusterer import ErrorClusterer, _SKLEARN_AVAILABLE
+        from src.error_clusterer import ErrorClusterer
         from unittest.mock import MagicMock
         mock_col = MagicMock()
         mock_col.count.return_value = 5  # < _MIN_VECTORS=20
@@ -547,7 +557,6 @@ class TestJSONLogging(unittest.TestCase):
             self.fail(f"setup_json_logging() raised: {e}")
 
     def test_fallback_when_no_jsonlogger(self):
-        import sys
         from src.utils import logging_config as lc
         orig = lc._JSON_AVAILABLE
         lc._JSON_AVAILABLE = False

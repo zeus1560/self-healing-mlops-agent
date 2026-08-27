@@ -6,16 +6,30 @@ AgentObserver — Self-Healing Agent 활동 메트릭 수집 및 Slack 경보 �
   - 모든 타임스탬프는 UTC-aware ISO 형식 저장 (naive/aware 혼용 방지).
   - PII 마스킹 후 저장 (pii_masker.mask).
   - 조치 실패 및 에스컬레이션 시 Slack 경보 자동 발송.
+  - 스키마 마이그레이션 컬럼 이름은 _SAFE_COL_RE 로 검증 후 SQL에 삽입한다.
 """
 import json
 import logging
 import os
+import re
 import traceback
 import urllib.request
 from datetime import datetime, timezone
 
 from src.utils.sqlite_pool import get_conn
 from src.utils.pii_masker import mask as _mask_pii
+
+# 스키마 마이그레이션 컬럼 정의.
+# 컬럼 이름은 소문자 영문자·밑줄만 허용한다(_SAFE_COL_RE 로 검증).
+# 이 목록에만 f-string SQL이 사용되므로, 새 컬럼 추가 시 이곳에만 등록하면 된다.
+_SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    ("result_category", "TEXT DEFAULT 'SUCCESS'"),
+    ("error_type",      "TEXT"),
+    ("error_detail",    "TEXT"),
+    ("error_category",  "TEXT"),
+)
+# 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
+_SAFE_COL_RE = re.compile(r'^[a-z_]+$')
 
 
 class AgentObserver:
@@ -35,6 +49,12 @@ class AgentObserver:
 
     # ── 초기화 ──────────────────────────────────────────────────────────
     def _init_db(self) -> None:
+        """
+        metrics 테이블을 생성하고 누락 컬럼을 마이그레이션한다.
+
+        _SCHEMA_MIGRATIONS의 컬럼 이름은 _SAFE_COL_RE 로 사전 검증해
+        f-string SQL 구성 시 비안전 식별자가 삽입되지 않도록 보장한다.
+        """
         conn = get_conn(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS metrics (
@@ -52,12 +72,11 @@ class AgentObserver:
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
-        for col, definition in [
-            ("result_category", "TEXT DEFAULT 'SUCCESS'"),
-            ("error_type",      "TEXT"),
-            ("error_detail",    "TEXT"),
-            ("error_category",  "TEXT"),
-        ]:
+        for col, definition in _SCHEMA_MIGRATIONS:
+            # 소문자 영문자·밑줄 외 문자가 포함된 컬럼 이름은 건너뛴다.
+            if not _SAFE_COL_RE.match(col):
+                logging.error(f"[Observer] 비안전 컬럼 이름 건너뜀: {col!r}")
+                continue
             if col not in existing:
                 conn.execute(f"ALTER TABLE metrics ADD COLUMN {col} {definition}")
                 logging.info(f"[Observer] 컬럼 추가: {col}")
@@ -78,7 +97,7 @@ class AgentObserver:
         error_category: str | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다."""
-        safe_log = _mask_pii(error_log)
+        safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
         timestamp = datetime.now(timezone.utc).isoformat()
         try:
@@ -114,10 +133,24 @@ class AgentObserver:
                 f"• *판단 소스*: `{source}`\n"
                 f"• *시도한 액션*: `{action_type}`\n"
                 f"• *실패 유형*: `{error_type or 'N/A'}`\n"
-                f"• *실패 상세*: {('`' + error_detail[:200] + '`') if error_detail else '없음'}\n"
+                f"• *실패 상세*: {('`' + (error_detail or '')[:200] + '`') if error_detail else '없음'}\n"
                 f"⚠️ *관리자의 즉각적인 확인이 필요합니다!*"
             )
-            self._send_slack_alert(message)
+            # Prefer Telegram notifications when configured, fallback to Slack webhook
+            try:
+                from src.telegram_bot import get_chatops_client
+                tg = get_chatops_client()
+            except Exception:
+                tg = None
+
+            if tg:
+                # Telegram client present — send a short HTML message
+                try:
+                    tg.send_notification("Self-Healing Agent 경보", message)
+                except Exception:
+                    logging.error("[Observer] Telegram 알림 전송 실패:\n" + traceback.format_exc())
+            else:
+                self._send_slack_alert(message)
 
     def print_performance_report(self) -> None:
         """성능 리포트를 콘솔에 출력한다. 실패 시 에러 로그만 남기고 계속."""
@@ -182,3 +215,32 @@ class AgentObserver:
                     logging.info("🔔 [Slack Alert] 경보 전송 완료.")
         except Exception:
             logging.error(f"❌ [Slack Alert] 전송 실패:\n{traceback.format_exc()}")
+
+    def export_csv(self, days: int = 90, out_path: str | None = None) -> str:
+        """
+        Export metrics for the last `days` days to CSV and return the output path.
+        If out_path is None, writes to ./data/metrics_export_<iso>.csv
+        """
+        import csv
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_iso = cutoff.isoformat()
+        conn = get_conn(self.db_path)
+        rows = conn.execute(
+            "SELECT * FROM metrics WHERE timestamp >= ? ORDER BY timestamp",
+            (cutoff_iso,),
+        ).fetchall()
+        if not out_path:
+            os.makedirs("./data", exist_ok=True)
+            out_path = f"./data/metrics_export_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.csv"
+
+        with open(out_path, "w", newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # write a simple header from PRAGMA table_info
+            header = [r[1] for r in conn.execute("PRAGMA table_info(metrics)")]
+            writer.writerow(header)
+            for r in rows:
+                writer.writerow([r[col] for col in r.keys()])
+        logging.info(f"[Observer] Exported {len(rows)} rows to {out_path}")
+        return out_path

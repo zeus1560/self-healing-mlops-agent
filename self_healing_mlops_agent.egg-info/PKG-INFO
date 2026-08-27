@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: self-healing-mlops-agent
+Version: 0.2.0
+Summary: Self-Healing MLOps Agent — L1/L2/Rule resolution pipeline
+Requires-Python: >=3.10
+Requires-Dist: chromadb>=0.5.0
+Requires-Dist: watchdog>=3.0
+Requires-Dist: requests>=2.31
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn>=0.29
+Requires-Dist: streamlit>=1.33
+Requires-Dist: pandas>=2.0
+Requires-Dist: plotly>=5.18
+Requires-Dist: python-json-logger>=2.0
+Requires-Dist: scikit-learn>=1.4

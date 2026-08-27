@@ -21,7 +21,7 @@ try:
     _PSUTIL_OK = True
 except ImportError:
     _PSUTIL_OK = False
-    logging.warning("[ProactiveMonitor] psutil 미설치 — CPU/Memory/Disk 모니터링 비활성화")
+    logging.debug("[ProactiveMonitor] psutil 미설치 — CPU/Memory/Disk 모니터링 비활성화")
 
 try:
     from src.monitor.vram_profiler import get_intel_gpu_stats as _get_gpu_stats

@@ -1,8 +1,7 @@
-import os
 import logging
 from src.schemas import AgentResponse, ActionType
 # 방금 만든 파일 이름이 executor.py라고 가정 (다르다면 맞춰서 수정)
-from src.executor import ActionExecutor 
+from src.executor import ActionExecutor
 
 # 로그가 화면에 보이도록 기본 설정
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

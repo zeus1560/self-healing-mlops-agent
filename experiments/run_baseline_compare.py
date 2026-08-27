@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import chromadb
 from chromadb.config import Settings
+from sklearn.metrics import precision_recall_fscore_support
 
 TEST_SET_PATH = Path("data/test_set.json")
 CHROMA_PATH   = Path("data/chroma_db")
@@ -65,6 +66,8 @@ def rag_classify(collection, log_text: str, threshold: float) -> tuple[str, floa
 
 
 def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
+    true_categories = []
+    pred_categories = []
     correct = action_correct = 0
     unknown = 0
     latencies = []
@@ -80,6 +83,9 @@ def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
         else:
             pred, pred_action = result, ""
 
+        true_categories.append(s["error_category"])
+        pred_categories.append(pred)
+
         if pred == s["error_category"]:
             correct += 1
         if pred == "Unknown":
@@ -94,10 +100,19 @@ def evaluate_system(name: str, predict_fn, test_samples: list[dict]) -> dict:
     total    = len(test_samples)
     accuracy = correct / total
     coverage = (total - unknown) / total
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        true_categories,
+        pred_categories,
+        average="macro",
+        zero_division=0,
+    )
 
     return {
         "system":          name,
         "accuracy":        round(accuracy, 4),
+        "precision":       round(precision, 4),
+        "recall":          round(recall, 4),
+        "f1":              round(f1, 4),
         "action_accuracy": round(action_correct / total, 4),
         "coverage":        round(coverage, 4),
         "correct":         correct,
@@ -131,10 +146,11 @@ def main():
         ),
     ]
 
-    print(f"\n{'System':<30} {'Cat Acc':>8} {'Act Acc':>8} {'Coverage':>9} {'Correct':>8} {'Unknown':>8} {'Latency(ms)':>12}")
-    print("-" * 90)
+    print(f"\n{'System':<30} {'Cat Acc':>8} {'Prec':>8} {'Recall':>8} {'F1':>8} {'Act Acc':>8} {'Coverage':>9} {'Correct':>8} {'Unknown':>8} {'Latency(ms)':>12}")
+    print("-" * 106)
     for r in results:
-        print(f"{r['system']:<30} {r['accuracy']:>8.3f} {r['action_accuracy']:>8.3f} {r['coverage']:>9.3f} "
+        print(f"{r['system']:<30} {r['accuracy']:>8.3f} {r['precision']:>8.3f} {r['recall']:>8.3f} "
+              f"{r['f1']:>8.3f} {r['action_accuracy']:>8.3f} {r['coverage']:>9.3f} "
               f"{r['correct']:>8} {r['unknown']:>8} {r['avg_latency_ms']:>12.1f}")
 
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")

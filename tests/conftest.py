@@ -4,7 +4,6 @@ pytest 공통 픽스처.
 각 테스트 클래스가 직접 tempfile을 관리하는 대신 여기서 제공하는 픽스처를 사용하면
 tearDown 누락으로 인한 파일 잔재 문제가 없어진다.
 """
-import os
 import pytest
 
 

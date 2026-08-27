@@ -1,0 +1,3 @@
+system,accuracy,precision,recall,f1,action_accuracy,coverage,correct,action_correct,unknown,total,avg_latency_ms
+Keyword Baseline,0.372,0.7392,0.3532,0.4272,0.0,0.5314,77,0,97,207,0.006
+"RAG (τ=0.5, K=10)",0.7246,0.7061,0.6577,0.6729,0.7874,0.9517,150,163,10,207,30.09

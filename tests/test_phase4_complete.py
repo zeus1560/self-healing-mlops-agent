@@ -33,8 +33,6 @@ def test_phase4_loop():
     target_error_log = (
         "CRITICAL: Redis cache connection timeout. Unable to connect to 127.0.0.1:6379"
     )
-    simulated_command = "redis-cli ping && redis-cli FLUSHALL"
-
     print("\n" + "-" * 70)
     print("[Step 1] 미지의 에러 발생")
     print("-" * 70)
@@ -44,7 +42,7 @@ def test_phase4_loop():
     print("[Step 2] RAGEngine에 에러 분석 요청...")
     decision = rag_engine.analyze_error(target_error_log)
 
-    print(f"\n결정 정보:")
+    print("\n결정 정보:")
     print(f"  - Action: {decision.action_type.name}")
     print(f"  - Reasoning: {decision.reasoning}\n")
 
@@ -94,7 +92,7 @@ def test_phase4_loop():
         # 두 번째 호출: 새로운 커맨드 생성 없이 캐시에서 즉시 반환되어야 함
         cached_decision = rag_engine.analyze_error(target_error_log)
 
-        print(f"두 번째 호출 결과:")
+        print("두 번째 호출 결과:")
         print(f"  - Action: {cached_decision.action_type.name}")
         print(f"  - 반환된 커맨드: {cached_decision.reasoning}")
         print(

@@ -101,7 +101,7 @@ def test_phase4_simulation():
         print("두 번째 호출: RAGEngine.analyze_error() 실행")
         cached_decision = rag_engine.analyze_error(target_error_log)
 
-        print(f"\n두 번째 호출 결과:")
+        print("\n두 번째 호출 결과:")
         print(f"  - Action: {cached_decision.action_type.name}")
         print(f"  - 반환된 커맨드: {cached_decision.reasoning}")
         print(

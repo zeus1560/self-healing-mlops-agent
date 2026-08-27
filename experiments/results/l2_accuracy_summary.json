@@ -1,0 +1,20 @@
+{
+  "n_samples": 50,
+  "cat_accuracy": 0.08,
+  "act_accuracy": 0.28,
+  "avg_latency_ms": 23745.4,
+  "l1_latency_ms": 189.0,
+  "slowdown_x": 125.6,
+  "per_category": {
+    "Out_Of_Memory": 0.0,
+    "Memory_Leak": 0.0,
+    "Network_Timeout": 0.0,
+    "DB_Connection": 0.0,
+    "Configuration_Error": 0.2,
+    "Permission_Denied": 0.2,
+    "Disk_Full": 0.4,
+    "Process_Crash": 0.0,
+    "Port_Conflict": 0.0,
+    "Auth_Error": 0.0
+  }
+}

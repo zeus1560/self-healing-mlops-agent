@@ -1,24 +1,31 @@
 """
-RAGEngine — L1 Cache(ChromaDB) + L2 Fallback(Ollama → ipex_llm → Rule) 투트랙 추론 엔진.
+RAGEngine — L1 Cache(ChromaDB) + L2 Fallback(Groq → Ollama → ipex_llm → Rule) 투트랙 추론 엔진.
 
 아키텍처:
   analyze_error(log) 호출 시:
     1. ChromaDB 벡터 검색 (L1 — 임계치 이하 거리)
        → 적중 시 앙상블 투표로 최적 메타데이터 선택 → AgentResponse 즉시 반환
     2. L1 미스 → _l2_slow_track()
-       a. Ollama (경량 LLM, keep_alive로 메모리 상주)
-       b. ipex_llm (spawn 프로세스, VRAM 반환 보장)
-       c. Rule-based heuristic
-       d. 인간 에스컬레이션
+       a. Groq API (llama-3.3-70b, GROQ_API_KEY 설정 시 1순위)
+       b. Ollama (경량 LLM, keep_alive로 메모리 상주 — Groq 미설정/실패 시 폴백)
+       c. ipex_llm (spawn 프로세스, VRAM 반환 보장)
+       d. Rule-based heuristic
+       e. 인간 에스컬레이션
 
 ChromaDB 싱글톤:
   Double-Checked Locking으로 프로세스 내 클라이언트를 하나만 유지.
   파일 락 경합 및 중복 연결 방지.
+  초기화 실패 시 _chroma_client를 None으로 유지해 다음 호출에서 재시도 가능.
 
 ipex_llm 메모리 설계:
   spawn 방식으로 격리된 자식 프로세스에서 모델을 로드하고,
   추론 완료 후 os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다.
   parent_conn은 finally 블록에서 반드시 닫힌다.
+
+디렉터리 경로:
+  CHROMA_PERSIST_DIR 환경 변수로 재정의 가능.
+  미설정 시 __file__ 기준 2레벨 상위의 data/chroma_db를 사용.
+  os.getcwd() 의존을 제거해 실행 디렉터리 변경에 독립적이다.
 """
 import hashlib
 import json
@@ -35,11 +42,26 @@ from collections import Counter
 
 import chromadb
 from chromadb.config import Settings
+from dotenv import load_dotenv
 
 from src.system_diagnostics import gather_system_context
 from src.schemas import AgentResponse, ActionType
 
+# log_watcher.py는 llm_engine을 slack_bot/telegram_bot보다 먼저 임포트하므로,
+# 모듈 레벨 os.getenv() 호출 전에 이 자리에서 직접 .env를 로드해야 한다.
+load_dotenv()
+
 # ── Config ────────────────────────────────────────────────────────────────────
+GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "")
+# llama-3.3-70b-versatile는 Groq에서 단종됨 (2026-08 기준).
+# qwen/qwen3.6-27b + reasoning_effort=none 조합이 사고형(thinking) 오버헤드 없이
+# 안정적으로 원샷 명령어를 반환하는 것으로 검증됨 — gpt-oss 계열은 harmony 포맷상
+# reasoning 채널을 강제로 소비해 max_tokens 내에서 content가 비는 문제가 있었음.
+GROQ_MODEL          = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_API_URL        = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
+_GROQ_MAX_RETRIES   = int(os.getenv("GROQ_MAX_RETRIES", "2"))
+_GROQ_RETRY_BASE    = float(os.getenv("GROQ_RETRY_BASE_SEC", "2.0"))
+
 OLLAMA_BASE_URL     = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL        = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 _OLLAMA_MAX_RETRIES = int(os.getenv("OLLAMA_MAX_RETRIES", "3"))
@@ -47,6 +69,16 @@ _OLLAMA_RETRY_BASE  = float(os.getenv("OLLAMA_RETRY_BASE_SEC", "2.0"))
 _OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 # L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
 _RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "0.6"))
+
+# ChromaDB 퍼시스턴트 디렉터리.
+# __file__ 기준 경로를 사용해 os.getcwd() 변경에 독립적으로 동작한다.
+CHROMA_PERSIST_DIR = os.getenv(
+    "CHROMA_PERSIST_DIR",
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "chroma_db",
+    ),
+)
 
 # ── 정규식 프리컴파일 ──────────────────────────────────────────────────────────
 # 모듈 임포트 시 1회만 컴파일해 _clean_llm_output() 반복 호출 비용을 절감한다.
@@ -67,24 +99,41 @@ _PROSE_STARTERS = {
 }
 
 # ── ChromaDB Singleton ────────────────────────────────────────────────────────
-# 프로세스 내 클라이언트를 하나만 유지해서 파일 락 경합을 방지한다.
 # Double-Checked Locking: 1차 검사(락 없이)는 초기화 완료 후 빠른 경로.
+# 초기화 실패 시 _chroma_client = None 이 유지되어 다음 호출에서 재시도된다.
 _chroma_client = None
 _chroma_lock   = threading.Lock()
 
 
 def _get_chroma_client() -> chromadb.PersistentClient:
-    """프로세스 내 ChromaDB 싱글톤 클라이언트를 반환한다."""
+    """
+    프로세스 내 ChromaDB 싱글톤 클라이언트를 반환한다.
+
+    CHROMA_PERSIST_DIR 디렉터리가 없으면 자동 생성한다.
+    초기화 실패 시 예외를 로깅하고 그대로 전파한다.
+    (_chroma_client 는 None으로 유지되어 다음 호출에서 재시도 가능)
+    """
     global _chroma_client
     if _chroma_client is None:
         with _chroma_lock:
             if _chroma_client is None:
-                persist_dir = os.path.join(os.getcwd(), "data", "chroma_db")
-                _chroma_client = chromadb.PersistentClient(
-                    path=persist_dir,
-                    settings=Settings(anonymized_telemetry=False),
-                )
-                logging.info("[ChromaDB] Singleton 클라이언트 초기화 완료.")
+                os.makedirs(CHROMA_PERSIST_DIR, exist_ok=True)
+                try:
+                    _chroma_client = chromadb.PersistentClient(
+                        path=CHROMA_PERSIST_DIR,
+                        settings=Settings(anonymized_telemetry=False),
+                    )
+                    logging.info(
+                        f"[ChromaDB] Singleton 클라이언트 초기화 완료. "
+                        f"(경로: {CHROMA_PERSIST_DIR})"
+                    )
+                except Exception:
+                    # _chroma_client 를 None으로 유지 → 다음 호출에서 재시도
+                    logging.error(
+                        f"[ChromaDB] 초기화 실패 — 다음 호출에서 재시도됩니다:\n"
+                        f"{traceback.format_exc()}"
+                    )
+                    raise
     return _chroma_client
 
 
@@ -292,10 +341,86 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
     return f"ERROR: Ollama not reachable after {_OLLAMA_MAX_RETRIES} attempts - {last_error}"
 
 
+# ── Groq ──────────────────────────────────────────────────────────────────────
+def _is_groq_available() -> bool:
+    """GROQ_API_KEY 설정 여부로 판별한다 (별도 헬스체크 엔드포인트 없음)."""
+    return bool(GROQ_API_KEY)
+
+
+def _call_groq_chat(prompt: str, max_tokens: int, timeout: int) -> str:
+    """
+    Groq Chat Completions API(OpenAI 호환)를 호출해 원본 응답 텍스트를 반환한다.
+    실패 시 'ERROR:...' 문자열을 반환한다 (예외를 던지지 않음 — 호출측 폴백 체인 유지).
+    """
+    payload = json.dumps({
+        "model":            GROQ_MODEL,
+        "messages":         [{"role": "user", "content": prompt}],
+        "temperature":      0,
+        "max_tokens":       max_tokens,
+        # qwen3 계열의 <think> 체인 생성을 비활성화해 max_tokens 내 응답 유실을 방지한다.
+        # 미지원 모델(예: gpt-oss)로 GROQ_MODEL이 바뀌면 Groq가 무시하거나 400을 반환할 수 있음.
+        "reasoning_effort": "none",
+    }).encode()
+
+    last_error = ""
+    for attempt in range(1, _GROQ_MAX_RETRIES + 1):
+        try:
+            req = urllib.request.Request(
+                GROQ_API_URL,
+                data=payload,
+                headers={
+                    "Content-Type":  "application/json",
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    # 기본 urllib UA("Python-urllib/x.x")는 Cloudflare에 차단(1010)되므로 명시 지정.
+                    "User-Agent":    "self-healing-mlops-agent/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                result = json.loads(resp.read())
+                return result["choices"][0]["message"]["content"]
+
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="ignore")[:200]
+            last_error = f"HTTP {e.code}: {body}"
+            if e.code == 429 and attempt < _GROQ_MAX_RETRIES:
+                wait = _GROQ_RETRY_BASE ** attempt
+                logging.warning(f"[Groq] Rate limit(429), {wait:.0f}초 후 재시도: {last_error}")
+                time.sleep(wait)
+                continue
+            break
+        except urllib.error.URLError as e:
+            last_error = str(e)
+            if attempt < _GROQ_MAX_RETRIES:
+                wait = _GROQ_RETRY_BASE ** attempt
+                logging.warning(
+                    f"[Groq] 연결 실패 ({attempt}/{_GROQ_MAX_RETRIES}), {wait:.0f}초 후 재시도: {e}"
+                )
+                time.sleep(wait)
+        except Exception as e:
+            return f"ERROR: Groq call failed - {e}"
+
+    return f"ERROR: Groq not reachable - {last_error}"
+
+
+def _run_groq(error_log: str, system_context: str, timeout: int = 30) -> str:
+    """Groq API를 호출해 명령어를 추론한다. 실패 시 'ERROR:...' 반환."""
+    prompt = _build_prompt(error_log, system_context)
+    raw    = _call_groq_chat(prompt, max_tokens=24, timeout=timeout)
+    if raw.startswith("ERROR:"):
+        return raw
+
+    command = _clean_llm_output(raw)
+    if not command:
+        logging.warning(f"[Groq] 유효 명령어 추출 실패. 원본 응답: {raw!r:.120}")
+        return "ERROR: Groq returned unparseable response"
+    return command
+
+
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     """
-    자가 반성 루프 — LLM이 생성한 명령어의 안전성을 동일 LLM으로 재검증.
+    자가 반성 루프 — LLM이 생성한 명령어의 안전성을 재검증한다.
 
+    Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
     YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
@@ -309,6 +434,19 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
         f"System: {system_ctx}\n\n"
         "Is this command safe and appropriate? (YES/NO):"
     )
+
+    if _is_groq_available():
+        raw = _call_groq_chat(prompt, max_tokens=4, timeout=15)
+        if not raw.startswith("ERROR:"):
+            answer = raw.strip().upper()
+            safe   = answer.startswith("YES")
+            logging.info(
+                f"[자가 반성/Groq] 명령어='{command}' | 판정='{answer}' "
+                f"→ {'통과' if safe else '거부'}"
+            )
+            return safe
+        logging.warning(f"[자가 반성] Groq 검증 실패, Ollama로 폴백: {raw}")
+
     payload = json.dumps({
         "model":   OLLAMA_MODEL,
         "prompt":  prompt,
@@ -326,7 +464,7 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
             answer = json.loads(resp.read()).get("response", "").strip().upper()
             safe   = answer.startswith("YES")
             logging.info(
-                f"[자가 반성] 명령어='{command}' | 판정='{answer}' "
+                f"[자가 반성/Ollama] 명령어='{command}' | 판정='{answer}' "
                 f"→ {'통과' if safe else '거부'}"
             )
             return safe
@@ -342,7 +480,9 @@ mp_ctx = mp.get_context("spawn")
 def _ipex_inference_worker(conn, error_log: str, system_context: str) -> None:
     """
     spawn 자식 프로세스에서 ipex_llm 모델을 로드하고 추론한다.
-    os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다 (sys.exit은 finalizer를 거침).
+
+    os._exit(0)으로 즉시 종료해 VRAM을 즉시 반환한다.
+    sys.exit은 atexit finalizer를 거치므로 VRAM 해제가 지연될 수 있어 사용하지 않는다.
     """
     import warnings
     warnings.filterwarnings("ignore")
@@ -450,7 +590,6 @@ def _ensemble_vote(candidates: list[tuple[dict, float]]) -> dict:
     action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
     top_action   = action_votes.most_common(1)[0][0]
 
-    # 동일 action_type 후보 중 거리 최소 항목 선택 (인덱스 기반, is 비교 불필요)
     best_meta, best_dist = None, float("inf")
     for meta, dist in candidates:
         if meta.get("action_type") == top_action and dist < best_dist:
@@ -495,7 +634,7 @@ class RAGEngine:
             return {"documents": [[]] * n, "metadatas": [[]] * n, "distances": [[]] * n}
 
     def _l2_slow_track(self, error_log: str, best_distance: float) -> AgentResponse:
-        """L1 미스 시 Ollama → ipex_llm → Rule-based → Escalation 4단계 폴백 체인."""
+        """L1 미스 시 Groq → Ollama → ipex_llm → Rule-based → Escalation 5단계 폴백 체인."""
         logging.warning(
             f"[RAGEngine] 유사도 낮음 (거리: {best_distance:.4f}). Fallback 체인 시작..."
         )
@@ -503,7 +642,35 @@ class RAGEngine:
         system_context = gather_system_context(error_log)
         logging.info(f"📊 [진단 완료] 수집된 컨텍스트 길이: {len(system_context)}자")
 
-        # Step 1: Ollama
+        # Step 1: Groq (1순위 — GROQ_API_KEY 설정 시)
+        groq_result = None
+        if _is_groq_available():
+            logging.info(f"[RAGEngine] Groq({GROQ_MODEL}) 추론 시작...")
+            groq_result = _run_groq(error_log, system_context)
+            if not groq_result.startswith("ERROR:"):
+                logging.info(f"  👉 [Groq] 명령어: {groq_result}")
+                if not _reflect_on_command(groq_result, error_log, system_context):
+                    logging.warning(
+                        f"[자가 반성] Groq 명령어 거부 → 인간 에스컬레이션: {groq_result}"
+                    )
+                    return AgentResponse(
+                        error_category="Unknown", severity="HIGH",
+                        action_type=ActionType.ESCALATE_TO_HUMAN,
+                        reasoning=f"자가 반성 거부 — Groq 제안 명령어 위험 판정: {groq_result}",
+                        resolution_source="L2_LLM",
+                    )
+                return AgentResponse(
+                    error_category="LLM_Inferred", severity="CRITICAL",
+                    action_type=ActionType.EXECUTE_LLM_COMMAND,
+                    reasoning="Groq 추론 성공",
+                    resolution_source="L2_LLM",
+                    command=groq_result,
+                )
+            logging.warning(f"[RAGEngine] Groq 실패: {groq_result}")
+        else:
+            logging.info("[RAGEngine] GROQ_API_KEY 미설정. Ollama로 폴백...")
+
+        # Step 2: Ollama
         llm_result = None
         if _is_ollama_available():
             logging.info(f"[RAGEngine] Ollama({OLLAMA_MODEL}) 추론 시작...")
@@ -531,7 +698,7 @@ class RAGEngine:
         else:
             logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
 
-        # Step 2: ipex_llm
+        # Step 3: ipex_llm
         ipex_result = run_ipex_engine(error_log, system_context)
         if ipex_result not in ("TIMEOUT", "ERROR") and not ipex_result.startswith("ERROR:"):
             logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
@@ -554,7 +721,7 @@ class RAGEngine:
             )
         logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
 
-        # Step 3: Rule-based heuristic
+        # Step 4: Rule-based heuristic
         rule_cmd = _rule_based_fallback(error_log)
         if rule_cmd:
             logging.info(f"  👉 [Rule Match] 명령어: {rule_cmd}")
@@ -566,11 +733,14 @@ class RAGEngine:
                 command=rule_cmd,
             )
 
-        # Step 4: 완전 실패 → 인간 에스컬레이션
+        # Step 5: 완전 실패 → 인간 에스컬레이션
         return AgentResponse(
             error_category="Unknown", severity="HIGH",
             action_type=ActionType.ESCALATE_TO_HUMAN,
-            reasoning=f"모든 Fallback 실패 (Ollama: {llm_result}, ipex: {ipex_result})",
+            reasoning=(
+                f"모든 Fallback 실패 "
+                f"(Groq: {groq_result}, Ollama: {llm_result}, ipex: {ipex_result})"
+            ),
             resolution_source="L2_LLM",
         )
 

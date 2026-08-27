@@ -1,19 +1,20 @@
 import chromadb
 import hashlib
 import time
+from chromadb.config import Settings
 
 # 1. 아까 우리가 설계한 피드백 함수
 def save_to_l1_cache(error_log: str, successful_command: str, chroma_collection):
     try:
         error_hash = hashlib.md5(error_log.encode('utf-8')).hexdigest()
-        
+
         metadata = {
             "source": "L2_LLM_Learned",
             "learned_at": int(time.time()),
             "action_type": "EXECUTE_LLM_COMMAND",
             "command": successful_command # 실행할 커맨드 저장
         }
-        
+
         chroma_collection.upsert(
             documents=[error_log],
             metadatas=[metadata],
@@ -26,10 +27,10 @@ def save_to_l1_cache(error_log: str, successful_command: str, chroma_collection)
 # 2. 독립 테스트 로직
 def run_test():
     print("🚀 연속 학습(Continuous Learning) 파이프라인 검증 시작...\n")
-    
+
     # 실제 우리가 쓰는 로컬 DB 경로 연결 (기존 데이터 보존)
     client = chromadb.PersistentClient(path="./chroma_db", settings=Settings(anonymized_telemetry=False))
-     # 이 옵션 추가! 
+     # 이 옵션 추가!
     collection = client.get_or_create_collection(name="error_knowledge_base")
 
     # 가상의 상황: L2(LLM)가 1분 동안 고민해서 찾아낸 결과라고 가정하자.
@@ -42,16 +43,16 @@ def run_test():
 
     print("\n=== Phase B: 10분 뒤, 동일한 에러가 다시 발생했다고 가정 ===")
     start_time = time.time()
-    
+
     # L1 Fast Track 검색 흉내
     results = collection.query(
         query_texts=[fake_unknown_error],
         n_results=1
     )
-    
+
     latency = time.time() - start_time
     print(f"⏱️ L1 검색 소요 시간: {latency:.4f}초")
-    
+
     # 거리(Distance)가 0.0에 가까울수록 완벽한 일치
     if results['distances'][0] and results['distances'][0][0] < 0.5:
         print("\n✅ [검증 성공] 0.1초 컷 방어(Fast Track) 동작 확인!")

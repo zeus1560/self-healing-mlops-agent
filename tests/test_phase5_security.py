@@ -10,7 +10,6 @@
 
 import logging
 from src.executor import ActionExecutor
-from src.schemas import AgentResponse, ActionType
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 

@@ -10,15 +10,22 @@
   T6. 컨텍스트 윈도우가 RAGEngine에 전달됨을 확인
 """
 
+import hashlib
 import os
 import sqlite3
 import sys
 import tempfile
 import time
 from datetime import datetime, timezone, timedelta
-from collections import deque
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.circuit_breaker import CircuitBreaker
+from src.executor import ActionExecutor
+from src.llm_engine import RAGEngine
+from src.log_watcher import LogTailHandler
+from src.maintenance import MaintenanceRunner
+from src.observability import AgentObserver
 os.environ["AUTO_APPROVE"] = "true"
 
 PASS = "✅ PASS"
@@ -37,8 +44,6 @@ def record(name: str, ok: bool, detail: str = "") -> None:
 # ══════════════════════════════════════════════════════════════════════════
 print("\n[T1] 컨텍스트 윈도우 빌드")
 
-from src.log_watcher import LogTailHandler
-
 error_line = "ERROR: CUDA out of memory. Tried to allocate 2.00 GiB"
 before     = [f"INFO step {i}" for i in range(10)]
 after      = [f"DEBUG retry {i}" for i in range(10)]
@@ -53,7 +58,6 @@ record("총 줄 수 23줄",              len(lines) == 23, f"실제={len(lines)}
 record("before 없을 때 정상 동작",   LogTailHandler._build_context_window(error_line, [], after[:3]).startswith(error_line))
 
 # circuit_breaker 서명 호환 확인
-import hashlib
 def _sig(log):
     first = log.splitlines()[0] if log else log
     return hashlib.md5(" ".join(first[:100].lower().split()).encode()).hexdigest()
@@ -63,8 +67,6 @@ record("circuit_breaker 서명 호환",  _sig(ctx) == _sig(error_line))
 # T2. Circuit Breaker 상태 전이
 # ══════════════════════════════════════════════════════════════════════════
 print("\n[T2] Circuit Breaker 상태 전이")
-
-from src.circuit_breaker import CircuitBreaker
 
 db_tmp = tempfile.mktemp(suffix=".db")
 cb = CircuitBreaker(db_path=db_tmp)
@@ -126,8 +128,6 @@ os.unlink(db_tmp2)
 # ══════════════════════════════════════════════════════════════════════════
 print("\n[T4] Maintenance 실행")
 
-from src.maintenance import MaintenanceRunner
-
 db_m = tempfile.mktemp(suffix=".db")
 with sqlite3.connect(db_m) as conn:
     conn.execute("""CREATE TABLE metrics (
@@ -157,11 +157,6 @@ os.unlink(db_m)
 # T5. RAGEngine L1 패스 → executor → observer 전 구간
 # ══════════════════════════════════════════════════════════════════════════
 print("\n[T5] RAGEngine L1 → executor → observer 전 구간")
-
-from src.llm_engine import RAGEngine
-from src.executor import ActionExecutor
-from src.observability import AgentObserver
-from src.schemas import ActionType
 
 db_obs = tempfile.mktemp(suffix=".db")
 engine   = RAGEngine()
@@ -215,7 +210,7 @@ t0  = time.perf_counter()
 dec = engine.analyze_error(ctx_log)
 lat = time.perf_counter() - t0
 record("RAGEngine 컨텍스트 포함 입력 처리", dec is not None)
-record(f"응답시간 15초 이내",          lat < 15.0, f"{lat:.2f}s")
+record("응답시간 15초 이내",          lat < 15.0, f"{lat:.2f}s")
 
 # ══════════════════════════════════════════════════════════════════════════
 # 최종 요약

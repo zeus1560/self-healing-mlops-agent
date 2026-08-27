@@ -27,8 +27,7 @@ class LogMonitor:
             os.makedirs(log_dir, exist_ok=True)
 
         if not os.path.exists(self.log_file_path):
-            with open(self.log_file_path, "a", encoding="utf-8") as f:
-                pass  # 빈 파일 생성
+            open(self.log_file_path, "a", encoding="utf-8").close()  # 빈 파일 생성
 
         logging.info(f"[LogMonitor] 감시 시작: {self.log_file_path}")
 
