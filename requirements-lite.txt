@@ -1,0 +1,42 @@
+﻿# --- 1. Core LLM & Inference (의존성 지옥 탈출 황금 버전) ---
+
+# --- 2. Vector DB & 호환성 패치 (NumPy 2.0 대재앙 방지) ---
+chromadb==0.5.0
+rpds-py==0.18.0
+overrides==7.3.1
+pysqlite3-binary
+numpy==1.26.4
+
+# --- 3. Web & UI (대시보드 및 API 서빙용) ---
+fastapi==0.124.0
+uvicorn==0.38.0
+starlette==0.50.0
+streamlit
+altair
+watchdog
+
+# --- 4. Database & ORM (PostgreSQL 연결용) ---
+SQLAlchemy==2.0.44
+alembic==1.17.2
+psycopg2-binary
+
+# --- 5. Data Science & ML 생태계 ---
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.15.3
+catboost==1.2.8
+lightgbm==4.6.0
+xgboost==2.1.4
+matplotlib==3.10.7
+plotly==6.5.0
+
+# --- 6. Utilities & System ---
+python-dotenv==1.2.1
+pydantic==2.12.5
+pydantic_core==2.41.5
+requests
+psutil
+tqdm==4.67.1
+colorlog==6.10.1
+pytz==2025.2
+PyYAML==6.0.3
