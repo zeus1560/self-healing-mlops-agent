@@ -1,5 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks
-import threading, time, os, subprocess, signal
+import threading, time, os, subprocess
 from datetime import datetime
 
 app = FastAPI(title="Target App (Simulated)")
@@ -128,13 +128,17 @@ async def inject_process_crash(background_tasks: BackgroundTasks):
                 _append_evidence(
                     "CRITICAL",
                     f"target-app process (pid={pid}, rss={rss_mb:.1f}MB, uptime={uptime_s:.1f}s) "
-                    f"about to be SIGKILL'd — real process crash injection",
+                    f"about to crash — real process crash injection",
                 )
             except Exception:
-                _append_evidence("CRITICAL", f"target-app process (pid={pid}) about to be SIGKILL'd — real process crash injection")
+                _append_evidence("CRITICAL", f"target-app process (pid={pid}) about to crash — real process crash injection")
             time.sleep(0.3)
         finally:
-            os.kill(os.getpid(), signal.SIGKILL)
+            # PID 1 in a container's own PID namespace is immune to signals it sends
+            # itself (including SIGKILL) — os.kill() here would silently do nothing.
+            # os._exit() bypasses that: it's a real abrupt process termination, not a
+            # delivered signal, so it isn't subject to the PID-1 self-signal immunity.
+            os._exit(137)
 
     background_tasks.add_task(task)
     return {"injected": "process_crash", "note": "container will be killed and auto-restarted"}
