@@ -2,18 +2,31 @@
 run_l2_accuracy.py
 L2(LLM) 정확도 독립 평가 실험
 
-ChromaDB에 없는 신규 에러 50건을 Ollama에 직접 분류하게 하여
+ChromaDB에 없는 신규 에러 50건을 L2 모델에 직접 분류하게 하여
 L2 계층의 error_category 및 action_type 정확도를 측정한다.
+
+GROQ_API_KEY가 설정되어 있으면 Groq를 사용하고(현재 운영 중인 L2 1순위와 동일),
+없으면 Ollama로 폴백한다 — RAGEngine의 L2 우선순위와 동일한 규칙.
 """
 import csv
 import json
+import os
 import time
 import urllib.request
 import urllib.error
 from pathlib import Path
 
-OLLAMA_URL  = "http://localhost:11434/api/generate"
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OLLAMA_URL   = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:0.5b"
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
+
 RESULTS_DIR  = Path("experiments/results")
 
 CATEGORIES = [
@@ -122,6 +135,21 @@ Error log:
 JSON:"""
 
 
+def _parse_prediction(raw: str, latency_ms: float) -> tuple[str, str, float]:
+    """LLM 원문 응답에서 {"category": ..., "action": ...} JSON을 추출한다."""
+    try:
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            obj = json.loads(raw[start:end])
+            cat = obj.get("category", "").strip()
+            act = obj.get("action", "").strip()
+            return cat, act, latency_ms
+    except Exception:
+        pass
+    return "PARSE_ERROR", "PARSE_ERROR", latency_ms
+
+
 def call_ollama(log_text: str) -> tuple[str, str, float]:
     """Ollama 호출 후 (pred_category, pred_action, latency_ms) 반환."""
     prompt = CLASSIFY_PROMPT.format(log=log_text[:600])
@@ -142,32 +170,55 @@ def call_ollama(log_text: str) -> tuple[str, str, float]:
             result = json.loads(resp.read())
         latency_ms = (time.perf_counter() - t0) * 1000
         raw = result.get("response", "").strip()
-    except Exception as e:
+    except Exception:
         latency_ms = (time.perf_counter() - t0) * 1000
         return "ERROR", "ERROR", latency_ms
 
-    # JSON 파싱
+    return _parse_prediction(raw, latency_ms)
+
+
+def call_groq(log_text: str) -> tuple[str, str, float]:
+    """Groq 호출 후 (pred_category, pred_action, latency_ms) 반환. 운영 L2 1순위와 동일한 백엔드."""
+    prompt = CLASSIFY_PROMPT.format(log=log_text[:600])
+    payload = json.dumps({
+        "model":       GROQ_MODEL,
+        "messages":    [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens":  64,
+    }).encode()
+
+    t0 = time.perf_counter()
     try:
-        # 응답에서 JSON 부분만 추출
-        start = raw.find("{")
-        end   = raw.rfind("}") + 1
-        if start >= 0 and end > start:
-            obj = json.loads(raw[start:end])
-            cat = obj.get("category", "").strip()
-            act = obj.get("action", "").strip()
-            return cat, act, latency_ms
+        req = urllib.request.Request(
+            GROQ_API_URL, data=payload,
+            headers={
+                "Content-Type":  "application/json",
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+        latency_ms = (time.perf_counter() - t0) * 1000
+        raw = result["choices"][0]["message"]["content"].strip()
     except Exception:
-        pass
-    return "PARSE_ERROR", "PARSE_ERROR", latency_ms
+        latency_ms = (time.perf_counter() - t0) * 1000
+        return "ERROR", "ERROR", latency_ms
+
+    return _parse_prediction(raw, latency_ms)
 
 
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    if GROQ_API_KEY:
+        backend, model, call_fn = "groq", GROQ_MODEL, call_groq
+    else:
+        backend, model, call_fn = "ollama", OLLAMA_MODEL, call_ollama
+
     print("=" * 65)
     print("  L2(LLM) 정확도 독립 평가 — 신규 에러 50건")
     print("=" * 65)
-    print(f"  모델: {OLLAMA_MODEL} | 에러 수: {len(NOVEL_ERRORS)}건\n")
+    print(f"  백엔드: {backend} ({model}) | 에러 수: {len(NOVEL_ERRORS)}건\n")
 
     records = []
     cat_correct = 0
@@ -181,7 +232,7 @@ def main():
         true_cat = item["category"]
         true_act = ACTION_MAP[true_cat]
 
-        pred_cat, pred_act, lat = call_ollama(item["log"])
+        pred_cat, pred_act, lat = call_fn(item["log"])
         latencies.append(lat)
 
         cat_ok = (pred_cat == true_cat)
@@ -234,8 +285,8 @@ def main():
     print(f"  L1 대비 속도       : L1 ~189ms → L2 {avg_lat:.0f}ms ({avg_lat/189:.1f}x 느림)")
     print("=" * 65)
 
-    # CSV 저장
-    out_path = RESULTS_DIR / "l2_accuracy_results.csv"
+    # CSV 저장 (백엔드별 파일 분리 — 기존 Ollama 베이스라인을 덮어쓰지 않음)
+    out_path = RESULTS_DIR / f"l2_accuracy_results_{backend}.csv"
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=records[0].keys())
         writer.writeheader()
@@ -243,6 +294,8 @@ def main():
 
     # 요약 JSON 저장
     summary = {
+        "backend":         backend,
+        "model":           model,
         "n_samples":       n,
         "cat_accuracy":    round(cat_acc, 4),
         "act_accuracy":    round(act_acc, 4),
@@ -254,11 +307,10 @@ def main():
             for cat, v in cat_stats.items()
         },
     }
-    (RESULTS_DIR / "l2_accuracy_summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False)
-    )
+    summary_path = RESULTS_DIR / f"l2_accuracy_summary_{backend}.json"
+    summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"\n  CSV  저장: {out_path}")
-    print(f"  JSON 저장: {RESULTS_DIR}/l2_accuracy_summary.json")
+    print(f"  JSON 저장: {summary_path}")
     return summary
 
 
