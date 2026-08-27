@@ -46,15 +46,20 @@ async def inject_oom():
         return {"injected": "oom", "skipped": "another injection in progress"}
     try:
         try:
+            # --oomable: by default stress-ng avoids actually triggering the OOM
+            # killer (self-protective backoff); without this flag it silently
+            # under-allocates and exits 0 instead of getting cgroup-killed.
             result = subprocess.run(
-                ["stress-ng", "--vm", "1", "--vm-bytes", "700M", "--vm-keep", "--timeout", "20s"],
+                ["stress-ng", "--vm", "1", "--vm-bytes", "900M", "--vm-keep", "--oomable", "--timeout", "20s"],
                 capture_output=True, text=True, timeout=25,
             )
+            oom_killed = result.returncode != 0
             stderr_tail = (result.stderr or "").strip().splitlines()[-1:] or [""]
             _append_evidence(
                 "CRITICAL",
-                f"stress-ng --vm-bytes=700M against cgroup mem_limit=512m — returncode={result.returncode}, "
-                f"real memory-pressure OOM event ({stderr_tail[0]})",
+                f"stress-ng --vm-bytes=900M --oomable against cgroup mem_limit=512m — returncode={result.returncode}, "
+                f"{'killed by real cgroup OOM' if oom_killed else 'completed without triggering OOM — investigate'} "
+                f"({stderr_tail[0]})",
             )
         except subprocess.TimeoutExpired:
             _append_evidence("CRITICAL", "stress-ng OOM test timed out (700M vs 512m limit) — process likely killed by cgroup OOM killer")
