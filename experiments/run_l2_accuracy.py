@@ -235,12 +235,20 @@ def main():
     act_correct = 0
     latencies   = []
 
+    # Groq 무료 티어 레이트리밋(30 RPM)에 안 걸리도록 순차 호출 간격을 둔다.
+    GROQ_CALL_INTERVAL_SEC = 2.2
+    if backend == "groq":
+        print(f"  (레이트리밋 회피를 위해 요청 간 {GROQ_CALL_INTERVAL_SEC}초 간격 — 총 약 {GROQ_CALL_INTERVAL_SEC * len(NOVEL_ERRORS):.0f}초 소요 예상)\n")
+
     print(f"{'#':>3} {'Category':>20} {'Pred':>20} {'Act✓':>5} {'ms':>7}")
     print("-" * 65)
 
     for i, item in enumerate(NOVEL_ERRORS):
         true_cat = item["category"]
         true_act = ACTION_MAP[true_cat]
+
+        if backend == "groq" and i > 0:
+            time.sleep(GROQ_CALL_INTERVAL_SEC)
 
         pred_cat, pred_act, lat = call_fn(item["log"])
         latencies.append(lat)
