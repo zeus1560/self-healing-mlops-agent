@@ -1,5 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks
-import threading, time, os, subprocess
+import threading, time, os, subprocess, sys
 from datetime import datetime
 
 app = FastAPI(title="Target App (Simulated)")
@@ -28,6 +28,22 @@ def _writer():
 threading.Thread(target=_writer, daemon=True).start()
 
 
+# stress-ng has self-protective OOM-avoidance heuristics that turned out to be
+# unreliable to fully disable — it kept exiting 0 without ever hitting the
+# cgroup limit. A plain Python allocator has no such protection: growing a
+# bytearray forces real page commits, so the kernel OOM killer has no choice
+# but to intervene once the 512m cgroup cap is hit. Run as its own subprocess
+# so a kill can't take down the FastAPI app itself.
+_OOM_BOMB_SRC = (
+    "blocks = []\n"
+    "for _ in range(2000):\n"
+    "    b = bytearray(10 * 1024 * 1024)\n"
+    "    for i in range(0, len(b), 4096):\n"
+    "        b[i] = 1\n"
+    "    blocks.append(b)\n"
+)
+
+
 def _append_evidence(level: str, message: str) -> None:
     """에이전트(log_watcher)가 실제로 tail하는 realtime_system.log에 실측 증거를 기록."""
     with open(EVIDENCE_LOG, "a", encoding="utf-8") as f:
@@ -46,23 +62,18 @@ async def inject_oom():
         return {"injected": "oom", "skipped": "another injection in progress"}
     try:
         try:
-            # --oomable: by default stress-ng avoids actually triggering the OOM
-            # killer (self-protective backoff); without this flag it silently
-            # under-allocates and exits 0 instead of getting cgroup-killed.
             result = subprocess.run(
-                ["stress-ng", "--vm", "1", "--vm-bytes", "900M", "--vm-keep", "--oomable", "--timeout", "20s"],
+                [sys.executable, "-c", _OOM_BOMB_SRC],
                 capture_output=True, text=True, timeout=25,
             )
             oom_killed = result.returncode != 0
-            stderr_tail = (result.stderr or "").strip().splitlines()[-1:] or [""]
             _append_evidence(
                 "CRITICAL",
-                f"stress-ng --vm-bytes=900M --oomable against cgroup mem_limit=512m — returncode={result.returncode}, "
-                f"{'killed by real cgroup OOM' if oom_killed else 'completed without triggering OOM — investigate'} "
-                f"({stderr_tail[0]})",
+                f"python memory allocator vs cgroup mem_limit=512m — returncode={result.returncode}, "
+                f"{'killed by real cgroup OOM' if oom_killed else 'completed without triggering OOM — investigate'}",
             )
         except subprocess.TimeoutExpired:
-            _append_evidence("CRITICAL", "stress-ng OOM test timed out (700M vs 512m limit) — process likely killed by cgroup OOM killer")
+            _append_evidence("CRITICAL", "python memory allocator OOM test timed out — process likely hung under memory pressure")
         return {"injected": "oom"}
     finally:
         _injection_lock.release()
