@@ -181,10 +181,12 @@ def call_groq(log_text: str) -> tuple[str, str, float]:
     """Groq 호출 후 (pred_category, pred_action, latency_ms) 반환. 운영 L2 1순위와 동일한 백엔드."""
     prompt = CLASSIFY_PROMPT.format(log=log_text[:600])
     payload = json.dumps({
-        "model":       GROQ_MODEL,
-        "messages":    [{"role": "user", "content": prompt}],
-        "temperature": 0.0,
-        "max_tokens":  64,
+        "model":            GROQ_MODEL,
+        "messages":         [{"role": "user", "content": prompt}],
+        "temperature":      0.0,
+        "max_tokens":       64,
+        # qwen3 계열의 <think> 체인 생성을 비활성화해 max_tokens 내 응답 유실을 방지 (llm_engine.py와 동일)
+        "reasoning_effort": "none",
     }).encode()
 
     t0 = time.perf_counter()
@@ -194,14 +196,22 @@ def call_groq(log_text: str) -> tuple[str, str, float]:
             headers={
                 "Content-Type":  "application/json",
                 "Authorization": f"Bearer {GROQ_API_KEY}",
+                # 기본 urllib UA는 Cloudflare에 차단(1010)되므로 명시 지정 (llm_engine.py와 동일)
+                "User-Agent":    "self-healing-mlops-agent/1.0",
             },
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read())
         latency_ms = (time.perf_counter() - t0) * 1000
         raw = result["choices"][0]["message"]["content"].strip()
-    except Exception:
+    except urllib.error.HTTPError as e:
         latency_ms = (time.perf_counter() - t0) * 1000
+        body = e.read().decode(errors="ignore")[:200]
+        print(f"    [Groq HTTP {e.code}] {body}")
+        return "ERROR", "ERROR", latency_ms
+    except Exception as e:
+        latency_ms = (time.perf_counter() - t0) * 1000
+        print(f"    [Groq 예외] {e!r}")
         return "ERROR", "ERROR", latency_ms
 
     return _parse_prediction(raw, latency_ms)
