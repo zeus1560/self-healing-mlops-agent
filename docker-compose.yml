@@ -60,7 +60,7 @@ services:
   target-app:
     build: .
     container_name: mlops_target_app
-    command: uvicorn deploy.target_app.main:app --host 0.0.0.0 --port 9000
+    command: uvicorn deploy.target_app:app --host 0.0.0.0 --port 9000
     env_file: .env
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -69,11 +69,18 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - ./deploy/target-app:/app
       - ./data:/app/data
+    tmpfs:
+      - /fill:size=150m
+    # 카오스 엔지니어링 장애 주입(stress-ng/dd/self-kill) 격리용 하드 캡 —
+    # 호스트(2vCPU/4GB, 네이티브 에이전트와 공유)로 압력이 새지 않도록 제한
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.0
+    pids_limit: 100
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
       interval: 20s
       timeout: 5s
       retries: 3
