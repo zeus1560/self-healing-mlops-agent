@@ -1,0 +1,5 @@
+experiment,metric,value
+open_transition,accuracy(%),100.0
+block_rate,avg_rate(%),100.0
+recovery,accuracy(%),100.0
+atomic_halfopen,accuracy(%),100.0

@@ -115,15 +115,15 @@ def main():
     collection   = get_collection()
 
     print(f"테스트 샘플: {len(test_samples)}개 | threshold {len(THRESHOLDS)}개 sweep")
-    print(f"{'Threshold':>10} {'F1(cat)':>8} {'F1(action)':>11} {'Precision':>10} {'L1Rate':>8} {'Latency(ms)':>12}")
-    print("-" * 70)
+    print(f"{'Threshold':>10} {'F1(cat)':>8} {'F1(action)':>11} {'Precision':>10} {'Recall':>8} {'L1Rate':>8} {'Latency(ms)':>12}")
+    print("-" * 78)
 
     rows = []
     for thresh in THRESHOLDS:
         r = evaluate(collection, test_samples, thresh)
         rows.append(r)
         print(f"{r['threshold']:>10.2f} {r['f1']:>8.3f} {r['action_f1']:>11.3f} "
-              f"{r['precision']:>10.3f} {r['l1_hit_rate']:>8.3f} "
+              f"{r['precision']:>10.3f} {r['recall']:>8.3f} {r['l1_hit_rate']:>8.3f} "
               f"{r['avg_latency_ms']:>12.1f}")
 
     if not rows:
@@ -194,7 +194,8 @@ def main():
           f"(action_f1={best_by_action['action_f1']:.3f}, cat_f1={best_by_action['f1']:.3f})")
     print(f"최적 threshold (category_f1 기준): {best_by_cat['threshold']} "
           f"(cat_f1={best_by_cat['f1']:.3f})")
-
+    print("\n주의: 본 스크립트는 전체 테스트셋에서 τ를 평가합니다. 편향을 줄이려면 별도의 validation set에서 threshold를 튜닝하세요.")
+    
     # llm_engine.py의 distance 임계값 자동 업데이트
     _apply_best_threshold(best_by_action["threshold"])
 

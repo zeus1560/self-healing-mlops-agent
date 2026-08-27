@@ -1,0 +1,1604 @@
+{
+  "data": [
+    {
+      "log_text": "ERROR vault[5601]: permission denied — policy 'read-secrets' not attached to role ml-worker",
+      "error_category": "Auth_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "sidekiq: Timeout::Error: Timeout occurred after 30s waiting for Redis response",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "WARN influxdb[3309]: max-concurrent-write-limit 10 exceeded — writes queued",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "R Error: cannot allocate vector of size 8.0 Gb",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL api-server[8800]: std::bad_alloc — failed to allocate 536870912 bytes for request buffer",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "## Backport\n\nThis PR is auto-generated from #28873 to be assessed for backporting due to the inclusion of the label backport/1.18.x.\n\n\n\nThe below text is copied from the body of the original PR.\n\n---\n\n### Description\r\nThis PR fixes the MFA workflow for OIDC, Okta and SAML (enterprise only). Now users can enable MFA and log in to the Vault GUI with OIDC, Okta or SAML. \r\n\r\n❌ Failures for MFA+SSO don't return very intuitive error messages and differ depending on the auth mount type. Screenshots are below for posterity and to help triage bug reports.\r\n\r\n## Test scenarios\r\n\r\n\r\n  | OIDC SSO authenticator   | MFA method | `root` | child namespace | cloud `admin/` namespace |\r\n  | ------------------------ | ---------- | ------ | --------------- | ------------------------ |\r\n  | `azure`*                 | TOTP       | ✅     | ✅              | ✅                       |\r\n  | `auth0`*                  | TOTP       | ✅     | ✅              | ✅                       |\r\n  | `okta`",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "mlflow: Error: [Errno 98] Address already in use — port 5000 for tracking server",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "On the CLI, upon successfully running `vault auth`, the token is stored at ~/.vault-token. I assume this is to allow multiple terminal sessions to access vault after one login. It would make more sense to dump the token to the VAULT_TOKEN environment variable noted in the docs, but I can see some not liking this idea.\r\n\r\nInstead, this request is for a `vault logout` function to be added to the cli. Very simply, this would effectively run `rm ~/.vault-token`.\r\n\r\nI have mentioned these two related items here in order for others to understand the context. Either solution would function, and I would like to start a conversation regarding the two.",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "elasticsearch: DiskThresholdMonitor: flood stage disk watermark [95%] exceeded, index readonly",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "I have tested using `docker build` both within target(`docker build .`) and parallel to my fig location(`docker build web/`). When I use the direct `docker` command, my context builds normally about <8 MBs. When I invoke `fig build` the `web` container building process seems to not use the `.dockerignore` located in my web folder. Leading to `Service 'web' failed to build: write /mnt/sda1/var/lib/docker/aufs/mnt/.../app/log/development.log: no space left on device`",
+      "error_category": "Disk_Full",
+      "severity": "CRITICAL",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "reasoning": "Docker 리포지토리에서 수집된 디스크 용량 부족 에러. 불필요한 이미지/컨테이너 정리 필요."
+    },
+    {
+      "log_text": "ERROR mlflow[6600]: OSError: [Errno 98] Address already in use — mlflow UI port 5000",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "**This is a bug tracker**\nWhy am I getting Server-Side Request Forgery (SSRF)  \"conn = psycopg2.connect(host=host, user=user, dbname=dbname, password=password, sslmode=sslmode, connect_timeout=5)\"\n\nI have ensured that host regex and trusted ip, still i am getting the isssue.\n\n**Please complete the following information:**\n- Psycopg version: 2.9.9\n- Python version: >3.9\n- pip version >24\n\n**Describe the bug**\nPlease let us know:\nScript-\n\n```python\nfrom flask import request, jsonify\nimport logging\nimport psycopg2\nfrom datetime import datetime\nimport os\nfrom urllib.parse import urlparse\nimport re\nfrom config import Config\nimport socket\nfrom ipaddress import ip_address, ip_network\n\nhost = os.environ.get(\"HOST\")\nuser = os.environ.get(\"USER\")\ndbname = os.environ.get(\"DBNAME\")\npassword = os.environ.get(\"PASSWORD\")\nsslmode = \"require\"\n\ntrusted_hosts = Config.HOST\n\n# Block IP ranges (private networks)\nprivate_networks = [\n    ip_network('172.16.0.0/12'),\n    ip_network('192.168.0.0/16'),\n    ip",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Implementation notes:\r\n\r\n1. For sds(len/setlen/etc) methods, we technically do not need to mask the for the extra bits whenever we\r\nwe want to shift the given value because the caller of all of these functions should have guaranteed that\r\nthe given `size_t` does not exceed what the current SDS_TYPE_* can handle.\r\n\r\n2. I think this is all that needs to be done. There might be edge cases where code is accessing the values directly?\r\n\r\nEdit: Getting connection refused error for tests. Is that me? :V\r\n\r\nSigned-off-by: Hanif Bin Ariffin <hanif.ariffin.4326@gmail.com>",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Stack from [ghstack](https://github.com/ezyang/ghstack) (oldest at bottom):\n* __->__ #173735\n\nThis test is failing with CUDA out of memory. I guess we need the decorator on the calling method too?\n\nFixes: https://github.com/pytorch/pytorch/issues/145359\n\ncc @voznesenskym @penguinwu @EikanWang @jgong5 @Guobing-Chen @XiaobingSuper @zhuhaozhe @blzheng @wenzhe-nrv @jiayisunx @ipiszy @kadeng @muchulee8 @amjames @chauhang @aakhundov @coconutruben @jataylo",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "ERROR git[9900]: remote: HTTP Basic: Access denied — deploy key revoked for repo ml-models",
+      "error_category": "Auth_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "ERROR mongo[4450]: wiredTiger cache: 7.8GB / 8.0GB — cache pressure, possible leak in aggregation cursor",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "haproxy: [ALERT] cannot bind socket [0.0.0.0:80] — address already in use",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "This pull request corrects the following bug (fixes #3888):\r\n- Using `RedisModule_Call` write commands on a `HASH` data type passing a `'l' (long long)` formatter on `field` or `value` results in a segmentation fault.\r\n\r\nI wrote a [simple redis module](https://github.com/aviggiano/pr-redis) to better explain the problem. \r\nThe fix consists of calling `getDecodedObject` before the `hashTypeSet` call in the `hsetCommand` function. The `getDecodedObject` properly decodes a `(void*)(long long)` to a `sds` when the object is of type `OBJ_ENCODING_INT`, which is the case of this issue.\r\n\r\nNote: I'm not sure if this bug exists in other commands, since some of them use `getDecodedObject` internally (such as those from the `LIST` data type) and others do not (e.g. `HASH` write commands). It would be probably better to change all data types write calls to pass a `robj` instead of a `sds` as a function argument, but I wasn't not sure about how @antirez would feel about this structural change.",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "elasticsearch: ElasticsearchException: illegal value for [cluster.initial_master_nodes] — empty list",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "prometheus: error loading config file: yaml: unmarshal errors — invalid scrape_interval",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "**Describe the bug**\r\nAfter upgrading from Vault 1.12.8 to 1.13+ (tested with 1.13.1, 1.13.4 and 1.14.0), approle login fails on _some_ of our app roles.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Run `curl --request POST --data '{\"role_id\":\"<redacted>\",\"secret_id\":\"<redacted>\"}' https://<redacted>/v1/auth/approle/login`\r\n2. Returns `{\"errors\":[\"permission denied\"]}`\r\n\r\nWe're struggling to find any more detail on this. Runing Vault with `log_level: \"trace\"` provides nothing.\r\n\r\nWhat we've tested so far is:\r\n1. Try to log in with role_id/secret_id created prior to upgrade -> fails on some app roles\r\n2. Try to log in with same role_id and secret_id created after upgrade -> fails on same app roles\r\n3. Created a new role_id/secret_id with the same configuration as one that fails -> can login successfully\r\n\r\nOne curious thing is that we also get `permission denied` when running `list auth/approle/role/:rolename/secret-id` on some app roles (all of the ones that fail to log in",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "**TDLR** for_each test fails when ran with: \n`TEST_CONFIG=default python3 test/run_test.py --verbose --keep-going -i test_foreach`\n\nAdding  @serialTest() decorator to the test function `test_foreach_copy_with_multi_dtypes_large_input` fixes this issue.\n\n```\n_____ TestForeachCUDA.test_foreach_copy_with_multi_dtypes_large_input_cuda _____\nTraceback (most recent call last):\n  File \"/pytorch/torch/testing/_comparison.py\", line 1289, in not_close_error_metas\n    pair.compare()\n  File \"/pytorch/torch/testing/_comparison.py\", line 740, in compare\n    self._compare_values(actual, expected)\n  File \"/pytorch/torch/testing/_comparison.py\", line 898, in _compare_values\n    compare_fn(\n  File \"/pytorch/torch/testing/_comparison.py\", line 1077, in _compare_regular_values_close\n    matches = torch.isclose(\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 8.00 GiB. GPU 0 has a total capacity of 139.80 GiB of which 94.40 GiB is free. Process 32188 has 518.00 MiB memory in use. Process 3218",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "### Summary\n\nThe mere act of importing an Ansible module may cause writing to `~/.ansible'. Worse, errors doing that are not caught and propagate out.\r\n\r\nIMHO it's a violation of Python's module contract for an import attempt to raise anything but `ImportError`. I also do not expect an import to write to my file system, much less die when it can't do that.\n\n### Issue Type\n\nBug Report\n\n### Component Name\n\nvars\n\n### Ansible Version\n\n```console\n2.17.5, devel 2a53b851fe\n```\n\n\n### Configuration\n\n```console\nnot relevant\n```\n\n\n### OS / Environment\n\nAny Linux with a user that has a nonexistent or unwriteable home directory\n\n### Steps to Reproduce\n\n```\r\n$ chmod 400 ~/.ansible\r\n$ ansible --version\r\n```\r\nAlternately\r\n```\r\n$ python3\r\n>>> from ansible.vars.hostvars import HostVars\r\n```\r\n\n\n### Expected Results\n\nThe command works.\n\n### Actual Results\n\n```console\nERROR: Unable to create local directories(/home/smurf/.ansible/tmp): [Errno 13] Permission denied: b'/home/smurf/.ansible/tmp'\r\n```\r\nExact s",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "CRITICAL druid[5603]: unable to acquire connection: pool exhausted, maxSize=50 active=50",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='api.example.com', port=443): Max retries exceeded with url: / (Caused by ConnectTimeoutError)",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "mongod: received signal 11 (Segmentation fault), backtrace: [...]",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "clickhouse: DB::Exception: Max count of simultaneous queries exceeded — Too many connections",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "*** stack smashing detected ***: terminated",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Summary\r\n\r\nRelates to #64954\r\n\r\nThis appears to still be an issue with rootless podman containers.  The ansible fact to set virtualization_type == podman is checking the contents of /proc/1/environ which is not readable in rootless containers when nested.\r\n\r\nTo reproduce run podman in docker as user:\r\n\r\n`$ docker run --rm --hostname docker --security-opt seccomp=unconfined --user podman -it quay.io/podman/stable bash`\r\n\r\nSecurity Option for seccomp is required to use \"clone\" per https://github.com/containers/podman/issues/10802\r\n \r\nNext run podman as user podman (included in podman's test container):\r\n\r\n`[podman@docker /]$ podman run --rm --uts=private --hostname podman -it quay.io/podman/stable bash`\r\n\r\n(re-pulls quay.io/podman/stable - used the uts=private param to set the hostname but not required for test, just easier to know what container I'm in)\r\n\r\n```\r\n[root@podman /]# yum install ansible\r\n<snip output>\r\n\r\n\r\n[root@podman /]# ansible localhost -m setup|grep 'ansible_virtuali",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "nginx: [crit] 3421#3421: *1 open() '/etc/ssl/private/nginx.key' failed (13: Permission denied)",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "nginx: [emerg] unknown directive 'proxy_cache_invalid' in /etc/nginx/conf.d/app.conf:15",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "zfs: pool data: Disk is full — transaction failed: ENOSPC",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL systemd[1]: /dev/sda1 at 100% — write I/O blocked, journald dropping messages",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "This PR is based on #122763, and we use `IsEventedPLEGInUse()` instead of `utilfeature.DefaultFeatureGate.Enabled(features.EventedPLEG)`.\r\n\r\n- This PR also includes #127954 which can fix init container problem.\r\n\r\nFixes #123087\r\n\r\nContext can be found in #122763.\r\n\r\n```release-note\r\nkubelet: fix a static pod startup bug with Evented PLEG\r\n```",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "Platforms: linux\n\n  This test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_cublas_addmm_reduced_precision_fp16_accumulate_size_10000_backend_cublas_cuda_bfloat16&suite=TestMatmulCudaCUDA&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/43015499460).\n\n  Over the past 3 hours, it has been determined flaky in 8 workflow(s) with 16 failures and 8 successes.\n\n  **Debugging instructions (after clicking on the recent samples link):**\n  DO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\n  To find relevant log snippets:\n  1. Click on the workflow logs linked above\n  2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n  3. Grep for `test_cublas_addmm_reduced_precision_fp16_accumulate_size_10000_backend_cublas_cuda_bfloat16`\n  4. There sho",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- pkg == \"crypto/internal/fips140/aes\" && test == \"\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8718189968962993441)):\n\n    # crypto/internal/fips140/aes\n    runtime: VirtualAlloc of 8192 bytes failed with errno=1455\n    fatal error: out of memory\n    \n    runtime stack:\n    runtime.throw({0x7ff758b2d06e?, 0x400005c000?})\n    \truntime/panic.go:1089 +0x34 fp=0x7fd89ffd60 sp=0x7fd89ffd30 pc=0x7ff758947fc4\n    runtime.sysUsedOS(0x400005c000, 0x2000)\n    \truntime/mem_windows.go:83 +0x168 fp=0x7fd89ffdc0 sp=0x7fd89ffd60 pc=0x7ff7588f7388\n    runtime.sysUsed(...)\n    ...\n    runtime.(*scavengerState).park(0x7ff758d303c0)\n    \truntime/mgcscavenge.go:425 +0x5c fp=0x4000055f90 sp=0x4000055f60 pc=0x7ff75890393c\n    runtime.bgscavenge(0x400004e000)\n    \truntime/mgcscavenge.go:653 +0x44 fp=0x4000055fb0 sp=0x4000055f90 pc=0x7ff758903e44\n    runtime.gcenable.gowrap2()\n    \truntime/mgc.go:204 +0x28 fp=0x4000055fd0 s",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "mongodb: Error: No primary found in replicaset — connection pool exhausted attempting failover",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "flink: taskmanager heap growing — checkpoint state backend memory not released",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "- OS: Container running Python3.7 Slim image\r\n- Psycopg version: 2.9.4\r\n- Python version: 3.7\r\n- PostgreSQL version: 14\r\n\r\n**Describe the bug**\r\nI am running a Python based service that interacts with PostgreSQL database using the pyscopg2 library. Everything works fine until I run a large insert query when I see the following error message in the database logs - `Unexpected EOF on client connection with an open transaction`.\r\n\r\nPosts across the internet suggest that this is an issue with client walking away while the connection was still open. But interestingly, I don't see any error or exceptions in my Python code. \r\n\r\nThis is how I am executing the large (around 40MB in size) insert query inside my python service ~\r\n\r\n```\r\ntry:\r\n    with conn.cursor() as c:\r\n        c.execute(query)\r\nexcept Exception:\r\n    logger.warning(\"Query failed %s\" % query)\r\n    raise\r\n```\r\n\r\nEven though the query failed to execute, I don't get any exception thrown. \r\n\r\nMaybe it is some issue with the network",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "mongodb: MongoSocketReadTimeoutException: Timeout while receiving message after 30000ms",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR gpu-service[8821]: CUDA context memory not released after inference — cumulative leak 18GB",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "CRITICAL istio-proxy[3300]: upstream_request_timeout: stream reset by peer, host 10.0.2.50:5000",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "pip: ERROR: Could not install packages due to an OSError: [Errno 13] Permission denied: '/usr/local/lib/python3.10/dist-packages'",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR celery[5501]: flower: error — port 5555 already in use (previous instance not cleaned up)",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "logstash: Pipeline aborted due to error — configuration error in filter grok pattern",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "node-postgres: Error: Client checkout timeout — pool is full after 30s",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR mlflow[6600]: artifact upload failed: OSError: [Errno 28] No space left on device: /mlruns",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "aiohttp.ServerTimeoutError: Timeout on reading data from socket — upstream timeout",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "The following usage will output an empty newline:\r\n```\r\n> redis-cli help set\r\nempty line\r\n```\r\n\r\nThe reason is that in interactive mode, we have called\r\n`cliInitHelp`, which initializes help.\r\n\r\nWhen using `redis-cli help xxx` or `redis-cli help ? xxx`,\r\nwe can't match the command due to empty `helpEntries`,\r\nso we output an empty newline.\r\n\r\nIn this commit, we will call `cliInitHelp` to init the help.\r\nNote that in this case, we need to call `cliInitHelp` (COMMAND DOCS)\r\nevery time, which i think is acceptable.\r\n\r\nSo now the output will look like:\r\n```\r\n[redis]# src/redis-cli help get\r\n\r\n  GET key\r\n  summary: Get the value of a key\r\n  since: 1.0.0\r\n  group: string\r\n\r\n[redis]#\r\n```\r\n\r\nFixes #10378\r\n\r\nThis PR also fix a redis-cli crash when using `--ldb --eval`:\r\n```\r\n[root]# src/redis-cli --ldb --eval test.lua test 1\r\nLua debugging session started, please use:\r\nquit    -- End the session.\r\nrestart -- Restart the script in debug mode again.\r\nhelp    -- Show Lua script debugging commands",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "### gopls version\n\nBuild info\n----------\n```shell\ngolang.org/x/tools/gopls v0.18.1\n    golang.org/x/tools/gopls@v0.18.1 h1:2xJBNzdImS5u/kV/ZzqDLSvlBSeZX+pWY9uKVP7Pask=\n    github.com/BurntSushi/toml@v1.4.1-0.20240526193622-a339e1f7089c h1:pxW6RcqyfI9/kWtOwnv/G+AzdKuy2ZrqINhenH4HyNs=\n    github.com/google/go-cmp@v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\n    golang.org/x/exp/typeparams@v0.0.0-20241210194714-1829a127f884 h1:1xaZTydL5Gsg78QharTwKfA9FY9CZ1VQj6D/AZEvHR0=\n    golang.org/x/mod@v0.23.0 h1:Zb7khfcRGKk+kqfxFaP5tZqCnDZMjC5VtUBs87Hr6QM=\n    golang.org/x/sync@v0.11.0 h1:GGz8+XQP4FvTTrjZPzNKTMFtSXH80RAzG+5ghFPgK9w=\n    golang.org/x/telemetry@v0.0.0-20241220003058-cc96b6e0d3d9 h1:L2k9GUV2TpQKVRGMjN94qfUMgUwOFimSQ6gipyJIjKw=\n    golang.org/x/text@v0.22.0 h1:bofq7m3/HAFvbF51jz3Q9wLg3jkvSPuiZu/pD1XwgtM=\n    golang.org/x/tools@v0.30.1-0.20250221230316-5055f70f240c h1:Ja/5gV5a9Vvho3p2NC/T2TtxhHjrWS/2DvCKMvA0a+Y=\n    golang.org/x/vuln@v1.1.3 h1:NPGnvPOTgnjBc9HTaUx+nj+EaUYxl5SJO",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### What happened?\n\nWhen Pods are evicted due to a soft eviction threshold (e.g., disk pressure), most pods have an `Evicted` event(`kubectl get events`), but some do not.\n\n```\nroot:~# kgetpods infras-logstash-d484d57fc-rkx95\nsre  infras-logstash-d484d57fc-rkx95  0/1  Error  0  50m  10.128.6.48  192.168.250.5  \n\n# pod status.reason is Evicted\nroot:~# ks get pod infras-logstash-d484d57fc-rkx95 -o jsonpath='{.metadata.name}{\"\\t\\t\"}{.status.reason}{\"\\t\\t\"}{.status.message}{\"\\n\"}'\ninfras-logstash-d484d57fc-rkx95\t\tEvicted\t\tThe node was low on resource: ephemeral-storage. Threshold quantity: 30Gi, available: 24094024Ki. Container infras-logstash was using 2456Ki, request is 0, has larger consumption of ephemeral-storage. \n\n# kubelet log shows that the pod was successfully evicted\nMay 28 16:05:50 192-168-250-5 kubelet[2269385]: I0528 16:05:50.514706 2269385 eviction_manager.go:405] \"Eviction manager: pods ranked for eviction\" pods=[\"sre/infras-logstash-d484d57fc-rkx95\",\"sre/admin-api-server-8",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "malloc: error for object 0x7f123456: incorrect checksum for freed object — abort",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "@hengku @itamarhaber Please have a look\r\n\r\nRelated to https://github.com/antirez/redis/issues/6474\r\n\r\nOutput Log:\r\n**Default Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 set key1 value1\r\n>>> Calling set key1 value1\r\n127.0.0.1:6001: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:7001: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:6003: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:6002: OK\r\n127.0.0.1:7002: MOVED 9189 127.0.0.1:6002\r\n\r\n127.0.0.1:7003: MOVED 9189 127.0.0.1:6002\r\n```\r\n\r\n**Master Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 master set key2 value1\r\n>>> Calling set key2 value1\r\n127.0.0.1:6001: OK\r\n127.0.0.1:6003: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:6002: MOVED 4998 127.0.0.1:6001\r\n```\r\n\r\n**Slave Option:**\r\n\r\n```\r\nsrc/redis-cli --cluster call 127.0.0.1:6001 slave set key2 value1\r\n>>> Calling set key2 value1\r\n127.0.0.1:7001: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:7002: MOVED 4998 127.0.0.1:6001\r\n\r\n127.0.0.1:7003: MOVED 4998 127.0.0.1:6001\r\n```",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "k8s: Service mesh timeout: upstream request timeout exceeded 30s for pod app-abc123",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "kernel: Killed process 4512 (python3) total-vm:8192000kB, anon-rss:7340032kB, file-rss:0kB",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR containerd[911]: memory pressure: cgroup ml-trainer limit approaching, suspected leak",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "CRITICAL django[9910]: ImproperlyConfigured: DATABASES 'default' not configured — SECRET_KEY missing",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "npm: Error: EACCES: permission denied, mkdir '/home/user/.npm'",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "cx_Oracle has a major new release under a new name and homepage [python-oracledb](https://oracle.github.io/python-oracledb/).\r\n\r\nThe python-oracledb driver is a [Python programming language](https://www.python.org/) extension module allowing Python programs to connect to [Oracle Database](https://www.oracle.com/database/). Python-oracledb is the new name for Oracle's popular cx_Oracle driver.\r\n\r\nTested on an Oracle Autonomous Database with TLSv1 connection.\r\n\r\nTicket: https://code.djangoproject.com/ticket/33817",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "redis: Background saving error — No space left on device writing /var/lib/redis/dump.rdb",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "etcd: context deadline exceeded — follower failed to get response from leader in time",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "haproxy: server backend/web1 is DOWN — health check timeout exceeded",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "Segmentation fault (core dumped) — process ran out of addressable memory",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "```\r\n#!watchflakes\r\ndefault <- builder ~ `windows-arm64` && log ~ `fatal error: out of memory`\r\n```\r\n\r\nhttps://ci.chromium.org/ui/p/golang/builders/luci.golang.ci/gotip-windows-arm64\r\nseems all builders are offline.\r\n\r\ncc @golang/release @thanm",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "- OS: Debian 12\n- Psycopg version: 2.9.11\n- Python version: 3.11 (latest patch packaged by debian)\n- PostgreSQL version: managed postgres on Google cloud (I do not have the exact version at hand right now, but can find out if required)\n\n---\n\nDear maintainers,\nWhen our application connects to a managed postgres database on GCP with a password that is near expiry, the following is printed to stderr:\n\n`Caution: Password is set to expire on 2025-09-13 06:23:52+00. Be sure to update the password before the expiration time.`\n\nWe did some digging and it appears that this is a `NOTICE` that is sent on connection establishment. As our password is rotated regularly, this message is not actionable for us and we would like to suppress it.\n\nAs we do not have a custom notice handler in our python application, this notice should not appear on stderr in the first place. I read through the psycopg2 code and I believe that there is a race condition where `NOTICE` messages that are sent right when the co",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "kernel: oom-kill: process python3 pid=9934 score=870 triggered by python3 pid=9934",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL ceph[4450]: OSD 7 FULL — refusing writes, disk capacity exceeded on /dev/sdc",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "# Trac ticket number\r\n\r\nticket-373\r\n\r\n# Branch description\r\n\r\nThis branch adds the `CompositePrimaryKey` field. If present, Django will create a composite primary key.\r\n\r\nPlease refer to the [docs](https://github.com/django/django/pull/18056/files#diff-cca8870fcaec19104d999f61553ba925c72e2eb19b4933068c4849f2ce58a6f6) for a more in-depth explanation.\r\n\r\n[Proposal](https://forum.djangoproject.com/t/gsoc-2024-proposal-django-orm-support-for-composite-primary-keys/29146)\r\n[Previous PR](https://github.com/django/django/pull/18031)\r\n\r\nRelated PRs:\r\n[Composite FK](https://github.com/django/django/pull/18868) ⌛ \r\n[Admin](https://github.com/django/django/pull/18865) ⌛\r\n[Composite Generic FK](https://github.com/django/django/pull/18863) ⌛\r\n~~[Model._is_pk_set()](https://github.com/django/django/pull/18450)~~ ✅ \r\n~~[Tuple Lookups](https://github.com/django/django/pull/18404)~~ ✅ \r\n~~[Serial Fields](https://github.com/django/django/pull/18123)~~ ❌ \r\n\r\n```python\r\nclass Tenant(models.Model):\r\n    pa",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "flask: RuntimeError: A secret key is required to use CSRF — set SECRET_KEY in configuration",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "mysql: [ERROR] The table '/tmp/mysql.tmp' is full",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "**This is a bug tracker**\r\nI cant connect to redshift anymore.\r\n\r\n**Please complete the following information:**\r\n- OS: Ubuntu\r\n- Psycopg version: psycopg2-binary==2.9.10\r\n- Python version: 3.12\r\n- PostgreSQL version: ~\r\n- pip version 24.0\r\n\r\n**Describe the bug**\r\nI am just trying to make an connection to redshift database.\r\nThis code used to work a year ago, but I tried using it today and the error appears.\r\n\r\n```python\r\nfrom psycopg2 import connect\r\ncon = connect(\r\n    dbname=DB,\r\n    host=HOST,\r\n    port=PORT,\r\n    user=USERNAME,\r\n    password=PASSWORD,\r\n)\r\n\r\n```\r\n\r\nwhich gives me the following error:\r\n\r\n```\r\nFile ~/.local/lib/python3.12/site-packages/psycopg2/__init__.py:122, in connect(dsn, connection_factory, cursor_factory, **kwargs)\r\n    [119](https://file+.vscode-resource.vscode-cdn.net/home/miguel.filho/Documents/rnd_data_libs/utils/~/.local/lib/python3.12/site-packages/psycopg2/__init__.py:119)     kwasync['async_'] = kwargs.pop('async_')\r\n    [121](https://file+.vscode-reso",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "### Go version\n\nGo Version: go1.24.1 linux/amd64\n\n### Output of `go env` in your module/workspace:\n\n```shell\nany\n```\n\n### What did you do?\n\nThere is a subtle memory leak pattern when `time.Local` is updated dynamically. When `time.LoadLocation` or `time.LoadLocationFromTZData` is called, it returns a pointer to a **newly allocated** `time.Location` object. \n\nIf a program repeatedly updates the global `time.Local` with these new instances (e.g., in a scheduled task or dynamic configuration update), any `time.Time` object created via `time.Now()` (or any constructor using `Local`) will hold a reference to that specific `Location` instance.\n\nIf these `time.Time` objects are long-lived (e.g., stored in a global cache, map, or persistent buffer), they prevent the specific `Location` instance from being garbage collected. Over time, as `time.Local` is reassigned again and again, the number of `Location` objects pinned in memory grows linearly, leading to a significant memory leak.\n\n**Reprodu",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "ERROR postgres[2211]: could not open file '/var/lib/postgresql/data': Permission denied",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "*** Error in 'gunicorn': free(): invalid pointer: 0x00007f1234567890 ***",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "The while loop is useless and it may send redundant commands to server.",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "Error: invalid dsn: invalid connection option \"idle_timeout\"",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "kernel: Killed process 8821 (python3) total-vm:4096000kB, anon-rss:3801200kB",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "### What happened?\n\nI find some error when using Cilium as Kubernetes network.\r\n\r\n- Cilium: 1.11.6\r\n- Kubernetes: 1.23.0\r\n\r\n## Describe\r\n\r\nThe step of create cluster as follow:\r\n\r\n1. Use `kubeadm --config kubeadm.conf` to init cluster:\r\n```shell\r\nkind: InitConfiguration\r\nlocalAPIEndpoint:\r\n  advertiseAddress: 192.168.153.21\r\n  bindPort: 6443\r\nnodeRegistration:\r\n  criSocket: /var/run/dockershim.sock\r\n  imagePullPolicy: IfNotPresent\r\n  name: nm\r\n  taints: null\r\n---\r\napiServer:\r\n  timeoutForControlPlane: 4m0s\r\napiVersion: kubeadm.k8s.io/v1beta3\r\ncertificatesDir: /etc/kubernetes/pki\r\nclusterName: kubernetes\r\ncontrollerManager: {}\r\ndns: {}\r\netcd:\r\n  local:\r\n    dataDir: /var/lib/etcd\r\nimageRepository: registry.aliyuncs.com/google_containers\r\nkind: ClusterConfiguration\r\nkubernetesVersion: 1.23.0\r\nnetworking:\r\n  dnsDomain: cluster.local\r\n  serviceSubnet: 10.96.0.0/12\r\n  podSubnet: 10.5.0.0/16\r\nscheduler: {}\r\n---\r\napiVersion: kubelet.config.k8s.io/v1beta1\r\nkind: KubeletConfiguration\r\nresolvCon",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "CRITICAL load-balancer[2200]: health check failed — 10.0.1.100:8080 timeout after 3000ms, marking DOWN",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "apache2 child pid 5432 exit signal Segmentation fault (11), possible coredump in /etc/apache2",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "```console\r\n+ /usr/bin/python3 -Bm pytest -ra\r\n=========================================================================== test session starts ============================================================================\r\nplatform linux -- Python 3.8.9, pytest-6.2.3, py-1.10.0, pluggy-0.13.1\r\nrootdir: /home/tkloczko/rpmbuild/BUILD/psycopg2-binary-2.8.6\r\nplugins: forked-1.3.0, shutil-1.7.0, virtualenv-1.7.0, expect-1.1.0, cov-2.11.1, httpbin-1.0.0, xdist-2.2.1, flake8-1.0.7, timeout-1.4.2, betamax-0.8.1, pyfakefs-4.4.0, freezegun-0.4.2, cases-3.4.6, case-1.5.3, isort-1.3.0, aspectlib-1.5.2, flaky-3.7.0, mock-3.6.0, hypothesis-6.12.0, asyncio-0.15.1, toolbox-0.5\r\ncollected 791 items / 1 error / 790 selected\r\n\r\n================================================================================== ERRORS ==================================================================================\r\n_______________________________________________________________ ERROR collecting tests/test_async_keyword.py",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "node[4411]: FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed — JavaScript heap out of memory",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "ERROR postgres[2211]: FATAL: password authentication failed for user 'app_user' — 3 consecutive failures",
+      "error_category": "Auth_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "<!-- Please reserve GitHub issues for bug reports and feature requests.\r\n\r\nFor questions, the best place to get answers is on our [discussion forum](https://discuss.hashicorp.com/c/vault), as they will get more visibility from experienced users than the issue tracker.\r\n\r\nPlease note: We take Vault's security and our users' trust very seriously. If you believe you have found a security issue in Vault, please responsibly disclose by contacting us at security@hashicorp.com. Our PGP key is available at [our security page](https://www.hashicorp.com/security/).\r\n\r\n-->\r\n\r\n**Describe the bug**\r\nA token is associated with a policy that defines two paths : /secrets/* (list only) and /secrets/+/prefix-* (write only).\r\nWhen trying to write a secret to /secrets/alice/prefix-test, we get a permission denied.\r\n\r\nThe capabilities retained for this is path is list only. The doc says that the most specific path should have priority when resolving capabilities, so the capabilities for /secrets/+/prefix-*",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "Overnight database connections can timeout. Coming back one gets InterfaceErrors if not checking `closed` == 1. Can the pool please only hand out open connections, currently there is no check on `closed`. Meaning using it eg with pool.getconn() might raise. I see no point in a pool handing out broken connections, or me missed sth.?\r\n\r\nhttps://github.com/psycopg/psycopg2/blob/cb3353be1f10590cdc2a894ada42c3b4c171feb7/lib/pool.py#L86",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "druid: historical node memory growing — segment loading cache not evicting",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR haproxy[2211]: memory leak in SSL session cache — sessions not expired after timeout",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "grafana: level=error t=2024-01-15 msg='failed to write session data' error='no space left on device'",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "I'm trying to update my docker image switching from python:3.8.2-alpine3.10 to python:3.9.0-alpine3.12, but I'm getting an issue when running django commands SSL_check_private_key: symbol not found.\r\n\r\n\r\n\r\nI'm trying to update my docker image switching from python:3.8.2-alpine3.10 to python:3.9.0-alpine3.12, but I'm getting an issue when running django commands SSL_check_private_key: symbol not found.\r\n\r\nI get the following error when running checks:\r\n\r\nbash -c \"touch /var/donor_reporting_portal/.touch && django-admin check --deploy \" /usr/local/lib/python3.9/site-packages/environ/environ.py:628: UserWarning: /usr/local/lib/python3.9/site-packages/donor_reporting_portal/config/.env doesn't exist - if you're not configuring your environment separately, create one. Traceback (most recent call last): File \"/usr/local/bin/django-admin\", line 8, in sys.exit(execute_from_command_line()) File \"/usr/local/lib/python3.9/site-packages/django/core/management/init.py\", line 401, in execute_from_co",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "WARN php-fpm[4411]: memory_limit nearly reached — process 4422 using 490MB / 512MB, leak detected",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "My model trained and tested by pytorch0.4.1 in ubuntu 16.04, the machine is GTX 1080Ti with 11G Memory. When we test the model, it require 1700MB memory.\r\nwe export the model with torch.jit.trace and infer with libtorch c++ api, we found that it require 6300MB memory.\r\nIf we want to  process image larger than 1280*720, it complain about CUDA out of memory.\r\nWe use the Preview build of libtorch.",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "Vault 0.6.5\r\n\r\nI would like to be able to have a vault anonymous policy. From my reading of the default policy, it seems that this assumes a token already exists(?) \r\n\r\nI would like users for example to be able to run `vault auth -methods` - to see which methods of authentication are available to them as this may change over time - however currently I cant find a way of doing this without the user being logged in first, which kind of defeats the point. \r\n\r\nIs there an anonymous policy at the moment? Is this possible?",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "### 🐛 Describe the bug\r\n\r\nThis is the exact same repro as https://github.com/pytorch/pytorch/issues/103715 but a different issue\r\n\r\nWhen using SAM with SDPA and torch.compile I get this perf hint coming from `torch/_inductor/codegen/triton.py`\r\n\r\n```\r\nreduction over non-contiguous dims\r\nreduction over non-contiguous dims\r\n```\r\n\r\nBut it doesn't really tell me what I can change in my model code to fix this or which line of code in my program is causing this\r\n\r\n\r\n## Setup\r\n\r\n```\r\npip install git+https://github.com/cpuhrsch/saf.git@msaroufim/sdpa\r\npip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121\r\npip install nvtx\r\nwget https://gist.githubusercontent.com/msaroufim/1002c17469fc670fc5af27dda12fa7e4/raw/c22a381f359da08c7efb4c87959efbd00f688bac/benchmark_segment_anything.py\r\n```\r\n\r\n## Command\r\n\r\n```\r\npython benchmark_segment_anything.py --model_type \"vit_h\" --checkpoint_path \"/data/home/vasiliy/cluster/sam_dataset/sam_vit_h_4b8939.pth\" -",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "openssl: Permission denied — cannot write certificate to /etc/ssl/certs/server.crt",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "k8s: pods 'nginx-abc123' is forbidden: User 'system:serviceaccount:default:default' cannot get resource 'pods'",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "error:\r\n\r\nOperationalError: server closed the connection unexpectedly This probably means the server terminated abnormally before",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "Fixes #ISSUE_NUMBER\r\n\n\ncc @jeffdaily @sunway513 @jithunnair-amd @pruthvistony @ROCmSupport @jataylo @hongxiayang @naromero77amd @jerrymannil @xinyazhang",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "- OS: Ubuntu 20.04.6 LTS\r\n- Psycopg version: psycopg2 Version: 2.9.9\r\n- Python version: 3.11.8\r\n- PostgreSQL version: PostgreSQL 12.16 (Ubuntu 12.16-0ubuntu0.20.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0, 64-bit\r\n- pip version 24.1.1\r\n\r\nI have an linux service that runs `Thread()` every 12 second and do queries to database. Suddenly I notice that after 1-5 days my python script freezes and nothing happens. So I put a lot of breakpoints and found out that script hangs on these lines and nothing happens, no errors:\r\n```python\r\ncursor.execute(f\"SELECT 1 FROM _blocks WHERE number={block_number}\")\r\n_exists_block = cursor.fetchone()\r\n```\r\nService is located in `/etc/systemd/system/`:\r\n```\r\nEnvironment=PYTHONUNBUFFERED=1\r\nEnvironment=\"PATH=/home/fridary/miniconda3/envs/eth/bin\"\r\nExecStart=/home/fridary/miniconda3/envs/eth/bin/python eth_newHeads.py\r\nStandardOutput=append:/home/fridary/python/ethereum/lib/logs/service_output.log\r\nStandardError=append:/h",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "### What would you like to be added?\n\nWe should add a swap test in e2e for swap that tests OOM with LimitedSwap.  We can replicate similar tests from OOMKilled but we should run them separately from conformance.  \n\n### Why is this needed?\n\nhttps://github.com/kubernetes/kubernetes/pull/121706\r\n\r\nTesting UnlimitedSwap in OOM will cause a lot of failures in CI.  This is because the kernel will reclaim memory and you won't hit the pressure limit.  \r\n\r\nLimitedSwap is necessary for OOM.  But we were not a",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "sidekiq: Errno::ECONNREFUSED: Connection refused — Redis connection pool drained",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "Fix coredump after `Client Unpause` command when threaded I/O is also enabled for the reading + parsing side and  clients are sending pipelining requests.\r\n\r\nenable threaded I/O in redis.conf:\r\n```\r\nio-threads 4\r\nio-threads-do-reads yes\r\n```\r\nstart redis-benchmark sending pipelining requests:\r\n```\r\nredis-benchmark -t set -P 1000 -c 10 -r 100000000 -n 100000000\r\n```\r\nsend `client pause` and `client unpause`:\r\n```\r\n127.0.0.1:6379> client pause 100000 write\r\nOK\r\n127.0.0.1:6379> client unpause\r\nCould not connect to Redis at 127.0.0.1:6379: Connection refused\r\n```\r\nBacktrace:\r\n```\r\n0   redis-server                        0x000000010e9e7b79 unblockClient + 329\r\n1   redis-server                        0x000000010e974e23 clientCommand + 3459\r\n2   redis-server                        0x000000010e95e2eb call + 267\r\n3   redis-server                        0x000000010e95f27e processCommand + 2398\r\n4   redis-server                        0x000000010e976e39 processInputBuffer + 393\r\n5   redis-server",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "rails: Rails.configuration: Missing required configuration key 'secret_key_base'",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL monitor: process api-server RSS grew 450MB → 8.9GB over 24h — intervention required",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "kernel: Memory cgroup out of memory: Killed process 6621 (python) in cgroup /kubepods",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: ReceiveTimeoutTransportException: [node1] request_id [12345] timed out",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "WARN filebeat[9900]: harvester failed to read file: no space left on device /var/log/app",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "ERROR elasticsearch[5501]: master not discovered yet — cluster state timeout 30s exceeded",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "### 🐛 Describe the bug\n\nthis could be related to https://github.com/pytorch/pytorch/issues/172537, but https://github.com/pytorch/pytorch/issues/172537 is regarding performance, not memory.\n\nRun the repro code below on torch 2.8.0 and torch 2.9.1\nopen the resulting file using https://docs.pytorch.org/memory_viz\n\ntorch 2.8.0 peak vram is 6.3 GB\ntorch 2.9.1 peak vram is 12.7 GB\n\non 16 GB vram GPUs it can fail entirely because of fragmentation:\n```\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.06 GiB. GPU 0 has a total capacity of 15.56 GiB of which 2.74 GiB is free. Including non-PyTorch memory, this process has 12.37 GiB memory in use. Of the allocated memory 6.55 GiB is allocated by PyTorch, and 5.53 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environm",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "https://hud.pytorch.org/hud/pytorch/pytorch/9df2e8020f190bdad02258aff2b2f88f7db3dcab/1?per_page=100&mergeEphemeralLF=true\r\n\r\nhttps://hud.pytorch.org/pytorch/pytorch/commit/8e8d4b13b0f6358e249a1e6fea9831b91b41b6d0#43980565863-box\r\n\r\nstarted OOMing after switching to cuda 12.8\r\n\r\nMaybe b/c I made some changes fix the per process memory fraction so each proc has fewer memory\r\n```\r\n2025-06-12T15:29:50.4998758Z FAILED [0.0124s] test_linalg.py::TestLinalgCUDA::test_svd_memory_allocation_cuda_complex128 - torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 4.10 GiB. GPU 0 has a total capacity of 7.43 GiB of which 6.85 GiB is free. Process 80272 has 68.75 MiB memory in use. Process 83346 has 68.75 MiB memory in use. Process 83365 has 374.75 MiB memory in use. Process 83384 has 70.75 MiB memory in use. 2.90 GiB allowed; Of the allocated memory 240.00 MiB is allocated by PyTorch, and 2.00 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try settin",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "mysql: connection timeout after 30s — max_connect_errors threshold reached",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR terraform[9900]: AccessDenied — user arn:aws:iam::123:user/ci lacks s3:PutObject permission",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: NoNodeAvailableException: None of the configured nodes are available",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "gunicorn[2345]: Worker with pid 7890 was terminated due to signal 11",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Summary\r\n\r\nI had `private_key_file` in .ansible.cfg and used that file. But now it seems that `ansible_ssh_private_key_file` from group vars takes precedence.\r\n\r\n### Issue Type\r\n\r\nBug Report\r\n\r\n### Component Name\r\n\r\nvariables\r\n\r\n### Ansible Version\r\n\r\n```console\r\n$ ansible --version\r\nansible [core 2.11.12] \r\n  config file = /home/ann/.ansible.cfg\r\n  configured module search path = ['/home/ann/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /usr/local/lib/python3.6/site-packages/ansible\r\n  ansible collection location = /home/ann/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /usr/local/bin/ansible\r\n  python version = 3.6.8 (default, Sep 13 2022, 09:40:27) [GCC 8.5.0 20210514 (Red Hat 8.5.0-10.1.0.1)]\r\n  jinja version = 2.10.1\r\n  libyaml = True\r\n```\r\n\r\n\r\n### Configuration\r\n\r\n```console\r\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "redis: MISCONF Redis is configured to save RDB snapshots, but it is currently not able to persist on disk",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "lsof: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME: nginx 3421 root 8u IPv4 — port conflict",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL logstash[7700]: JVM old gen 99% — long-lived objects accumulating, GC unable to reclaim",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "pydantic: ValidationError: 4 validation errors for Settings — invalid configuration values",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "php-fpm: worker PID 12340 RSS 1.8GB — memory_limit not applying to long-lived workers",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Description\r\nℹ️ No user facing changes\r\n\r\nThis PR implements the new `api` service to make login requests and migrates the abstracted `authenticate` method to each auth component to reduce abstraction.\r\n\r\n### Previous behavior\r\nPreviously the [old login form](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/components/auth/login-form.js#L81-L86) invoked `this.auth.authenticate` for every auth method. This [auth service method](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/services/auth.js#L480-L490) then called the `cluster` adapter's [authenticate method](https://github.com/hashicorp/vault/blob/release/1.19.x/ui/app/adapters/cluster.js#L124-L144). \r\n\r\nThis abstraction made it hard to follow the login logic and required the need for two separate MFA workflows depending on which component was called. It also was challenging to discern what auth response data was actually necessary for the app. \r\n\r\n#### Whimsical diagram for the previous workflow.\r\n![imag",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "chronyd: memory growing due to excessive NTP peer accumulation",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "nginx: worker process exited on signal 9 (SIGKILL) — OOM killer terminated",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "celery: ImproperlyConfigured: result_backend must be set when CELERY_TASK_ALWAYS_EAGER=False",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR python3[9910]: KeyError: 'OPENAI_API_KEY' — required environment variable not set",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "airflow: scheduler heap growing 100MB/hour — check DAG serialization objects",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "rabbitmq: failed to start rabbit: {error, {could_not_start, rabbit, {bad_return_value, {error, {missing_required_env_var, RABBITMQ_ERLANG_COOKIE}}}}}",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "mysqld: Aborted connection 89012 to db: 'production' host: 'app-server' (Timeout reading communication packets)",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "zookeeper: ERROR Unable to bind to port 2181 — port already in use by another ZK instance",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR php-fpm[4411]: unable to bind listening socket for address 'tcp://0.0.0.0:9000': address already in use",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "systemctl: Failed to restart nginx.service: Permission denied",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "java: java.net.BindException: Address already in use — port 7077 (Spark master conflict)",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "go: SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x7f1234abcdef",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "sshd: error: Bind to port 22 on 0.0.0.0 failed: Permission denied — check sshd_config Port",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Summary\r\n\r\nWhen running ansible-test unit tests with pytest>=8 it fails with the following trace. Pinning pytest<8 in requirements.txt fixes the issue.\r\n```\r\n________________________ ERROR collecting test session _________________________\r\ntests/output/.tmp/delegation/python3.9/lib/python3.9/site-packages/pluggy/_hooks.py:501: in __call__\r\n    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)\r\ntests/output/.tmp/delegation/python3.9/lib/python3.9/site-packages/pluggy/_manager.py:119: in _hookexec\r\n    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)\r\ntests/output/.tmp/delegation/python3.9/lib/python3.9/site-packages/_pytest/python.py:211: in pytest_collect_directory\r\n    if pkginit.is_file():\r\n/usr/lib/python3.9/pathlib.py:1456: in is_file\r\n    return S_ISREG(self.stat().st_mode)\r\n/usr/lib/python3.9/pathlib.py:1232: in stat\r\n    return self._accessor.stat(self)\r\n```\r\n\r\n### Issue Type\r\n\r\nBug Report\r\n\r\n### Component Name\r\n\r\nansible-test",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "Opening this as a draft pull request until I figure out the following:\r\n\r\n- [x] Where to add validation for the transaction_mode values?\r\n\r\nRight now it's in `get_connection_params`, but it doesn't feel like the right place. We do validation for `NAME` there though, so maybe it's ok? \r\n\r\n- [x] Is `OPTIONS` the right place for this `transaction_mode`?\r\n\r\nJust double checking, since it doesn't feel clean that I have to pop it from the `OPTIONS` dict to avoid `TypeError: 'transaction_mode' is an invalid keyword argument for Connection()`\r\n\r\n- [x] Figure out which documentation files to update",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ERROR celery[6600]: memory growth detected — worker RSS 4.1GB after 12h, initial was 210MB",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "### What happened?\n\nAfter enabling the feature --feature-gates=InPlacePodVerticalScaling=true, I tried to dynamically patch the Pod’s CPU and memory with\n```\n> kubectl patch pod operator-0 -n wx \\\n>   --type='json' \\\n>   -p='[{\"op\":\"replace\",\"path\":\"/spec/containers/0/resources\",\"value\":{\"requests\":{\"cpu\":\"4\",\"memory\":\"4096Mi\"},\"limits\":{\"cpu\":\"4\",\"memory\":\"4096Mi\"}}}]'\n```\n\nThe Pod then failed and showed:\n```\nstatus:\n  conditions:\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:06:23Z\"\n    status: \"True\"\n    type: Initialized\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:45:10Z\"\n    message: 'containers with unready status: [goldendb-operator]'\n    reason: ContainersNotReady\n    status: \"False\"\n    type: Ready\n  - lastProbeTime: null\n    lastTransitionTime: \"2025-12-05T08:45:10Z\"\n    message: 'containers with unready status: [goldendb-operator]'\n    reason: ContainersNotReady\n    status: \"False\"\n    type: ContainersReady\n  - lastProbeTime: null\n    last",
+      "error_category": "Process_Crash",
+      "severity": "CRITICAL",
+      "action_type": "restart_service",
+      "target_process": "pod",
+      "reasoning": "Kubernetes 리포지토리에서 수집된 컨테이너 크래시 에러. 파드 재시작 및 리소스 리밋 점검 필요."
+    },
+    {
+      "log_text": "consul: Failed to write snapshot: No space left on device",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "nginx: upstream timed out (110: Connection timed out) while connecting to upstream",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL kafka[5501]: IOException writing to log segment — /var/kafka-logs: No space left on device",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "apache2: (13)Permission denied: AH00035: access to /var/www/app denied because search permissions are missing",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "postgres: PANIC: pre-existing shared memory block is still in use",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "crond: OOM kill detected, some scheduled tasks may have been lost",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "nginx: [emerg] host not found in upstream 'backend:8080' in /etc/nginx/conf.d/app.conf:22",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "Caught signal 11 (Segmentation fault): backtrace available in /var/crash/app.1234.crash",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "rsync: [receiver] write error: No space left on device (28) at receiver.c(378)",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### ➡️ ➡️ ➡️  This PR has moved to https://github.com/django/django/pull/21231.\r\n\r\n-----\r\n\r\n<img width=\"360\" height=\"216\" alt=\"This PR has hidden comments! GitHub has hidden some comments on this page, which may include unresolved review feedback and other open discussions. Be sure to search the page for “Load more…” and click all the links found.\" src=\"https://github.com/user-attachments/assets/9096e077-1b73-447d-b5be-4c8d48cfa795\" />\r\n\r\nUpvote [*Please stop hiding PR comments*](https://github.com/orgs/community/discussions/112603) to request a fix.\r\n\r\n-----\r\n\r\n#### Trac ticket number\r\n\r\nticket-35514\r\n\r\n#### Branch description\r\nImplements `mail.providers` factory and dictionary-based `EMAIL_PROVIDERS` setting, aligning Django's email backend configuration with similar capabilities\r\nin caches, databases, storages, and tasks.\r\n\r\nSee [DEP 0018](https://github.com/django/deps/pull/105)\r\n\r\n#### AI Assistance Disclosure (REQUIRED)\r\n<!-- Please select exactly ONE of the following: -->\r\n- [ ]",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "gorm: too many open connections: dial tcp 10.0.0.3:3306: connection refused",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Summary\n\nAlthough I can interact with a host using ssh from the control node, ansible complains about permissions. \n\n### Issue Type\n\nBug Report\n\n### Component Name\n\npip\n\n### Ansible Version\n\n```console\n$ ansible --version\r\nansible [core 2.15.1]\r\n  config file = None\r\n  configured module search path = ['/Users/xxx/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /Users/xxx/.local/lib/python3.9/site-packages/ansible\r\n  ansible collection location = /Users/xxx/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /Users/xxx/.local/bin/ansible\r\n  python version = 3.9.5 (default, May 18 2021, 12:31:01) [Clang 10.0.0 ] (/Users/xxx/opt/miniconda3/bin/python3)\r\n  jinja version = 3.0.1\r\n  libyaml = True\n```\n\n\n### Configuration\n\n```console\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed -t all\r\nCONFIG_FILE() = None\r\nPAGER(env: PAGER) = less\n```\n\n\n###",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "cassandra: PoolingOptions: connection pool for host 10.0.0.5 exhausted (size=128)",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "# Trac ticket number\r\n\r\nticket-35688\r\n\r\n# Checklist\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [x] I have added or updated relevant tests.\r\n- [x] I have added or updated relevant docs, including release notes if applicable.\r\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ERROR node[4411]: process exited with code: 1 — uncaughtException: Cannot read property of undefined",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: AccessDeniedException /var/lib/elasticsearch/nodes",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Summary\n\nIt used to work but not with recent versions.\n\n### Issue Type\n\nBug Report\n\n### Component Name\n\nansible core\n\n### Ansible Version\n\n```console\n$ ansible --version\r\nansible [core 2.16.2]\r\n  config file = /home/self/.ansible.cfg\r\n  configured module search path = ['/home/self/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']\r\n  ansible python module location = /home/self/.local/lib/python3.10/site-packages/ansible\r\n  ansible collection location = /home/self/.ansible/collections:/usr/share/ansible/collections\r\n  executable location = /home/self/.local/bin/ansible\r\n  python version = 3.10.12 (main, Nov 20 2023, 15:14:05) [GCC 11.4.0] (/usr/bin/python3)\r\n  jinja version = 3.0.3\r\n  libyaml = True\n```\n\n\n### Configuration\n\n```console\n# if using a version older than ansible-core 2.12 you should omit the '-t all'\r\n$ ansible-config dump --only-changed -t all\r\n\r\nI omit this as it includes too much private data\n```\n\n\n### OS / Environment\n\nKubuntu 22.04\n\n### Steps to Reprod",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ERROR mongo[4450]: WiredTiger error: posix_fallocate: [28] No space left on device",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "Platforms: linux, win, windows, slow\n\n\n\n\n\nThis test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_assigning_back_deleter_fns_to_tensor&suite=TestBlockStateAbsorption&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/29446658101).\n\nOver the past 3 hours, it has been determined flaky in 30 workflow(s) with 90 failures and 30 successes.\n\n**Debugging instructions (after clicking on the recent samples link):**\nDO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\nTo find relevant log snippets:\n1. Click on the workflow logs linked above\n2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n3. Grep for `test_assigning_back_deleter_fns_to_tensor`\n4. There should be several instances run (as flaky tests are rerun in CI) from which you can study",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "ERROR nginx[4422]: bind() to 0.0.0.0:80 failed (98: Address already in use)",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: failed to load settings from configuration file — invalid YAML at line 23",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR redis[3391]: Creating Server TCP listening socket 0.0.0.0:6379: bind: Address already in use",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "```\n#!watchflakes\ndefault <- pkg == \"golang.org/x/tools/go/packages\" && test == \"TestParseFileModifyAST/Modules\"\n```\n\nIssue created automatically to collect these failures.\n\nExample ([log](https://ci.chromium.org/b/8718215636726388865)):\n\n    === RUN   TestParseFileModifyAST/Modules\n    === PAUSE TestParseFileModifyAST/Modules\n    === CONT  TestParseFileModifyAST/Modules\n        invoke.go:205: starting GOROOT= GOPATH=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\modcache GO111MODULE=off GOPROXY=file:///C:/Users/swarming/.swarming/w/ir/x/t/TestParseFileModifyAST_Modules2955769261/modproxy PWD=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\fake go list -e -f {{context.ReleaseTags}} -- unsafe\n        invoke.go:205: starting GOROOT= GOPATH=C:\\Users\\swarming\\.swarming\\w\\ir\\x\\t\\TestParseFileModifyAST_Modules2955769261\\modcache GO111MODULE=on GOPROXY=file:///C:/Users/swarming/.swarming/w/ir/x/t/TestParseFileModifyAST_Modules295576",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "### Summary\n\nI am running simple shell module with async and poll and getting permission denied error on the remote ansible module files. \n\n```\n(ansible_venv) [root@ansible_host]# ansible-playbook  k  -i tower.yml -e \"target_host=myhost\"\n\nPLAY [Run debug command] ********************************************************************************************************************************************\n\nTASK [IPU Remediate tasks | Apply latest updates on system] *********************************************************************************************************\n[WARNING]: sftp transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\n[WARNING]: scp transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\n[WARNING]: piped transfer mechanism failed on [myhost]. Use ANSIBLE_DEBUG=1 to see detailed information\nfatal: [myhost]: FAILED! => {\"msg\": \"failed to transfer file to /root/.ansible/tmp/ansible-local-523372x5d1eox9/tmp8j4g",
+      "error_category": "Permission_Denied",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Ansible 리포지토리에서 수집된 파일 권한 에러. OS 권한 문제로 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ERROR elasticsearch[5501]: unable to load configuration: unknown setting [indices.memory.unknown_setting]",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "Hello,\r\nI currently adopted psycopg2 for logical decoding. It runs very fine for a few hours and then it throws the error : \r\nDatabaseError: SSL SYSCALL error: EOF detected\r\njust at the point : consume_stream(consume)\r\n\r\nand doesn't reconnect until a few hours later.\r\n\r\nany ideas ?\r\n\r\nrunning PG9.5 and psycopg2.7.1\r\n\r\nthanks",
+      "error_category": "Network_Timeout",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "postgres_pool",
+      "reasoning": "psycopg2 공식 리포지토리에서 수집된 DB 연결 지연 에러. 커넥션 풀 재시작 필요."
+    },
+    {
+      "log_text": "node: Error: read ECONNRESET — connection forcibly closed by upstream server",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL postgres[2211]: invalid value for parameter 'max_connections': '10000' — exceeds system limit",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "terraform: Error: Invalid expression — expected closing brace, got EOF at main.tf:45",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR kafka[5501]: java.lang.OutOfMemoryError: Direct buffer memory exhausted",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "datadog-agent: memory growing 2MB/check cycle — custom check object retention",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR mysql[1204]: Got error 28 from storage engine (No space left on device) writing to /var/lib/mysql",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "ceph: OSD.2 full at 95.0%: marking OSD full — writes will be rejected",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "mysql: ERROR 13 (HY000): Can't get stat of '/var/lib/mysql/data' (Errcode: 13 - Permission denied)",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "### Proposal Details\n\nIf the function passed to `runtime.AddCleanup` contains a reference to the variable that the cleanup is attached to, then the variable will remain live and the cleanup will never run. A [recent CL](https://go-review.googlesource.com/c/go/+/696295) exhibited this bug and I can see it being a fairly easy mistake to make. Since `AddCleanup` is a relatively new API addition, I think it makes sense to detect these errors now before they become a problem.\n\nI suggest that vet warn about this problem. I have an implementation for gopls at [CL696775](https://go-review.googlesource.com/c/tools/+/696775) that can be used to evaluate just how helpful this warning would be.",
+      "error_category": "Memory_Leak",
+      "severity": "HIGH",
+      "action_type": "kill_process",
+      "target_process": null,
+      "reasoning": "Go 공식 리포지토리에서 수집된 메모리 누수 에러. 해당 프로세스 재시작 및 힙 덤프 분석 필요."
+    },
+    {
+      "log_text": "ERROR mysql[1204]: Access denied for user 'app'@'10.0.1.5' to database 'production'",
+      "error_category": "Auth_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: IOException: failed to write segment file — No space left on device",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "Platforms: linux, slow\n\nThis test was disabled because it is failing in CI. See [recent examples](https://hud.pytorch.org/flakytest?name=test_max_split_expandable&suite=TestCudaMallocAsync&limit=100) and the most recent trunk [workflow logs](https://github.com/pytorch/pytorch/runs/29456799947).\n\nOver the past 3 hours, it has been determined flaky in 16 workflow(s) with 48 failures and 16 successes.\n\n**Debugging instructions (after clicking on the recent samples link):**\nDO NOT ASSUME THINGS ARE OKAY IF THE CI IS GREEN. We now shield flaky tests from developers so CI will thus be green but it will be harder to parse the logs.\nTo find relevant log snippets:\n1. Click on the workflow logs linked above\n2. Click on the Test step of the job so that it is expanded. Otherwise, the grepping will not work.\n3. Grep for `test_max_split_expandable`\n4. There should be several instances run (as flaky tests are rerun in CI) from which you can study the logs.\n\n\n\n<details><summary>Sample error message</s",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "I wanted to seal the vault using the output policy report by vault, i.e.\r\n```\r\n$ vault operator seal -output-policy\r\npath \"sys/seal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n$ vault policy read admin | grep -FA 2 seal\r\npath \"sys/seal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n```\r\nBut it fails:\r\n```\r\n$ vault operator seal\r\nError sealing: Error making API request.\r\n\r\nURL: PUT https://...:8200/v1/sys/seal\r\nCode: 403. Errors:\r\n\r\n* 1 error occurred:\r\n\t* permission denied\r\n```\r\n\r\nSo the `seal` operation requires \"sudo\" to be present, so that is missing in the output of `-output-policy`.\r\n\r\nSimilar the output for the unseal operation is also wrong:\r\n```\r\n$ vault operator unseal -output-policy\r\nUnseal Key (will be hidden): \r\npath \"sys/unseal\" {\r\n  capabilities = [\"create\", \"update\"]\r\n}\r\n```\r\n\r\nThis suggests I need a token attached to a policy with those capabilities while in fact I don't even need any token, just the unseal key.\r\n\r\nSo the bugfix/improvement I'm suggesting is that the o",
+      "error_category": "Auth_Error",
+      "severity": "HIGH",
+      "action_type": "escalate_to_human",
+      "target_process": "vault",
+      "reasoning": "HashiCorp Vault 리포지토리에서 수집된 인증 실패 에러. 토큰 만료 또는 정책 문제로 관리자 확인 필요."
+    },
+    {
+      "log_text": "pip: ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device",
+      "error_category": "Disk_Full",
+      "action_type": "execute_llm_command",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "CRITICAL node[8811]: memory leak alert — heap used 1.82GB / 1.98GB, V8 heap growing unbounded",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "elasticsearch: [ERROR][o.e.b.Bootstrap] node validation exception — process crashed",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "elasticsearch: A terminally broken JVM was detected — exiting with code 137",
+      "error_category": "Process_Crash",
+      "action_type": "restart_service",
+      "target_process": "rsyslog",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "java: java.io.FileNotFoundException: /var/log/app/app.log (Permission denied)",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "# Trac ticket number\r\n\r\nticket-35514\r\n\r\n# Branch description\r\n\r\nThis is a draft pull request. It just replaces the the configuration settings starting with `EMAIL_…` with a dictionary based configuration. More features have to be added.\r\n\r\n# Checklist\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [x] I have added or updated relevant tests.\r\n- [x] I have added or updated relevant docs, including release notes if applicable.\r\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.",
+      "error_category": "Configuration_Error",
+      "severity": "MEDIUM",
+      "action_type": "escalate_to_human",
+      "target_process": null,
+      "reasoning": "Django 공식 리포지토리에서 수집된 환경설정 누락 에러. 시스템 자동 복구 불가, 관리자 개입 필요."
+    },
+    {
+      "log_text": "ERROR node[4411]: Error: ETIMEDOUT — connection to postgres:5432 timed out after 5000ms",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "traefik: [ERROR] dial tcp 10.0.0.3:8080: i/o timeout — backend unreachable",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "php: mysqli_connect(): (HY000/1040): Too many connections",
+      "error_category": "DB_Connection",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "WARN prometheus[2109]: open /etc/prometheus/prometheus.yml: permission denied — config not reloaded",
+      "error_category": "Permission_Denied",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "exim: Configuration error: unknown option 'dkim_domain' — check exim4.conf",
+      "error_category": "Configuration_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "io.grpc.StatusRuntimeException: DEADLINE_EXCEEDED: deadline exceeded after 30.000000000s",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "istio: upstream request timeout — 504 Gateway Timeout after 30s",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.06 GiB. GPU 0 has a total capacity of 15.56 GiB of which 2.74 GiB is free. Inc",
+      "error_category": "Out_Of_Memory",
+      "severity": "CRITICAL",
+      "action_type": "clear_memory",
+      "target_process": null,
+      "reasoning": "PyTorch 공식 리포지토리에서 수집된 VRAM 부족 에러. 시스템 캐시 초기화 필요."
+    },
+    {
+      "log_text": "ntpd: Cannot bind socket on port 123 — address already in use",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "envoy: upstream_reset_before_response_started{connection_timeout} — request timed out",
+      "error_category": "Network_Timeout",
+      "action_type": "restart_service",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "consul: [ERR] agent: error starting agent: error starting rpc listener: listen tcp 0.0.0.0:8300: bind: address already in use",
+      "error_category": "Port_Conflict",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "When port lengh is bigger thant strlen(\"65535\"), redis-cli prompt seems wrong.\r\nI started a server with port 30001，and connect it with \"redis-cli -p 300010000\"，while the prompt is \"127.0.0.1:300010000>\". \r\nI think it should be \"127.0.0.1:30001\".",
+      "error_category": "DB_Connection",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "redis",
+      "reasoning": "Redis 공식 리포지토리에서 수집된 DB 연결 거부 에러. Redis 서비스 재시작 필요."
+    },
+    {
+      "log_text": "### Environment\n\nInclude the result of the following commands:\n  - `nginx/1.24.0`\n  - `Linux i-0b1e9a928bcb1c9f8 6.8.0-1026-aws #28-Ubuntu SMP Mon Mar 24 19:41:53 UTC 2025 aarch64 aarch64 aarch64 GNU/Linux`\n\n### Description\n\nDescribe the bug in full detail including expected and actual behavior.\nSpecify conditions that caused it. Provide the relevant part of nginx\nconfiguration and debug log.\n\n- [ ] The bug is reproducible with the latest version of nginx\n- [ ] The nginx configuration is minimized to the smallest possible\nto reproduce the issue and doesn't contain third-party modules\n\n#### nginx configuration\n\n```\n# grep -r \"listen\" /etc/nginx/*\n/etc/nginx/sites-available/domain.conf:    listen 443 ssl http2 default_server;\n```\nor share the configuration in [gist](https://gist.github.com/).\n\n#### nginx debug log\n\nIt is advised to enable\n[debug logging](http://nginx.org/en/docs/debugging_log.html).\n```\n# Your nginx debug log here\nApr 18 21:43:06 i-0b1e9a928bcb1c9f8 nginx[4748]: 2025/04/",
+      "error_category": "Port_Conflict",
+      "severity": "HIGH",
+      "action_type": "restart_service",
+      "target_process": "nginx",
+      "reasoning": "Nginx 리포지토리에서 수집된 포트 충돌 에러. 기존 프로세스 종료 후 서비스 재시작 필요."
+    },
+    {
+      "log_text": "ERROR redis[3391]: NOAUTH Authentication required — client connected without password",
+      "error_category": "Auth_Error",
+      "action_type": "escalate_to_human",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "CRITICAL redis[3391]: Can't save in background: fork: Cannot allocate memory",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    },
+    {
+      "log_text": "activemq: store usage at 98% — messages accumulating in dead letter queue",
+      "error_category": "Memory_Leak",
+      "action_type": "kill_process",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v2)"
+    },
+    {
+      "log_text": "ERROR logstash[7700]: java.lang.OutOfMemoryError: Java heap space at pipeline worker",
+      "error_category": "Out_Of_Memory",
+      "action_type": "clear_memory",
+      "target_process": "",
+      "severity": "HIGH",
+      "reasoning": "syslog 테스트 샘플 (syslog_augment_v1)"
+    }
+  ]
+}

@@ -144,9 +144,6 @@ class CircuitBreaker:
                 return False
 
             if elapsed >= OPEN_TIMEOUT_SEC:
-                # OPEN → HALF_OPEN 전환 후 시험 요청 원자적으로 허용
-                self._write(sig, STATE_HALF_OPEN, data["consecutive_failures"],
-                            opened_at, test_in_progress=0)
                 return self._try_claim_half_open(sig, elapsed)
 
             logging.warning(
@@ -162,30 +159,48 @@ class CircuitBreaker:
 
     def _try_claim_half_open(self, sig: str, elapsed) -> bool:
         """
-        test_in_progress = 0 → 1 원자적 업데이트.
-        1행 업데이트 성공 시 이 요청이 유일한 시험 요청.
-        0행이면 이미 다른 요청이 진행 중 → 차단.
+        BEGIN EXCLUSIVE로 상태 전이와 test_in_progress 설정을 단일 원자 트랜잭션으로 처리.
+        여러 스레드가 동시에 진입해도 오직 1개만 시험 요청을 허용한다.
         """
         conn = get_conn(self.db_path)
-        cur  = conn.execute(
-            "UPDATE circuit_breaker SET test_in_progress = 1 "
-            "WHERE error_sig = ? AND test_in_progress = 0",
-            (sig,),
-        )
-        conn.commit()
-        if cur.rowcount == 1:
-            if elapsed is not None:
-                logging.warning(
-                    f"[CircuitBreaker] OPEN→HALF_OPEN ({elapsed / 60:.1f}분 경과). "
-                    f"시험 요청 허용: {sig[:8]}"
-                )
-            else:
-                logging.warning(
-                    f"[CircuitBreaker] HALF_OPEN 시험 요청 허용: {sig[:8]}"
-                )
-            return True
-        logging.warning(f"[CircuitBreaker] HALF_OPEN 중 추가 요청 차단: {sig[:8]}")
-        return False
+        now  = datetime.now(timezone.utc).isoformat()
+        conn.execute("BEGIN EXCLUSIVE")
+        try:
+            row = conn.execute(
+                "SELECT state, test_in_progress FROM circuit_breaker WHERE error_sig = ?",
+                (sig,),
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                return False
+            db_state, tip = row[0], row[1]
+            if db_state == STATE_CLOSED:
+                conn.rollback()
+                return True
+            if tip == 1:
+                conn.rollback()
+                logging.warning(f"[CircuitBreaker] HALF_OPEN 중 추가 요청 차단: {sig[:8]}")
+                return False
+            conn.execute(
+                "UPDATE circuit_breaker "
+                "SET state = ?, test_in_progress = 1, last_updated = ? "
+                "WHERE error_sig = ?",
+                (STATE_HALF_OPEN, now, sig),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        if elapsed is not None:
+            logging.warning(
+                f"[CircuitBreaker] OPEN→HALF_OPEN ({elapsed / 60:.1f}분 경과). "
+                f"시험 요청 허용: {sig[:8]}"
+            )
+        else:
+            logging.warning(
+                f"[CircuitBreaker] HALF_OPEN 시험 요청 허용: {sig[:8]}"
+            )
+        return True
 
     def record_result(self, error_log: str, success: bool) -> None:
         """파이프라인 결과를 기록하고 상태 전이 및 에스컬레이션을 처리한다."""

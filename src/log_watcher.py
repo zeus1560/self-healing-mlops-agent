@@ -10,7 +10,8 @@ watchdog observer로 대상 로그 파일을 inotify 감시하고,
 
 종료 처리:
   SIGTERM/SIGINT 수신 시 _shutdown_event를 set하고, 메인 루프와 executor의
-  승인 대기 루프가 모두 이를 감지해 최대 30초 내에 클린하게 종료한다.
+  승인 대기 루프가 모두 이를 감지해 최대 _OBSERVER_JOIN_TIMEOUT_SEC 내에
+  클린하게 종료한다.
   signal.signal()은 반드시 메인 스레드에서만 등록한다.
 """
 import logging
@@ -23,8 +24,13 @@ import time
 import traceback
 from collections import deque
 
-# 종료 신호를 받으면 set() → 메인 루프와 executor 승인 대기 루프가 동시에 감지
+# ── 종료 이벤트 ───────────────────────────────────────────────────────────────
+# SIGTERM/SIGINT 수신 시 set() → 메인 루프와 executor 승인 대기 루프가 동시에 감지.
 _shutdown_event = threading.Event()
+
+# watchdog Observer 종료 대기 상한(초).
+# 이 시간 내에 종료되지 않으면 경고 후 강제 진행한다.
+_OBSERVER_JOIN_TIMEOUT_SEC = int(os.getenv("OBSERVER_JOIN_TIMEOUT_SEC", "30"))
 
 
 def _handle_shutdown(signum, frame) -> None:
@@ -156,6 +162,10 @@ class LogTailHandler(FileSystemEventHandler):
         logging.info(f"[파이프라인 가동] ({n_lines}줄 컨텍스트) {first_line}")
         start_time = time.time()
 
+        _demo = os.getenv("DEMO_MODE", "0") == "1"
+        if _demo:
+            _demo_print(f"[감지] {first_line[:90]}", "red")
+
         try:
             decision = self.engine.analyze_error(error_log)
         except Exception:
@@ -163,6 +173,14 @@ class LogTailHandler(FileSystemEventHandler):
             return
 
         source = decision.resolution_source
+
+        if _demo:
+            _src_label = "L1 cache hit" if source == "L1_CACHE" else "L2 LLM inference"
+            _demo_print(
+                f" -> {_src_label} / action: {decision.action_type.name.lower()}"
+                + (f" (category: {decision.error_category})" if decision.error_category else ""),
+                "yellow",
+            )
 
         try:
             exec_result = self.executor.execute(decision, original_error_log=error_log)
@@ -175,6 +193,13 @@ class LogTailHandler(FileSystemEventHandler):
         result_category = exec_result["result_category"]
         error_type      = exec_result["error_type"]
         error_detail    = exec_result["error_detail"]
+
+        if _demo:
+            _status = "SUCCESS" if success else "FAILED"
+            _demo_print(
+                f" => {_status} ({latency*1000:.0f}ms)",
+                "green" if success else "red",
+            )
 
         if success and source in ("L2_LLM", "RULE") and decision.command:
             try:
@@ -227,10 +252,9 @@ def start_watching(target_log_files: str | list[str]) -> None:
     set_shutdown_event(_shutdown_event)
 
     for log_file in target_log_files:
-        abs_path = os.path.abspath(log_file)
+        abs_path  = os.path.abspath(log_file)
         watch_dir = os.path.dirname(abs_path)
-        if watch_dir:
-            os.makedirs(watch_dir, exist_ok=True)
+        os.makedirs(watch_dir, exist_ok=True)
         if not os.path.exists(abs_path):
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write("=== System Log Initialized ===\n")
@@ -265,7 +289,6 @@ def start_watching(target_log_files: str | list[str]) -> None:
     etl_scheduler = ETLScheduler()
     slack         = SlackChatOps()
 
-    # first_handler가 None이면 (빈 파일 목록) 콜백 없이 경고만 출력
     pipeline_cb = first_handler.trigger_agent_pipeline if first_handler else None
     if pipeline_cb is None:
         logging.warning("[Watcher] 감시할 로그 파일이 없습니다. ProactiveMonitor 콜백 비활성.")
@@ -273,10 +296,9 @@ def start_watching(target_log_files: str | list[str]) -> None:
 
     _last_cluster = time.time()
 
-    while not _shutdown_event.is_set():
-        _shutdown_event.wait(1)
-        if _shutdown_event.is_set():
-            break
+    # threading.Event.wait(timeout)은 이벤트가 set되면 True, 타임아웃이면 False를 반환한다.
+    # "while not wait(1)" 패턴: 1초 폴링 + 즉시 종료 감지를 동시에 달성한다.
+    while not _shutdown_event.wait(1):
         maintenance.run_if_due()
         proactive.check_and_trigger()
         etl_scheduler.run_if_due()
@@ -310,10 +332,28 @@ def start_watching(target_log_files: str | list[str]) -> None:
                     ),
                 )
 
-    logging.info("[Shutdown] 감시 루프 종료. 실행 중인 작업 완료 대기 중 (최대 30s)...")
+    logging.info(
+        f"[Shutdown] 감시 루프 종료. 실행 중인 작업 완료 대기 중 "
+        f"(최대 {_OBSERVER_JOIN_TIMEOUT_SEC}s)..."
+    )
     watch_observer.stop()
-    watch_observer.join(timeout=30)
+    watch_observer.join(timeout=_OBSERVER_JOIN_TIMEOUT_SEC)
+
+    # join() 이후에도 Observer 스레드가 살아있으면 강제 진행 경고를 남긴다.
+    if watch_observer.is_alive():
+        logging.warning(
+            f"[Shutdown] watchdog Observer가 {_OBSERVER_JOIN_TIMEOUT_SEC}s 내에 "
+            "종료되지 않았습니다. 강제 진행합니다."
+        )
+
     logging.info("[Shutdown] 종료 완료.")
+
+
+_COLORS = {"red": "\033[91m", "yellow": "\033[93m", "green": "\033[92m", "reset": "\033[0m"}
+
+def _demo_print(msg: str, color: str = "reset") -> None:
+    c = _COLORS.get(color, "")
+    print(f"{c}{msg}{_COLORS['reset']}", flush=True)
 
 
 if __name__ == "__main__":
@@ -324,6 +364,12 @@ if __name__ == "__main__":
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
         )
+    # chromadb 버전 충돌로 발생하는 telemetry 에러 숨김
+    logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+
+    if os.getenv("DEMO_MODE", "0") == "1":
+        logging.disable(logging.CRITICAL)
+        print("self-healing agent started. watching logs...", flush=True)
 
     targets = sys.argv[1:] if len(sys.argv) > 1 else ["./data/realtime_system.log"]
     start_watching(targets)

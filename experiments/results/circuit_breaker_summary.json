@@ -1,0 +1,9 @@
+{
+  "open_transition_accuracy": 1.0,
+  "block_rate": 1.0,
+  "recovery_accuracy": 1.0,
+  "atomic_halfopen_accuracy": 1.0,
+  "failure_threshold": 3,
+  "open_timeout_real_sec": 1800,
+  "n_error_types": 5
+}

@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
+        stress-ng \
     && rm -rf /var/lib/apt/lists/*
 
 # 의존성 먼저 복사 (레이어 캐시 활용)
@@ -30,6 +31,7 @@ RUN pip install --no-cache-dir \
 # 소스 복사
 COPY src/ src/
 COPY dashboard/ dashboard/
+COPY deploy/ deploy/
 
 # 패키지 설치 (src/ import 경로 정상화)
 RUN pip install --no-cache-dir -e .

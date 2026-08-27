@@ -1,12 +1,19 @@
 """
 ActionExecutor — 에이전트 결정을 안전하게 실행하는 실행기.
 
-보안 설계:
-  1. _validate_command(): shlex 파싱 → 메타문자 → 블랙리스트 → 화이트리스트 순으로 검증.
-  2. _validate_process_name(): 프로세스·서비스 이름에 플래그(-로 시작) 또는
+보안 설계 (4중 방어):
+  1. shlex.split(): 토큰 파싱 단계에서 인용 부호 트릭 차단.
+  2. _SHELL_METACHAR 필터: 파이프·리다이렉트·서브쉘 등 체이닝 메타문자 전량 차단.
+  3. _MAX_CMD_TOKENS: 토큰 수 상한으로 과도하게 긴 명령어(잠재적 체이닝) 차단.
+  4. BANNED_TOKENS + ALLOWED_COMMANDS: 블랙리스트·화이트리스트 이중 필터.
+     - systemctl 3번째 토큰(서비스 이름)은 _PROCESS_NAME_RE 로 추가 검증.
+  5. shell=False 원칙: subprocess.run 은 항상 리스트 형태 토큰을 사용.
+  6. _validate_process_name(): 프로세스·서비스 이름에 플래그(-로 시작) 또는
      비허용 문자가 포함된 경우 즉시 거부 — Flag Injection 방지.
-  3. shell=False 원칙: subprocess.run은 항상 리스트 형태 토큰을 사용.
-  4. Human-in-the-Loop: 모든 LLM 생성 명령은 Slack 승인 후 실행.
+  7. pkill -x: 정확한 프로세스 이름 완전 일치만 허용, 부분 매칭 방지.
+
+Human-in-the-Loop:
+  모든 LLM 생성 명령은 Slack 승인 후 실행.
 
 종료 신호 연동:
   set_shutdown_event()로 외부에서 threading.Event를 주입하면,
@@ -30,16 +37,26 @@ from src import approval_store
 from src.schemas import ActionType, AgentResponse
 from src.slack_bot import SlackChatOps
 
+# ── 환경 변수 설정 ────────────────────────────────────────────────────────────
 _APPROVAL_POLL_INTERVAL = int(os.getenv("APPROVAL_POLL_INTERVAL_SEC", "5"))
 _APPROVAL_TIMEOUT_SEC   = int(os.getenv("APPROVAL_TIMEOUT_SEC", "300"))
 
+# 단일 LLM 명령어의 최대 허용 토큰 수.
+# 이 값을 초과하면 명령 체이닝 시도로 간주해 차단한다.
+# 예: "systemctl restart nginx" = 3토큰, "journalctl --vacuum-size" = 2토큰
+_MAX_CMD_TOKENS = int(os.getenv("MAX_CMD_TOKENS", "6"))
+
+# ── 보안 상수 ─────────────────────────────────────────────────────────────────
+# 쉘 메타문자: 파이프·리다이렉트·서브쉘·글로빙 등 모든 체이닝 수단을 포함.
+# shlex.split 이후에도 토큰 내 메타문자 잔존 여부를 재확인한다.
 _SHELL_METACHAR = frozenset('|><;&`$(){}*?!\\~')
 
 # 프로세스·서비스 이름 허용 패턴:
 # 영문자·숫자·밑줄·하이픈·점만 허용. 플래그(-로 시작) 및 경로 구분자 차단.
 _PROCESS_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_\-.]*$')
 
-# 종료 신호 이벤트 (log_watcher에서 set_shutdown_event()로 주입)
+# ── 종료 신호 ─────────────────────────────────────────────────────────────────
+# log_watcher.start_watching()에서 set_shutdown_event()로 주입된다.
 _shutdown_event: Optional[threading.Event] = None
 
 
@@ -53,7 +70,9 @@ def _is_shutting_down() -> bool:
     return bool(_shutdown_event and _shutdown_event.is_set())
 
 
+# ── 롤백 맵 ──────────────────────────────────────────────────────────────────
 # 명령어 실패 후 시스템을 안전 상태로 되돌리기 위한 롤백 맵.
+# None: 롤백 불필요(읽기 전용 또는 단순 프로세스 종료).
 _ROLLBACK_MAP: dict[str, str | None] = {
     "systemctl":  "__stop_service__",
     "nginx":      "systemctl stop nginx",
@@ -92,7 +111,7 @@ def _validate_process_name(name: str) -> str | None:
       - 허용 패턴(_PROCESS_NAME_RE) 불일치
 
     Returns:
-      안전하면 name, 위험하면 None.
+        안전하면 name, 위험하면 None.
     """
     if not name:
         return None
@@ -106,6 +125,13 @@ def _validate_process_name(name: str) -> str | None:
 
 
 class ActionExecutor:
+    """
+    에이전트 결정(AgentResponse)을 실제 시스템 조치로 변환·실행한다.
+
+    모든 LLM 생성 명령어는 _validate_command()의 4중 보안 필터를 통과한 뒤
+    Human-in-the-Loop(Slack 승인 또는 대화형 확인) 과정을 거쳐 실행된다.
+    """
+
     def __init__(self, slack_webhook_url: Optional[str] = None):
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
@@ -113,11 +139,13 @@ class ActionExecutor:
         # 허용 명령어 화이트리스트.
         # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 사용).
         # 비어있지 않은 set = 첫 번째 인자를 집합 내 값으로만 제한.
+        #
         # [보안] pkill·kill은 신호 플래그 인젝션(-9, -SIGKILL 등)을 방지하기 위해
-        #         명시적 허용 집합으로 제한. 빈 set을 사용하면 _validate_command()의
-        #         인자 검증이 생략되어 'kill -9 1' 같은 파괴적 명령이 통과하는 취약점이
-        #         발생하므로 반드시 비어있지 않은 집합을 사용해야 한다.
-        # python/perl/node 등 인터프리터는 의도적으로 제외 (arbitrary code exec 위험).
+        #        명시적 허용 집합으로 제한. 빈 set을 사용하면 'kill -9 1' 같은
+        #        파괴적 명령이 통과하는 취약점이 발생하므로 반드시 비어있지 않은
+        #        집합을 사용해야 한다.
+        # [보안] python/perl/node 등 인터프리터는 의도적으로 제외.
+        #        (arbitrary code execution 위험)
         self.ALLOWED_COMMANDS: dict[str, set[str]] = {
             "pkill":      {"-f", "-x"},              # 패턴 매칭 플래그만 허용
             "kill":       {"-TERM", "-HUP"},          # 소프트 신호만 허용
@@ -142,8 +170,9 @@ class ActionExecutor:
             "python", "python3", "python2", "perl", "ruby", "node", "php", "lua",
         })
 
-    # ── 공개 인터페이스 ─────────────────────────────────────────────────────
+    # ── 공개 인터페이스 ─────────────────────────────────────────────────────────
     def execute(self, decision: AgentResponse, original_error_log: str = "") -> dict:
+        """AgentResponse를 받아 적절한 시스템 조치를 실행하고 결과 딕셔너리를 반환한다."""
         logging.info("===> [ActionExecutor] 시스템 조치 실행 시작 <===")
         logging.info(f"결정된 액션: {decision.action_type.name}")
 
@@ -190,17 +219,30 @@ class ActionExecutor:
         )
         return result
 
-    # ── 보안 검증 ────────────────────────────────────────────────────────
+    # ── 보안 검증 ────────────────────────────────────────────────────────────
     def _validate_command(self, command: str) -> tuple[list[str], dict | None]:
         """
-        shlex 파싱 → 메타문자 → 블랙리스트 → 화이트리스트 순으로 검증.
-        통과 시 (tokens, None), 차단 시 ([], error_dict) 반환.
+        4단계 보안 파이프라인으로 LLM 생성 명령어를 검증한다.
+
+        검증 순서:
+          1. shlex 파싱 → 인용 부호 트릭, 멀티라인 인젝션 차단
+          2. 토큰 수 상한 → 과도하게 긴 명령어(잠재적 체이닝) 차단
+          3. 메타문자 → 파이프·리다이렉트·서브쉘 등 모든 체이닝 차단
+          4. 경로 포함 여부 → 절대/상대 경로로 화이트리스트 우회 차단
+          5. 블랙리스트 → 파괴적·임의 실행 가능 명령어 차단
+          6. 화이트리스트 → 허용 목록 외 명령어 전량 차단
+          7. systemctl 서비스 이름 검증 → 경로 트래버설·플래그 인젝션 차단
+
+        Returns:
+            통과: (token_list, None)
+            차단: ([], error_dict)
         """
         def _block(reason: str, detail: str) -> tuple[list, dict]:
             logging.error(f"  [Security Block] {reason}: {detail}")
             return [], {"success": False, "result_category": "FAILURE",
                         "error_type": "SecurityBlock", "error_detail": detail}
 
+        # 1. shlex 파싱
         try:
             tokens = shlex.split(command)
         except ValueError as e:
@@ -212,18 +254,29 @@ class ActionExecutor:
             return [], {"success": False, "result_category": "FAILURE",
                         "error_type": "EmptyCommand", "error_detail": "빈 토큰 목록"}
 
+        # 2. 토큰 수 상한 — 허용 범위를 벗어나는 복잡한 명령은 잠재적 공격 시그니처
+        if len(tokens) > _MAX_CMD_TOKENS:
+            return _block(
+                "토큰 수 초과",
+                f"토큰 {len(tokens)}개 (최대 허용: {_MAX_CMD_TOKENS}개): {tokens}",
+            )
+
+        # 3. 쉘 메타문자 검사
         for token in tokens:
             if any(ch in _SHELL_METACHAR for ch in token):
                 return _block("메타문자 감지", f"토큰 {token!r} 에 쉘 메타문자 포함")
 
         base_cmd = tokens[0]
 
+        # 4. 경로 포함 명령어 — 화이트리스트 우회 방지
         if "/" in base_cmd or "\\" in base_cmd:
             return _block("경로 포함 명령어", f"경로 구분자가 포함된 명령어: {base_cmd!r}")
 
+        # 5. 블랙리스트
         if base_cmd in self.BANNED_TOKENS:
             return _block("블랙리스트 명령어", base_cmd)
 
+        # 6. 화이트리스트
         if base_cmd not in self.ALLOWED_COMMANDS:
             return _block("허용되지 않은 명령어", base_cmd)
 
@@ -236,10 +289,29 @@ class ActionExecutor:
                     f"'{base_cmd}' 의 인자 {first_arg!r} 미허용. 허용: {sorted(allowed_args)}",
                 )
 
+        # 7. systemctl 서비스 이름 추가 검증.
+        #    "systemctl restart ../etc/shadow" 같은 경로 트래버설 및
+        #    "systemctl restart -f" 같은 플래그 인젝션을 명시적으로 차단한다.
+        if base_cmd == "systemctl" and len(tokens) >= 3:
+            svc = tokens[2]
+            if not _PROCESS_NAME_RE.match(svc):
+                return _block(
+                    "서비스 이름 검증 실패",
+                    f"systemctl 서비스 이름 {svc!r} 에 비허용 문자 포함",
+                )
+
         return tokens, None
 
     # ── LLM 명령어 실행 ─────────────────────────────────────────────────
     def _execute_llm_command(self, command: str, error_log: str) -> dict:
+        """
+        검증·승인 파이프라인을 통해 LLM 생성 명령어를 실행한다.
+
+        실행 모드:
+          AUTO_APPROVE=true  → 검증 후 즉시 실행 (CI/테스트 환경)
+          대화형 터미널      → stdin 승인 프롬프트
+          데몬 모드          → Slack 승인 대기 (최대 _APPROVAL_TIMEOUT_SEC)
+        """
         if not command:
             logging.warning("  [실행거부] 실행할 명령어가 없습니다.")
             return {"success": False, "result_category": "FAILURE",
@@ -292,7 +364,7 @@ class ActionExecutor:
 
             deadline = time.time() + _APPROVAL_TIMEOUT_SEC
             while time.time() < deadline:
-                # 종료 신호 감지: SIGTERM 수신 시 승인 대기 즉시 취소
+                # SIGTERM 수신 시 승인 대기를 즉시 취소해 깨끗하게 종료한다.
                 if _is_shutting_down():
                     logging.warning("  [종료 신호] 승인 대기 중 에이전트 종료 감지. 실행 취소.")
                     return _result(False, "ShutdownDuringApproval",
@@ -364,7 +436,7 @@ class ActionExecutor:
             service = tokens[-1] if len(tokens) >= 3 else None
             if not service or service == base_cmd:
                 return
-            # 롤백 서비스 이름도 안전성 검증
+            # 롤백 대상 서비스 이름도 _validate_process_name 으로 재검증
             if not _validate_process_name(service):
                 logging.warning(f"  [롤백 차단] 서비스 이름 검증 실패: {service!r}")
                 return
@@ -389,6 +461,12 @@ class ActionExecutor:
 
     # ── 개별 조치 구현 ───────────────────────────────────────────────────
     def _clear_memory(self) -> tuple[bool, str | None]:
+        """
+        gc.collect()로 Python 힙을 정리하고, 가용 시 GPU VRAM 캐시를 초기화한다.
+
+        Intel UMA 환경에서 VRAM과 RAM을 공유하므로, VRAM 캐시 해제가
+        시스템 전체 가용 메모리 증가에 직접 기여한다.
+        """
         logging.warning("[조치] 시스템 메모리 최적화 시작...")
         collected = gc.collect()
         logging.info(f"  OS RAM 확보 완료 (수거: {collected}개)")
@@ -408,7 +486,7 @@ class ActionExecutor:
         return True, None
 
     def _verify_process_dead(self, target_name: str, wait_sec: float = 1.0) -> bool:
-        """pkill 후 프로세스가 실제로 종료됐는지 pgrep으로 확인."""
+        """pkill 후 프로세스가 실제로 종료됐는지 pgrep -x 로 확인한다."""
         time.sleep(wait_sec)
         try:
             proc = subprocess.run(
@@ -426,7 +504,7 @@ class ActionExecutor:
             return False
 
     def _verify_service_active(self, service_name: str, wait_sec: float = 2.0) -> bool:
-        """systemctl restart 후 서비스가 실제로 active 상태인지 확인."""
+        """systemctl restart 후 서비스가 실제로 active 상태인지 확인한다."""
         time.sleep(wait_sec)
         try:
             proc = subprocess.run(
@@ -445,9 +523,12 @@ class ActionExecutor:
 
     def _kill_process(self, target: str | None) -> tuple[bool, str | None]:
         """
-        지정 프로세스를 pkill로 종료한다.
+        지정 프로세스를 pkill -x 로 종료한다.
 
-        보안: _validate_process_name()으로 플래그 인젝션(-9 등) 및 비허용 문자를 차단한다.
+        보안:
+          - _validate_process_name()으로 플래그 인젝션(-9 등) 및 비허용 문자를 차단.
+          - '-x' 플래그: 이름이 정확히 일치하는 프로세스만 종료 (부분 매칭 방지).
+            예) target="nginx" 일 때 "nginx-helper" 같은 다른 프로세스를 종료하지 않는다.
         """
         safe_name = _validate_process_name(target or "")
         if safe_name is None:
@@ -458,13 +539,13 @@ class ActionExecutor:
         logging.warning(f"[조치] '{safe_name}' 프로세스 종료 시도...")
         try:
             proc = subprocess.run(
-                ["pkill", safe_name],
+                ["pkill", "-x", safe_name],   # -x: 완전 일치만 허용
                 capture_output=True, text=True, shell=False, timeout=10,
             )
             if proc.returncode == 0:
                 logging.info(f"  '{safe_name}' 종료 신호 전송. 복구 검증 중...")
                 ok = self._verify_process_dead(safe_name)
-                return ok, None if ok else f"'{safe_name}' 종료 후 프로세스가 여전히 실행 중"
+                return ok, (None if ok else f"'{safe_name}' 종료 후 프로세스가 여전히 실행 중")
             msg = f"'{safe_name}' 매칭 프로세스 없음 (이미 종료됐을 수 있음)"
             logging.warning(f"  {msg}.")
             return False, msg
@@ -479,7 +560,7 @@ class ActionExecutor:
 
     def _restart_service(self, target: str | None) -> tuple[bool, str | None]:
         """
-        systemctl restart로 서비스를 재시작한다.
+        systemctl restart 로 서비스를 재시작한다.
 
         보안: _validate_process_name()으로 플래그 인젝션 및 경로 트래버설을 차단한다.
         """
@@ -498,7 +579,7 @@ class ActionExecutor:
             if proc.returncode == 0:
                 logging.info(f"  '{safe_name}' 재시작 신호 전송. 복구 검증 중...")
                 ok = self._verify_service_active(safe_name)
-                return ok, None if ok else f"'{safe_name}' 재시작 후 active 상태 미확인"
+                return ok, (None if ok else f"'{safe_name}' 재시작 후 active 상태 미확인")
             detail = proc.stderr.strip() or f"returncode={proc.returncode}"
             logging.error(f"'{safe_name}' 재시작 실패: {detail}")
             self._try_rollback(f"systemctl restart {safe_name}")
@@ -528,8 +609,8 @@ class ActionExecutor:
         }
         payload = {
             "attachments": [{
-                "color":    color_map.get(severity, "#cccccc"),
-                "text":     message,
+                "color":     color_map.get(severity, "#cccccc"),
+                "text":      message,
                 "mrkdwn_in": ["text"],
             }]
         }

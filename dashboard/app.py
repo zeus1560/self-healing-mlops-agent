@@ -221,7 +221,7 @@ def _make_story(row: pd.Series) -> tuple[str, str, str]:
 
 
 # ── 데이터 로드 ───────────────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def load_circuit_breaker_status() -> pd.DataFrame:
     """circuit_breaker 테이블에서 최근 상태를 읽어온다."""
     if not DB_PATH.exists():
@@ -242,7 +242,7 @@ def load_circuit_breaker_status() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def load_metrics() -> pd.DataFrame:
     if not DB_PATH.exists():
         return pd.DataFrame()
@@ -251,7 +251,7 @@ def load_metrics() -> pd.DataFrame:
             df = pd.read_sql_query("SELECT * FROM metrics ORDER BY timestamp DESC", conn)
         if df.empty:
             return df
-        df["timestamp"]       = pd.to_datetime(df["timestamp"])
+        df["timestamp"]       = pd.to_datetime(df["timestamp"], format="mixed", utc=True).dt.tz_convert(None)
         df["latency_ms"]      = (df["latency_sec"] * 1000).round(1)
         df["result_category"] = df["result_category"].fillna("SUCCESS")
         # error_category: LLM이 분류한 도메인 카테고리 (우선). 없으면 텍스트 추론.
@@ -288,7 +288,7 @@ with st.sidebar:
     st.markdown("## 🛡️ MLOps Monitor")
     st.divider()
 
-    auto_refresh = st.toggle("🔄 자동 새로고침 (10초)", value=True)
+    auto_refresh = st.toggle("🔄 자동 새로고침 (5초)", value=True)
     if st.button("⟳  지금 새로고침", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -428,7 +428,7 @@ with tab1:
             "📊 아직 수집된 메트릭 데이터가 없습니다. "
             "Agent가 에러를 처리하면 여기에 자동으로 표시됩니다."
         )
-    else:
+    if not df.empty:
         total   = len(df)
         success = int(df["success"].astype(int).sum())
         s_rate  = success / total * 100
@@ -688,7 +688,7 @@ with tab2:
             "📊 아직 수집된 메트릭 데이터가 없습니다. "
             "Agent가 에러를 처리하면 여기에 자동으로 표시됩니다."
         )
-    else:
+    if not df.empty:
         # ── 서킷 브레이커 실시간 상태 ────────────────────────────────────────
         cb_df = load_circuit_breaker_status()
         open_cnt      = int((cb_df["state"] == "OPEN").sum())      if not cb_df.empty else 0
@@ -1532,5 +1532,5 @@ with tab4:
 
 # ── 자동 새로고침 ─────────────────────────────────────────────────────────────
 if auto_refresh:
-    time.sleep(10)
+    time.sleep(5)
     st.rerun()
