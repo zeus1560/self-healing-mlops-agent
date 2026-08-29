@@ -36,6 +36,7 @@ from src.maintenance import MaintenanceRunner
 from src.observability import AgentObserver
 from src.proactive_monitor import ProactiveMonitor
 from src.slack_bot import SlackChatOps
+from src.telegram_bot import get_chatops_client
 from src.utils.debouncer import LogDebouncer
 from src.vector_db_purger import VectorDBPurger
 from src.utils.logging_config import setup_json_logging
@@ -287,7 +288,7 @@ def start_watching(target_log_files: str | list[str]) -> None:
     clusterer     = ErrorClusterer()
     purger        = VectorDBPurger()
     etl_scheduler = ETLScheduler()
-    slack         = SlackChatOps()
+    chatops       = get_chatops_client() or SlackChatOps()
 
     pipeline_cb = first_handler.trigger_agent_pipeline if first_handler else None
     if pipeline_cb is None:
@@ -307,7 +308,7 @@ def start_watching(target_log_files: str | list[str]) -> None:
             _last_cluster = time.time()
             if result and result["new_patterns"]:
                 patterns_str = "\n".join(f"• `{p}`" for p in result["new_patterns"])
-                slack.send_notification(
+                chatops.send_notification(
                     title="🆕 새로운 에러 패턴 감지",
                     message=(
                         f"*Vector DB에서 신규 에러 카테고리가 발견되었습니다.*\n"
@@ -322,7 +323,7 @@ def start_watching(target_log_files: str | list[str]) -> None:
                 purged_str = "\n".join(
                     f"• `{d[:32]}...`" for d in purge_result["purged"]
                 )
-                slack.send_notification(
+                chatops.send_notification(
                     title="🗑️ Vector DB 불량 항목 자동 정제",
                     message=(
                         f"*반복 실패를 유발한 항목을 삭제했습니다.*\n"

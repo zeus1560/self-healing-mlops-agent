@@ -36,6 +36,7 @@ import requests
 from src import approval_store
 from src.schemas import ActionType, AgentResponse
 from src.slack_bot import SlackChatOps
+from src.telegram_bot import get_chatops_client
 
 # ── 환경 변수 설정 ────────────────────────────────────────────────────────────
 _APPROVAL_POLL_INTERVAL = int(os.getenv("APPROVAL_POLL_INTERVAL_SEC", "5"))
@@ -353,14 +354,14 @@ class ActionExecutor:
                 f"  확인 및 승인: {pending_url}"
             )
             try:
-                chatops = SlackChatOps()
+                chatops = get_chatops_client() or SlackChatOps()
                 chatops.send_approval_request(
                     error_log=error_log,
                     command=command,
                     reason=f"🔐 명령어 확인 및 승인: {pending_url}",
                 )
             except Exception:
-                logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
+                logging.error(f"  [ChatOps] 승인 요청 발송 실패:\n{traceback.format_exc()}")
 
             deadline = time.time() + _APPROVAL_TIMEOUT_SEC
             while time.time() < deadline:
