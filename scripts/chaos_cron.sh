@@ -9,7 +9,7 @@ ENV_FILE="$REPO_DIR/.env"
 LOCK_FILE="/tmp/chaos_injector.lock"
 AUDIT_LOG="$REPO_DIR/data/chaos_injector.log"
 TARGET_URL="http://localhost:9000"
-FAULT_TYPES=(oom cpu diskfull process_crash)
+FAULT_TYPES=(oom cpu diskfull process_crash permission_denied path_not_found config_error)
 
 if [ -f "$ENV_FILE" ] && ! grep -qE '^CHAOS_ENABLED=true\b' "$ENV_FILE"; then
     exit 0
