@@ -1,5 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks
-import threading, time, os, subprocess, sys
+import threading, time, os, subprocess, sys, json
 from datetime import datetime
 
 app = FastAPI(title="Target App (Simulated)")
@@ -158,6 +158,82 @@ async def inject_process_crash(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(task)
     return {"injected": "process_crash", "note": "container will be killed and auto-restarted"}
+
+
+@app.post("/inject/permission_denied")
+async def inject_permission_denied():
+    """실행 비트가 전혀 없는 스크립트 실행 시도 — root도 우회 못 하는 실제 PermissionError 유발.
+    (root는 파일 읽기/쓰기 권한 검사는 우회하지만, exec는 최소 하나의 x 비트가 없으면 root도 EACCES)"""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "permission_denied", "skipped": "another injection in progress"}
+    script_path = "/app/data/locked_reload.sh" if os.path.isdir('/app/data') else "./data/locked_reload.sh"
+    try:
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\necho reload\n")
+        os.chmod(script_path, 0o000)
+        try:
+            subprocess.run([script_path], capture_output=True, text=True, timeout=5)
+            _append_evidence("ERROR", f"expected PermissionError executing {script_path} (mode=000) but it ran — investigate")
+        except PermissionError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"PermissionError — [Errno 13] Permission denied: '{script_path}' (mode=000, no execute bit set): {e}",
+            )
+        return {"injected": "permission_denied"}
+    finally:
+        try:
+            os.chmod(script_path, 0o644)
+            if os.path.exists(script_path):
+                os.remove(script_path)
+        finally:
+            _injection_lock.release()
+
+
+@app.post("/inject/path_not_found")
+async def inject_path_not_found():
+    """존재하지 않는 설정 경로를 오픈 시도해 실제 FileNotFoundError 유발."""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "path_not_found", "skipped": "another injection in progress"}
+    missing_path = "/app/data/missing_module_v2.conf" if os.path.isdir('/app/data') else "./data/missing_module_v2.conf"
+    try:
+        try:
+            open(missing_path, "r", encoding="utf-8").close()
+            _append_evidence("ERROR", f"expected FileNotFoundError opening {missing_path} but it existed — investigate")
+        except FileNotFoundError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"FileNotFoundError — [Errno 2] No such file or directory: '{missing_path}': {e}",
+            )
+        return {"injected": "path_not_found"}
+    finally:
+        _injection_lock.release()
+
+
+@app.post("/inject/config_error")
+async def inject_config_error():
+    """문법 오류가 있는 JSON 설정 파일을 실제로 파싱 시도해 JSONDecodeError 유발."""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "config_error", "skipped": "another injection in progress"}
+    config_path = "/app/data/app_config.json" if os.path.isdir('/app/data') else "./data/app_config.json"
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write('{"proxy_cache_methods": [GET, POST],}')
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                json.load(f)
+            _append_evidence("ERROR", f"expected JSONDecodeError parsing {config_path} but it parsed — investigate")
+        except json.JSONDecodeError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"Configuration Error — JSONDecodeError parsing {config_path}: {e}",
+            )
+        return {"injected": "config_error"}
+    finally:
+        try:
+            if os.path.exists(config_path):
+                os.remove(config_path)
+        finally:
+            _injection_lock.release()
 
 
 @app.post("/stop")
