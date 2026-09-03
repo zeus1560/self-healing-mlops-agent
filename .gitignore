@@ -48,3 +48,7 @@ logs/
 .DS_Store
 Thumbs.db
 *.egg-info/
+
+# 런타임 SQLite WAL/SHM 파일 — 계속 바뀌므로 추적 제외
+data/*.db-shm
+data/*.db-wal
