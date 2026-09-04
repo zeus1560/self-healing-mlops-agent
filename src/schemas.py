@@ -43,6 +43,15 @@ class ErrorCategory(str, Enum):
     UNKNOWN = "Unknown"
 
 
+class AutonomyLevel(str, Enum):
+    """카테고리별 Progressive Autonomy 단계."""
+
+    READ_ONLY            = "read_only"            # 분류·로그만, 조치 없음
+    PROPOSE              = "propose"               # 조치 제안 알림만, 실행 안 함
+    APPROVE_THEN_EXECUTE = "approve_then_execute"  # 승인 후 실행
+    AUTO                 = "auto"                  # 즉시 실행
+
+
 class ActionType(str, Enum):
     """시스템이 허용하는 안전한 조치 목록."""
 

@@ -34,3 +34,14 @@ def isolate_approval_store(tmp_path):
     store.init_table()
     yield
     store._DB_PATH = orig
+
+
+@pytest.fixture(autouse=True)
+def isolate_autonomy_store(tmp_path):
+    """approval_store와 동일한 패턴으로 autonomy_store도 임시 DB로 격리한다."""
+    import src.autonomy_store as store
+    orig = store._DB_PATH
+    store._DB_PATH = str(tmp_path / "autonomy_test.db")
+    store.init_table()
+    yield
+    store._DB_PATH = orig

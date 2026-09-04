@@ -33,8 +33,8 @@ from typing import Optional
 
 import requests
 
-from src import approval_store
-from src.schemas import ActionType, AgentResponse
+from src import approval_store, autonomy_store
+from src.schemas import ActionType, AgentResponse, AutonomyLevel
 from src.slack_bot import SlackChatOps
 
 # ── 환경 변수 설정 ────────────────────────────────────────────────────────────
@@ -101,6 +101,21 @@ def _result(ok: bool, fail_type: str, detail: str | None = None) -> dict:
     }
 
 
+def _describe_action(decision: AgentResponse) -> str:
+    """
+    승인 요청 메시지에 표시할 사람이 읽을 수 있는 조치 설명을 만든다.
+
+    LLM/Rule 경로는 이미 구체적인 셸 명령어(decision.command)가 있으므로 그대로 쓰고,
+    L1 캐시가 반환하는 구조화된 액션(RESTART_SERVICE 등)은 target_process를 붙여
+    "restart_service(nginx)" 형태로 표시한다.
+    """
+    if decision.command:
+        return decision.command
+    if decision.target_process:
+        return f"{decision.action_type.value}({decision.target_process})"
+    return decision.action_type.value
+
+
 def _validate_process_name(name: str) -> str | None:
     """
     프로세스/서비스 이름의 안전성을 검증한다.
@@ -135,6 +150,7 @@ class ActionExecutor:
     def __init__(self, slack_webhook_url: Optional[str] = None):
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
+        autonomy_store.init_table()
 
         # 허용 명령어 화이트리스트.
         # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 사용).
@@ -176,17 +192,53 @@ class ActionExecutor:
         logging.info("===> [ActionExecutor] 시스템 조치 실행 시작 <===")
         logging.info(f"결정된 액션: {decision.action_type.name}")
 
+        result = self._dispatch(decision, original_error_log)
+
+        logging.info(
+            f"===> [ActionExecutor] 완료 | 결과:{result['result_category']}"
+            + (f" | {result['error_type']}" if result["error_type"] else "")
+            + " <===\n"
+        )
+        return result
+
+    # ── Progressive Autonomy 게이트 + 액션 분기 ─────────────────────────────────
+    def _dispatch(self, decision: AgentResponse, original_error_log: str) -> dict:
+        """
+        카테고리별 Autonomy 레벨을 확인한 뒤 실제 액션 분기로 넘긴다.
+
+        ESCALATE_TO_HUMAN/ALERT_ONLY는 이미 그 자체로 "조치 없음/사람에게 위임"이므로
+        게이트 대상에서 제외한다.
+        """
+        _ungated = (ActionType.ESCALATE_TO_HUMAN, ActionType.ALERT_ONLY)
+        if decision.action_type not in _ungated:
+            level = autonomy_store.get_level(decision.error_category)
+
+            if level == AutonomyLevel.READ_ONLY:
+                return self._observed_only(decision)
+
+            if level == AutonomyLevel.PROPOSE:
+                return self._propose_only(decision, original_error_log)
+
+            if (level == AutonomyLevel.APPROVE_THEN_EXECUTE
+                    and decision.action_type not in (ActionType.EXECUTE_LLM_COMMAND,
+                                                      ActionType.EXECUTE_RULE_COMMAND)):
+                outcome = self._await_approval(_describe_action(decision), original_error_log)
+                if outcome != "approved":
+                    return self._approval_failure_result(outcome)
+            # level == AUTO, 또는 APPROVE_THEN_EXECUTE + LLM/Rule 커맨드(아래에서 자체 승인 처리)
+            # → 그대로 통과해서 실제 액션 분기로 진행
+
         if decision.action_type == ActionType.CLEAR_MEMORY:
             ok, err = self._clear_memory()
-            result  = _result(ok, "MemoryClearFailed", err)
+            return _result(ok, "MemoryClearFailed", err)
 
         elif decision.action_type == ActionType.RESTART_SERVICE:
             ok, err = self._restart_service(decision.target_process)
-            result  = _result(ok, "ServiceRestartFailed", err)
+            return _result(ok, "ServiceRestartFailed", err)
 
         elif decision.action_type == ActionType.ESCALATE_TO_HUMAN:
             self._escalate_to_human(decision.reasoning)
-            result = {
+            return {
                 "success":         True,
                 "result_category": "IMPOSSIBLE",
                 "error_type":      "EscalatedToHuman",
@@ -195,29 +247,23 @@ class ActionExecutor:
 
         elif decision.action_type == ActionType.KILL_PROCESS:
             ok, err = self._kill_process(decision.target_process)
-            result  = _result(ok, "ProcessKillFailed", err)
+            return _result(ok, "ProcessKillFailed", err)
 
         elif decision.action_type == ActionType.ALERT_ONLY:
             logging.warning(
                 f"[ALERT_ONLY] 조치 없음, 관찰만 기록: {decision.reasoning[:200]}"
             )
-            result = _result(True, "")
+            return _result(True, "")
 
         elif decision.action_type in (ActionType.EXECUTE_LLM_COMMAND,
                                       ActionType.EXECUTE_RULE_COMMAND):
-            result = self._execute_llm_command(decision.command or "", original_error_log)
+            return self._execute_llm_command(decision, original_error_log)
 
         else:
             logging.warning(f"수행 불가 액션: {decision.action_type}")
             result = _result(False, "UnknownActionType", str(decision.action_type))
             result["result_category"] = "IMPOSSIBLE"
-
-        logging.info(
-            f"===> [ActionExecutor] 완료 | 결과:{result['result_category']}"
-            + (f" | {result['error_type']}" if result["error_type"] else "")
-            + " <===\n"
-        )
-        return result
+            return result
 
     # ── 보안 검증 ────────────────────────────────────────────────────────────
     def _validate_command(self, command: str) -> tuple[list[str], dict | None]:
@@ -302,16 +348,131 @@ class ActionExecutor:
 
         return tokens, None
 
+    # ── Progressive Autonomy 헬퍼 ────────────────────────────────────────
+    def _observed_only(self, decision: AgentResponse) -> dict:
+        """READ_ONLY 레벨: 조치를 실행하지 않고 관찰 기록만 남긴다."""
+        logging.info(
+            f"[READ_ONLY] '{decision.error_category}' 카테고리 — 조치 미실행, 관찰만 기록: "
+            f"{_describe_action(decision)}"
+        )
+        return {
+            "success":         True,
+            "result_category": "OBSERVED_ONLY",
+            "error_type":      None,
+            "error_detail":    decision.reasoning[:300],
+        }
+
+    def _propose_only(self, decision: AgentResponse, error_log: str) -> dict:
+        """PROPOSE 레벨: 조치를 실행하지 않고 제안 알림만 보낸다."""
+        description = _describe_action(decision)
+        logging.info(f"[PROPOSE] '{decision.error_category}' 카테고리 — 제안만 발송: {description}")
+        try:
+            SlackChatOps().send_notification(
+                title="🔎 [Self-Healing Agent] 제안된 조치 (미실행)",
+                message=(
+                    f"*카테고리*: {decision.error_category}\n"
+                    f"*제안된 조치*: `{description}`\n"
+                    f"*근거*: {decision.reasoning[:300]}\n\n"
+                    f"이 카테고리는 아직 '제안' 단계라 자동/승인 실행되지 않습니다."
+                ),
+            )
+        except Exception:
+            logging.error(f"  [알림] 제안 발송 실패:\n{traceback.format_exc()}")
+        return {
+            "success":         True,
+            "result_category": "PROPOSED_ONLY",
+            "error_type":      None,
+            "error_detail":    decision.reasoning[:300],
+        }
+
+    def _approval_failure_result(self, outcome: str) -> dict:
+        """_await_approval()의 비승인 결과를 표준 결과 딕셔너리로 변환한다."""
+        if outcome == "shutdown":
+            return _result(False, "ShutdownDuringApproval", "에이전트 종료 신호로 승인 대기 취소")
+        if outcome == "timeout":
+            return {"success": False, "result_category": "IMPOSSIBLE",
+                    "error_type": "ApprovalTimeout",
+                    "error_detail": f"{_APPROVAL_TIMEOUT_SEC}s 대기 후 응답 없음"}
+        return {"success": False, "result_category": "FAILURE",
+                "error_type": "HumanRejected",
+                "error_detail": "관리자가 실행을 거절했습니다."}
+
+    def _await_approval(self, description: str, error_log: str) -> str:
+        """
+        Human-in-the-Loop 승인을 기다린다. LLM 커맨드·구조화된 액션 양쪽에서 공유한다.
+
+        실행 모드:
+          AUTO_APPROVE=true  → 즉시 승인 (CI/테스트 환경)
+          대화형 터미널      → stdin 승인 프롬프트
+          데몬 모드          → Slack 승인 대기 (최대 _APPROVAL_TIMEOUT_SEC)
+
+        Returns: "approved" | "rejected" | "timeout" | "shutdown"
+        """
+        auto_approve = os.getenv("AUTO_APPROVE", "false").lower() == "true"
+        try:
+            is_interactive = sys.stdin.isatty()
+        except Exception:
+            is_interactive = False
+
+        if auto_approve:
+            logging.info(f"  [AUTO_APPROVE] 자동 승인 모드. 조치: {description}")
+            return "approved"
+
+        if is_interactive:
+            print("\n" + "=" * 50)
+            print("[Human-in-the-Loop] 실행 대기 중인 조치:", description)
+            approval = input("이 조치를 실행하시겠습니까? (y/n): ").strip().lower()
+            print("=" * 50 + "\n")
+            if approval != "y":
+                logging.warning("[관리자 거절] 조치가 취소되었습니다.")
+                return "rejected"
+            return "approved"
+
+        # 데몬 모드 — Slack 승인 대기
+        approval_store.init_table()
+        token       = approval_store.create_request(description, error_log, "")
+        base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
+        pending_url = f"{base_url}/pending/{token}"
+        logging.warning(
+            f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {description}\n"
+            f"  확인 및 승인: {pending_url}"
+        )
+        try:
+            chatops = SlackChatOps()
+            chatops.send_approval_request(
+                error_log=error_log,
+                command=description,
+                reason=f"🔐 명령어 확인 및 승인: {pending_url}",
+            )
+        except Exception:
+            logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
+
+        deadline = time.time() + _APPROVAL_TIMEOUT_SEC
+        while time.time() < deadline:
+            # SIGTERM 수신 시 승인 대기를 즉시 취소해 깨끗하게 종료한다.
+            if _is_shutting_down():
+                logging.warning("  [종료 신호] 승인 대기 중 에이전트 종료 감지. 실행 취소.")
+                return "shutdown"
+            time.sleep(_APPROVAL_POLL_INTERVAL)
+            status = approval_store.get_status(token)
+            if status == "approved":
+                logging.info("  [승인됨] 승인 확인. 실행 진행.")
+                return "approved"
+            if status == "rejected":
+                logging.warning("  [거절됨] 거절 확인. 실행 취소.")
+                return "rejected"
+        logging.warning(f"  [타임아웃] {_APPROVAL_TIMEOUT_SEC}s 내 응답 없음. 실행 취소.")
+        return "timeout"
+
     # ── LLM 명령어 실행 ─────────────────────────────────────────────────
-    def _execute_llm_command(self, command: str, error_log: str) -> dict:
+    def _execute_llm_command(self, decision: AgentResponse, error_log: str) -> dict:
         """
         검증·승인 파이프라인을 통해 LLM 생성 명령어를 실행한다.
 
-        실행 모드:
-          AUTO_APPROVE=true  → 검증 후 즉시 실행 (CI/테스트 환경)
-          대화형 터미널      → stdin 승인 프롬프트
-          데몬 모드          → Slack 승인 대기 (최대 _APPROVAL_TIMEOUT_SEC)
+        카테고리가 AUTO까지 승급된 경우에만 승인 없이 즉시 실행하고,
+        그 외(APPROVE_THEN_EXECUTE)에는 항상 _await_approval()을 거친다.
         """
+        command = decision.command or ""
         if not command:
             logging.warning("  [실행거부] 실행할 명령어가 없습니다.")
             return {"success": False, "result_category": "FAILURE",
@@ -322,68 +483,11 @@ class ActionExecutor:
         if err:
             return err
 
-        auto_approve = os.getenv("AUTO_APPROVE", "false").lower() == "true"
-        try:
-            is_interactive = sys.stdin.isatty()
-        except Exception:
-            is_interactive = False
-
-        if auto_approve:
-            logging.info(f"  [AUTO_APPROVE] 자동 승인 모드. 커맨드: {command}")
-
-        elif is_interactive:
-            print("\n" + "=" * 50)
-            print("[Human-in-the-Loop] 실행 대기 중인 명령어:", command)
-            approval = input("이 명령어를 실행하시겠습니까? (y/n): ").strip().lower()
-            if approval != "y":
-                logging.warning("[관리자 거절] 조치가 취소되었습니다.")
-                return {"success": False, "result_category": "FAILURE",
-                        "error_type": "HumanRejected",
-                        "error_detail": "관리자가 실행을 거절했습니다."}
-            print("=" * 50 + "\n")
-
-        else:
-            # 데몬 모드 — Slack 승인 대기
-            approval_store.init_table()
-            token       = approval_store.create_request(command, error_log, "")
-            base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
-            pending_url = f"{base_url}/pending/{token}"
-            logging.warning(
-                f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {command}\n"
-                f"  확인 및 승인: {pending_url}"
-            )
-            try:
-                chatops = SlackChatOps()
-                chatops.send_approval_request(
-                    error_log=error_log,
-                    command=command,
-                    reason=f"🔐 명령어 확인 및 승인: {pending_url}",
-                )
-            except Exception:
-                logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
-
-            deadline = time.time() + _APPROVAL_TIMEOUT_SEC
-            while time.time() < deadline:
-                # SIGTERM 수신 시 승인 대기를 즉시 취소해 깨끗하게 종료한다.
-                if _is_shutting_down():
-                    logging.warning("  [종료 신호] 승인 대기 중 에이전트 종료 감지. 실행 취소.")
-                    return _result(False, "ShutdownDuringApproval",
-                                   "에이전트 종료 신호로 승인 대기 취소")
-                time.sleep(_APPROVAL_POLL_INTERVAL)
-                status = approval_store.get_status(token)
-                if status == "approved":
-                    logging.info("  [승인됨] Slack 승인 확인. 실행 진행.")
-                    break
-                if status == "rejected":
-                    logging.warning("  [거절됨] Slack 거절 확인. 실행 취소.")
-                    return {"success": False, "result_category": "FAILURE",
-                            "error_type": "HumanRejected",
-                            "error_detail": "Slack에서 관리자가 실행을 거절했습니다."}
-            else:
-                logging.warning(f"  [타임아웃] {_APPROVAL_TIMEOUT_SEC}s 내 응답 없음. 실행 취소.")
-                return {"success": False, "result_category": "IMPOSSIBLE",
-                        "error_type": "ApprovalTimeout",
-                        "error_detail": f"{_APPROVAL_TIMEOUT_SEC}s 대기 후 응답 없음: {command}"}
+        level = autonomy_store.get_level(decision.error_category)
+        if level != AutonomyLevel.AUTO:
+            outcome = self._await_approval(command, error_log)
+            if outcome != "approved":
+                return self._approval_failure_result(outcome)
 
         logging.info(f"  [조치 승인됨] 커맨드 실행: {command}")
         try:

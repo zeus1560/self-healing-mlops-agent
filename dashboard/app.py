@@ -183,7 +183,16 @@ def _make_story(row: pd.Series) -> tuple[str, str, str]:
 
     source_desc = _SOURCE_DESC.get(source, source)
 
-    if is_success:
+    if result in ("OBSERVED_ONLY", "PROPOSED_ONLY"):
+        icon = "👁️" if result == "OBSERVED_ONLY" else "📋"
+        verb = "관찰만 기록했습니다(조치 없음)" if result == "OBSERVED_ONLY" else "조치를 제안만 했습니다(미실행)"
+        narrative = (
+            f"'{cat_label}' 에러를 감지했지만, 이 카테고리는 아직 Progressive Autonomy "
+            f"단계가 낮아 {verb} — 자가 치유 성공 건수에는 포함되지 않습니다."
+        )
+        detail = ""
+
+    elif is_success:
         icon = "✅"
         if source == "L1_CACHE":
             narrative = (
@@ -429,13 +438,22 @@ with tab1:
             "Agent가 에러를 처리하면 여기에 자동으로 표시됩니다."
         )
     if not df.empty:
-        total   = len(df)
-        success = int(df["success"].astype(int).sum())
-        s_rate  = success / total * 100
+        # Progressive Autonomy READ_ONLY/PROPOSE 레벨은 실제로 조치를 실행하지
+        # 않았으므로(success=True지만 미실행) "성공률" 헤드라인에서 제외한다 —
+        # 안 그러면 미실행 제안이 자가 치유 성공처럼 집계된다.
+        _acted = df[~df["result_category"].isin(["OBSERVED_ONLY", "PROPOSED_ONLY"])]
+
+        total   = len(_acted)
+        success = int(_acted["success"].astype(int).sum()) if total else 0
+        s_rate  = (success / total * 100) if total else 0.0
         l1_rate = (df["resolution_source"] == "L1_CACHE").mean() * 100
         avg_ms  = df["latency_ms"].mean()
 
-        prev_s_rate = (df_prev["success"].astype(int).mean() * 100) if not df_prev.empty else None
+        _acted_prev = (
+            df_prev[~df_prev["result_category"].isin(["OBSERVED_ONLY", "PROPOSED_ONLY"])]
+            if not df_prev.empty else df_prev
+        )
+        prev_s_rate = (_acted_prev["success"].astype(int).mean() * 100) if not _acted_prev.empty else None
         prev_l1     = ((df_prev["resolution_source"] == "L1_CACHE").mean() * 100) if not df_prev.empty else None
         prev_ms     = (df_prev["latency_ms"].mean()) if not df_prev.empty else None
 
@@ -455,8 +473,9 @@ with tab1:
 
         _oom_count = 0
         _oom_sr_val = 100.0
-        if "error_category" in df.columns:
-            _oom_tmp = df[df["error_category"].str.upper().str.contains(
+        if "error_category" in _acted.columns:
+            # OBSERVED_ONLY/PROPOSED_ONLY 제외 — 미실행 건을 OOM 방어 성공처럼 집계하지 않는다.
+            _oom_tmp = _acted[_acted["error_category"].str.upper().str.contains(
                 "OOM|OUT_OF_MEMORY|MEMORY", na=False
             )]
             _oom_count = len(_oom_tmp)
@@ -486,8 +505,9 @@ with tab1:
         _24h_df     = df_all[df_all["timestamp"] >= _24h_cutoff] if not df_all.empty else pd.DataFrame()
 
         if not _24h_df.empty:
-            _24h_resolved = int(_24h_df["success"].astype(int).sum())
-            _24h_total    = len(_24h_df)
+            _24h_acted    = _24h_df[~_24h_df["result_category"].isin(["OBSERVED_ONLY", "PROPOSED_ONLY"])]
+            _24h_resolved = int(_24h_acted["success"].astype(int).sum())
+            _24h_total    = len(_24h_acted)
             _24h_label    = "지난 24시간 동안"
         else:
             # 최근 24h 데이터 없음 → 슬라이더 선택 기간 기준으로 통일

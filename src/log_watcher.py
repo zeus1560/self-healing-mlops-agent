@@ -201,7 +201,11 @@ class LogTailHandler(FileSystemEventHandler):
                 "green" if success else "red",
             )
 
-        if success and source in ("L2_LLM", "RULE") and decision.command:
+        # OBSERVED_ONLY/PROPOSED_ONLY는 success=True지만 실제로 실행해본 적이 없으므로
+        # (Progressive Autonomy READ_ONLY/PROPOSE 레벨) 검증 안 된 커맨드를
+        # "성공한 해결책"으로 학습시키면 안 된다.
+        if (success and result_category not in ("OBSERVED_ONLY", "PROPOSED_ONLY")
+                and source in ("L2_LLM", "RULE") and decision.command):
             try:
                 self.engine.learn_from_feedback(error_log, decision.command)
             except Exception:
