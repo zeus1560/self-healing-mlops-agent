@@ -36,6 +36,7 @@ import requests
 from src import approval_store, autonomy_store
 from src.schemas import ActionType, AgentResponse, AutonomyLevel
 from src.slack_bot import SlackChatOps
+from src.telegram_bot import get_chatops_client
 
 # ── 환경 변수 설정 ────────────────────────────────────────────────────────────
 _APPROVAL_POLL_INTERVAL = int(os.getenv("APPROVAL_POLL_INTERVAL_SEC", "5"))
@@ -367,7 +368,7 @@ class ActionExecutor:
         description = _describe_action(decision)
         logging.info(f"[PROPOSE] '{decision.error_category}' 카테고리 — 제안만 발송: {description}")
         try:
-            SlackChatOps().send_notification(
+            (get_chatops_client() or SlackChatOps()).send_notification(
                 title="🔎 [Self-Healing Agent] 제안된 조치 (미실행)",
                 message=(
                     f"*카테고리*: {decision.error_category}\n"
@@ -438,14 +439,14 @@ class ActionExecutor:
             f"  확인 및 승인: {pending_url}"
         )
         try:
-            chatops = SlackChatOps()
+            chatops = get_chatops_client() or SlackChatOps()
             chatops.send_approval_request(
                 error_log=error_log,
                 command=description,
                 reason=f"🔐 명령어 확인 및 승인: {pending_url}",
             )
         except Exception:
-            logging.error(f"  [Slack] 승인 요청 발송 실패:\n{traceback.format_exc()}")
+            logging.error(f"  [ChatOps] 승인 요청 발송 실패:\n{traceback.format_exc()}")
 
         deadline = time.time() + _APPROVAL_TIMEOUT_SEC
         while time.time() < deadline:

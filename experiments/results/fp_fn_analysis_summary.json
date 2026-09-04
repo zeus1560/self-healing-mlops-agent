@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-09-04T03:13:03.813035+00:00",
+  "chaos_injector_log_events": 5,
+  "matched_and_labeled": 10,
+  "missed_entirely": 0,
+  "missed_events": [],
+  "unrecognized_marker": 2,
+  "injector_self_failed": 1,
+  "no_category_mapping_n": 1,
+  "no_category_mapping_faults": [
+    "cpu"
+  ],
+  "per_category": {
+    "Disk_Full": {
+      "n": 1,
+      "recall": 0.0,
+      "predicted_as": {
+        "LLM_Inferred": 1
+      }
+    },
+    "Process_Crash": {
+      "n": 4,
+      "recall": 0.0,
+      "predicted_as": {
+        "Unknown": 4
+      }
+    },
+    "Out_Of_Memory": {
+      "n": 2,
+      "recall": 0.0,
+      "predicted_as": {
+        "Unknown": 2
+      }
+    },
+    "Path_Not_Found": {
+      "n": 1,
+      "recall": 0.0,
+      "predicted_as": {
+        "LLM_Inferred": 1
+      }
+    },
+    "Permission_Denied": {
+      "n": 1,
+      "recall": 0.0,
+      "predicted_as": {
+        "LLM_Inferred": 1
+      }
+    }
+  },
+  "root_cause_tags": {
+    "학습 데이터 희소 카테고리(Disk_Full) 오분류 의심": 1,
+    "Process_Crash → Unknown 오분류": 4,
+    "Out_Of_Memory → Unknown 오분류": 2,
+    "학습 데이터 희소 카테고리(Path_Not_Found) 오분류 의심": 1,
+    "Permission_Denied → LLM_Inferred 오분류": 1
+  }
+}
