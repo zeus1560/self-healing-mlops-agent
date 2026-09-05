@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import src.llm_engine as llm_engine
+from src.schemas import ActionType
 
 
 class _FakeResponse:
@@ -145,6 +146,34 @@ class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
                 "systemctl restart postgresql", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
+
+
+class TestSelfReflectionNoForcedEscalation(unittest.TestCase):
+    """
+    2026-09-05 결정: 자가 반성이 명령어를 거부해도 더 이상 강제로
+    ESCALATE_TO_HUMAN을 반환하지 않는다 — 이전 동작은 이미 auto로 승급된
+    카테고리까지 매번 우회시켜 "승급은 사람만 결정한다"는 Progressive
+    Autonomy 원칙과 충돌했다. 대신 EXECUTE_LLM_COMMAND를 그대로 반환해
+    executor.py의 autonomy 게이트가 정상적으로 처리하게 하고, 거부 사유만
+    reasoning에 남긴다.
+    """
+
+    def test_rejected_command_still_returns_execute_action_not_escalation(self):
+        with patch.object(llm_engine, "_reflect_on_command", return_value=False):
+            response = llm_engine._make_llm_response(
+                "systemctl restart postgresql", "ERROR: timeout", "N/A", "Groq"
+            )
+        self.assertEqual(response.action_type, ActionType.EXECUTE_LLM_COMMAND)
+        self.assertEqual(response.command, "systemctl restart postgresql")
+        self.assertIn("자가 반성", response.reasoning)
+
+    def test_approved_command_has_plain_reasoning(self):
+        with patch.object(llm_engine, "_reflect_on_command", return_value=True):
+            response = llm_engine._make_llm_response(
+                "systemctl restart postgresql", "ERROR: timeout", "N/A", "Groq"
+            )
+        self.assertEqual(response.action_type, ActionType.EXECUTE_LLM_COMMAND)
+        self.assertNotIn("자가 반성", response.reasoning)
 
 
 if __name__ == "__main__":

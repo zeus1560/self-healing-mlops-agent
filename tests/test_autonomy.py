@@ -147,6 +147,38 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
         mock_await.assert_called_once()
         self.assertTrue(result["success"])
 
+    def test_llm_command_approval_description_surfaces_self_reflection_warning(self):
+        """
+        2026-09-05: 자가 반성이 거부한 명령어는 더 이상 강제 에스컬레이션되지 않고
+        정상 승인 게이트를 타는 대신(llm_engine._make_llm_response), 그 사유를
+        승인 화면에서 사람이 볼 수 있어야 한다.
+        """
+        autonomy_store.set_level("Process_Crash", AutonomyLevel.APPROVE_THEN_EXECUTE, "tester")
+        decision = AgentResponse(
+            error_category="Process_Crash", severity="HIGH",
+            action_type=ActionType.EXECUTE_LLM_COMMAND,
+            command="systemctl restart postgresql",
+            reasoning="⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: systemctl restart postgresql",
+            resolution_source="L2_LLM",
+        )
+        with patch.object(self.ex, "_await_approval", return_value="approved") as mock_await, \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            self.ex.execute(decision)
+        description = mock_await.call_args[0][0]
+        self.assertIn("systemctl restart postgresql", description)
+        self.assertIn("자가 반성", description)
+
+    def test_llm_command_approval_description_plain_when_no_self_reflection_flag(self):
+        autonomy_store.set_level("Process_Crash", AutonomyLevel.APPROVE_THEN_EXECUTE, "tester")
+        decision = _decision(ActionType.EXECUTE_LLM_COMMAND, command="free -m")  # reasoning="test reasoning"
+        with patch.object(self.ex, "_await_approval", return_value="approved") as mock_await, \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            self.ex.execute(decision)
+        description = mock_await.call_args[0][0]
+        self.assertEqual(description, "free -m")
+
 
 class TestLogWatcherLearningGuard(unittest.TestCase):
     """

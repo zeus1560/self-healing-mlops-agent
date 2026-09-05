@@ -486,7 +486,12 @@ class ActionExecutor:
 
         level = autonomy_store.get_level(decision.error_category)
         if level != AutonomyLevel.AUTO:
-            outcome = self._await_approval(command, error_log)
+            # 자가 반성이 이 명령어에 우려를 표했다면(_make_llm_response 참고) 승인
+            # 화면에 그 사유를 같이 보여줘 사람이 더 정보 있는 판단을 하게 한다.
+            description = command
+            if decision.reasoning and "자가 반성" in decision.reasoning:
+                description = f"{command}\n{decision.reasoning}"
+            outcome = self._await_approval(description, error_log)
             if outcome != "approved":
                 return self._approval_failure_result(outcome)
 

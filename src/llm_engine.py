@@ -613,6 +613,34 @@ def _build_response_from_meta(meta: dict, source: str) -> AgentResponse:
     )
 
 
+def _make_llm_response(command: str, error_log: str, system_context: str, backend: str) -> AgentResponse:
+    """
+    자가 반성 결과를 반영해 EXECUTE_LLM_COMMAND AgentResponse를 만든다.
+
+    2026-09-05 결정: 자가 반성이 "NO"를 내도 더 이상 강제로 인간 에스컬레이션시키지
+    않는다 — 이전엔 이미 auto로 승급된 카테고리까지 매번 우회시켜 "승급은 사람만
+    결정한다"는 Progressive Autonomy 원칙과 충돌했음(자가 반성 자체도 노이즈가 커서
+    같은 명령어에 온도=0으로도 판정이 뒤바뀜을 확인함, 프롬프트 튜닝으로 해결 불가).
+    대신 정상적으로 executor.py의 autonomy 게이트(auto/approve_then_execute)를
+    타게 하고, 거부 사유는 reasoning에 남겨 승인 화면에서 사람이 참고하게 한다.
+    """
+    if _reflect_on_command(command, error_log, system_context):
+        reasoning = f"{backend} 추론 성공"
+    else:
+        logging.warning(
+            f"[자가 반성] {backend} 명령어에 우려 표명(강제 에스컬레이션 아님, "
+            f"정상 게이트로 진행): {command}"
+        )
+        reasoning = f"⚠️ 자가 반성이 위험 판정({backend} 제안) — 승인 시 주의: {command}"
+    return AgentResponse(
+        error_category="LLM_Inferred", severity="CRITICAL",
+        action_type=ActionType.EXECUTE_LLM_COMMAND,
+        reasoning=reasoning,
+        resolution_source="L2_LLM",
+        command=command,
+    )
+
+
 def _ensemble_vote(candidates: list[tuple[dict, float]]) -> dict:
     """
     후보 목록에서 action_type 다수결로 최적 메타데이터를 선택한다.
@@ -682,23 +710,7 @@ class RAGEngine:
             groq_result = _run_groq(error_log, system_context)
             if not groq_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Groq] 명령어: {groq_result}")
-                if not _reflect_on_command(groq_result, error_log, system_context):
-                    logging.warning(
-                        f"[자가 반성] Groq 명령어 거부 → 인간 에스컬레이션: {groq_result}"
-                    )
-                    return AgentResponse(
-                        error_category="Unknown", severity="HIGH",
-                        action_type=ActionType.ESCALATE_TO_HUMAN,
-                        reasoning=f"자가 반성 거부 — Groq 제안 명령어 위험 판정: {groq_result}",
-                        resolution_source="L2_LLM",
-                    )
-                return AgentResponse(
-                    error_category="LLM_Inferred", severity="CRITICAL",
-                    action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning="Groq 추론 성공",
-                    resolution_source="L2_LLM",
-                    command=groq_result,
-                )
+                return _make_llm_response(groq_result, error_log, system_context, "Groq")
             logging.warning(f"[RAGEngine] Groq 실패: {groq_result}")
         else:
             logging.info("[RAGEngine] GROQ_API_KEY 미설정. Ollama로 폴백...")
@@ -710,23 +722,7 @@ class RAGEngine:
             llm_result = _run_ollama(error_log, system_context)
             if not llm_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Ollama] 명령어: {llm_result}")
-                if not _reflect_on_command(llm_result, error_log, system_context):
-                    logging.warning(
-                        f"[자가 반성] Ollama 명령어 거부 → 인간 에스컬레이션: {llm_result}"
-                    )
-                    return AgentResponse(
-                        error_category="Unknown", severity="HIGH",
-                        action_type=ActionType.ESCALATE_TO_HUMAN,
-                        reasoning=f"자가 반성 거부 — Ollama 제안 명령어 위험 판정: {llm_result}",
-                        resolution_source="L2_LLM",
-                    )
-                return AgentResponse(
-                    error_category="LLM_Inferred", severity="CRITICAL",
-                    action_type=ActionType.EXECUTE_LLM_COMMAND,
-                    reasoning="Ollama 추론 성공",
-                    resolution_source="L2_LLM",
-                    command=llm_result,
-                )
+                return _make_llm_response(llm_result, error_log, system_context, "Ollama")
             logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
         else:
             logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
@@ -735,23 +731,7 @@ class RAGEngine:
         ipex_result = run_ipex_engine(error_log, system_context)
         if ipex_result not in ("TIMEOUT", "ERROR") and not ipex_result.startswith("ERROR:"):
             logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
-            if not _reflect_on_command(ipex_result, error_log, system_context):
-                logging.warning(
-                    f"[자가 반성] ipex 명령어 거부 → 인간 에스컬레이션: {ipex_result}"
-                )
-                return AgentResponse(
-                    error_category="Unknown", severity="HIGH",
-                    action_type=ActionType.ESCALATE_TO_HUMAN,
-                    reasoning=f"자가 반성 거부 — ipex 제안 명령어 위험 판정: {ipex_result}",
-                    resolution_source="L2_LLM",
-                )
-            return AgentResponse(
-                error_category="LLM_Inferred", severity="CRITICAL",
-                action_type=ActionType.EXECUTE_LLM_COMMAND,
-                reasoning="ipex_llm 추론 성공",
-                resolution_source="L2_LLM",
-                command=ipex_result,
-            )
+            return _make_llm_response(ipex_result, error_log, system_context, "ipex_llm")
         logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
 
         # Step 4: Rule-based heuristic
