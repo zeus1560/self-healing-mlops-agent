@@ -416,23 +416,56 @@ def _run_groq(error_log: str, system_context: str, timeout: int = 30) -> str:
     return command
 
 
+_READ_ONLY_COMMANDS = frozenset({"df", "free", "ps", "ss", "netstat", "uptime", "echo"})
+
+
+def _is_read_only_command(command: str) -> bool:
+    """
+    부작용 없는 조회성 명령어인지 판별한다 (systemctl status 포함).
+
+    executor.py의 ALLOWED_COMMANDS 화이트리스트 안에서도 이 부분집합은
+    시스템 상태를 절대 바꾸지 않으므로, LLM 판정 없이 항상 안전으로 취급한다.
+    2026-09-05 발견: Groq 온도=0 호출도 'systemctl status postgresql' 같은
+    완전히 무해한 조회 명령을 매번 다른 판정(YES/NO 뒤섞임)으로 거부한 사례가
+    있어, 조회성 명령은 LLM 판정 자체를 아예 건너뛰도록 결정론적으로 처리한다.
+    """
+    tokens = command.split()
+    if not tokens:
+        return False
+    if tokens[0] in _READ_ONLY_COMMANDS:
+        return True
+    if tokens[0] == "systemctl" and len(tokens) >= 2 and tokens[1] == "status":
+        return True
+    return False
+
+
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     """
     자가 반성 루프 — LLM이 생성한 명령어의 안전성을 재검증한다.
 
-    Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
+    조회성 명령어(_is_read_only_command)는 LLM 호출 없이 항상 통과시킨다.
+    나머지는 Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
     YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
     """
+    if _is_read_only_command(command):
+        logging.info(f"[자가 반성] '{command}' — 조회성 명령어, LLM 판정 없이 통과")
+        return True
+
     prompt = (
         "You are a safety reviewer for a Self-Healing MLOps Agent.\n"
-        "Evaluate if the proposed command is safe and appropriate for fixing the error.\n"
+        "The proposed command has ALREADY passed a strict security whitelist — only a small\n"
+        "fixed set of safe commands is even possible here (systemctl restart/stop/start/status,\n"
+        "pkill/kill with soft signals only, memory/disk/process read-only queries). Shell\n"
+        "chaining, arbitrary paths, and destructive tools are already blocked before this point.\n"
+        "Your job is NOT to re-judge generic shell danger. Judge only whether this specific\n"
+        "action is a reasonable, proportionate response to the described error.\n"
         "Reply with only YES or NO.\n\n"
         f"Error: {error_log[:200]}\n"
         f"Proposed command: {command}\n"
         f"System: {system_ctx}\n\n"
-        "Is this command safe and appropriate? (YES/NO):"
+        "Is this command a reasonable response to the error? (YES/NO):"
     )
 
     if _is_groq_available():

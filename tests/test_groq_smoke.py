@@ -99,5 +99,53 @@ class TestGroqFallbackChain(unittest.TestCase):
         self.assertTrue(result.startswith("ERROR"))
 
 
+class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
+    """
+    2026-09-05 발견: Groq 온도=0 자가 반성 호출도 'systemctl status postgresql' 같은
+    완전히 무해한 조회 명령을 호출마다 다른 판정(YES/NO 뒤섞임)으로 거부하는 사례가
+    있었음 — 조회성 명령어는 LLM 호출 자체를 건너뛰고 항상 통과해야 한다.
+    """
+
+    def test_status_subcommand_is_read_only(self):
+        self.assertTrue(llm_engine._is_read_only_command("systemctl status postgresql"))
+
+    def test_restart_subcommand_is_not_read_only(self):
+        self.assertFalse(llm_engine._is_read_only_command("systemctl restart postgresql"))
+
+    def test_query_commands_are_read_only(self):
+        for cmd in ["df", "free", "ps", "ss", "netstat", "uptime", "echo hi"]:
+            self.assertTrue(llm_engine._is_read_only_command(cmd), cmd)
+
+    def test_mutating_commands_are_not_read_only(self):
+        for cmd in ["pkill -x nginx", "kill -TERM 123", "systemctl restart nginx"]:
+            self.assertFalse(llm_engine._is_read_only_command(cmd), cmd)
+
+    def test_empty_command_is_not_read_only(self):
+        self.assertFalse(llm_engine._is_read_only_command(""))
+
+    def test_reflect_skips_llm_call_for_read_only_command(self):
+        """읽기 전용 명령어는 urlopen을 아예 호출하지 않고 통과해야 한다."""
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
+            safe = llm_engine._reflect_on_command(
+                "systemctl status postgresql", "ERROR: timeout", "N/A"
+            )
+        self.assertTrue(safe)
+        mock_urlopen.assert_not_called()
+
+    def test_reflect_still_calls_llm_for_mutating_command(self):
+        """부작용 있는 명령어는 그대로 LLM 판정 경로를 탄다 (회귀 방지)."""
+
+        def fake_urlopen(req, timeout=None):
+            return _FakeResponse({"choices": [{"message": {"content": "YES"}}]})
+
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_engine.urllib.request, "urlopen", side_effect=fake_urlopen):
+            safe = llm_engine._reflect_on_command(
+                "systemctl restart postgresql", "ERROR: timeout", "N/A"
+            )
+        self.assertTrue(safe)
+
+
 if __name__ == "__main__":
     unittest.main()
