@@ -51,6 +51,13 @@ ACTION_MAP = {
     "Permission_Denied":  ("escalate_to_human",     "",        ""),
     "Port_Conflict":      ("execute_rule_command",  "",        "ss -tuln"),
     "Configuration_Error":("escalate_to_human",     "",        ""),
+    # 2026-09-06 추가 — 9/3 세션에서 확인된 0건 카테고리 4종(LogHub엔 관련 로그 자체가
+    # 없어 GitHub 이슈로 대체). 넷 다 단순 재시작/정리로 못 고치는 성격이라
+    # (파일 경로 문제, DB 내부 잠금 경합, 라우팅 인프라 문제) escalate_to_human으로 매핑.
+    "Path_Not_Found":       ("escalate_to_human",   "",        ""),
+    "Network_Unreachable":  ("escalate_to_human",   "",        ""),
+    "DB_Timeout":           ("escalate_to_human",   "",        ""),
+    "DB_Deadlock":          ("escalate_to_human",   "",        ""),
 }
 
 # ── GitHub 검색 쿼리 (카테고리당 3개 공식 레포) ───────────────────────────────
@@ -226,6 +233,75 @@ QUERIES = [
     },
 ]
 
+# ── 희소 카테고리 4종 (2026-09-06 추가) ──────────────────────────────────────
+#
+# 9/3 세션에서 0건으로 확인된 5개 카테고리(Unknown 제외 4개) 보강 시도.
+# 아래 쿼리들로 실제 크롤링해봤으나 extract_error_snippet()의 정규식 추출이
+# GitHub 이슈 본문 형식 다양성 때문에 노이즈를 많이 주움(예: DB_Deadlock은
+# 12건 후보 중 실제 deadlock 관련은 2~3건뿐, "fatal: [host]: FAILED! => {"
+# 같은 잘린 JSON 조각이나 무관한 PR 설명문이 다수 섞임). 그래서 QUERIES에
+# 자동 재크롤링 대상으로 넣지 않고, 직접 검토해서 고른 결과만
+# CURATED_SPARSE_CATEGORIES에 고정 데이터로 저장 — run()이 매번 GitHub API를
+# 다시 호출하지 않고도 재현 가능하게 이 목록을 그대로 upsert한다.
+#
+# 참고용 검색 쿼리 (재실행 안 함, 다음에 후보를 더 찾을 때 출발점으로만 사용):
+#   Path_Not_Found:      repo:ansible/ansible "No such file or directory" is:closed
+#                         repo:nodejs/node "ENOENT" is:closed
+#                         repo:docker/compose "no such file or directory" is:closed
+#   Network_Unreachable:  repo:kubernetes/kubernetes "no route to host" is:closed
+#                         repo:etcd-io/etcd "no route to host" OR "network unreachable" is:closed
+#                         repo:hashicorp/consul "no route to host" OR "network unreachable" is:closed
+#   DB_Timeout:           repo:go-sql-driver/mysql "query timeout" OR "statement timeout" is:closed
+#                         repo:sqlalchemy/sqlalchemy "statement timeout" OR "query timeout" is:closed
+#                         repo:redis/redis-py "TimeoutError" OR "command timeout" is:closed
+#   DB_Deadlock:          repo:go-sql-driver/mysql deadlock is:closed
+#                         repo:PyMySQL/PyMySQL deadlock is:closed
+#                         repo:django/django deadlock is:closed
+CURATED_SPARSE_CATEGORIES: dict[str, list[str]] = {
+    "Path_Not_Found": [
+        "Error removing home directory: Error opening `/home/testuser_move_create_test': No such file or directory.",
+        "[ERROR]: Could not find or access '/home/shertel/ansible/{{ item }}' on the Ansible Controller: Unable to retrieve file contents.",
+        "Error: ENOENT: no such file or directory, stat './nope.txt'",
+        "Error: ENOENT: no such file or directory, open 'config.json'",
+        "Error: ENOENT: no such file or directory, lstat 'source/test.txt'",
+        "Error: ENOENT: no such file or directory, realpath ''",
+        "error spawnSync node ENOENT",
+        "Error: ENOENT: no such file or directory, uv_cwd",
+        "Error response from daemon: error while mounting volume '/var/lib/docker/volumes/pgdb_pgdb-data/_data': failed to mount local volume: mount .//db:/var/lib/docker/volumes/pgdb_pgdb-data/_data, flags: 0x1000: no such file or directory",
+        "env file /home/runner/work/project/project/.envs/.production/.django not found: stat /home/runner/work/project/project/.envs/.production/.django: no such file or directory",
+        "gpg: public key decryption failed: No such file or directory",
+        "When I do so, I get an error stating the file is not found for the file passed in the include_tasks command.",
+    ],
+    "Network_Unreachable": [
+        "FATA[0018] unable to stream shell process: error dialing backend: dial tcp 192.168.49.3:10250: connect: no route to host",
+        "plugin/errors: read udp 10.244.0.150:34269->195.135.195.135:53: read: no route to host",
+        "Error from server: error dialing backend: dial tcp xx.xx.xx.xx:10250: connect: no route to host",
+        "I found when the etcd got the error \"no route to host\" all the temp nodes in etcd disappeared immediately.",
+        "memberlist: Failed to send gossip to [::]:7080: write udp [::]:7082->[::]:7080: sendto: no route to host",
+        "failed to make requestVote RPC: error=\"dial tcp <nil>->172.17.0.3:8300: connect: no route to host\"",
+        "agent.rpcclient.health: subscribe call failed: transport: Error while dialing dial tcp 10.128.2.16:8300: connect: no route to host",
+        "Error querying Consul agent: Get http://my_node_ip:8500/v1/agent/self: dial tcp my_node_ip:8500: getsockopt: no route to host",
+        "agent: failed to sync remote state: failed to get conn: dial tcp [::]:8300: network is unreachable",
+        "raft: Failed to make RequestVote RPC to {Voter xx.xxx.xx.88:8300}: dial tcp xx.xxx.xx.88:8300: getsockopt: no route to host",
+    ],
+    "DB_Timeout": [
+        "[mysql] packets.go:33: read tcp x.x.x.x:x->x.x.x.x:x: i/o timeout",
+        "there was a mysql query execute, it will get error: 'dial tcp: i/o timeout'.",
+        "Exception: Timeout connecting to server",
+        "redis-py throws a timeout",
+        "Timeout writing to socket",
+        "read_response conn=1600 !! TimeoutError <- slot 0",
+        "SET statement_timeout = 5; query",
+        "My sqlalchemy version is 0.7.8-1. DB lost connection When I connect to MySQL DB, and spend 15 minutes to wait the response.",
+        "The query_timeout parameter seems to be recognized by create_engine but is not active when we execute the query.",
+    ],
+    "DB_Deadlock": [
+        "I'm running many concurrent transactions with tx_isolation=serializable, and rerunning transactions where any statement returns a MySQLError with Number == ER_LOCK_DEADLOCK (1213). There are very often deadlock errors.",
+        "Map LOCK_DEADLOCK error to OperationalError",
+        "This PR resolves flakiness and deadlocks in SQLite threading/locking tests under the parallel test runner.",
+    ],
+}
+
 # ── 에러 스니펫 추출 패턴 ────────────────────────────────────────────────────
 _ERROR_PATTERNS = [
     # 코드블록 내 에러 (```...``` 또는 ~~~...~~~)
@@ -389,6 +465,11 @@ def run(dry_run: bool = False, per_page: int = 50):
         # 비인증: 10 req/min → 7s 간격, 인증: 30 req/min → 2s 간격
         time.sleep(2 if token else 7)
 
+    # 희소 카테고리 4종은 실시간 크롤링 대신 수동 검토된 고정 데이터를 그대로 추가
+    # (자동 추출 노이즈 문제로 QUERIES에서 제외 — 위 CURATED_SPARSE_CATEGORIES 주석 참고)
+    for cat, texts in CURATED_SPARSE_CATEGORIES.items():
+        collected[cat].extend(texts)
+
     # 결과 요약
     print(f"\n{'='*60}")
     print(f" 수집 결과")
@@ -453,6 +534,10 @@ def run(dry_run: bool = False, per_page: int = 50):
         "Permission_Denied":  "Permission denied EACCES operation not permitted docker.sock",
         "Port_Conflict":      "address already in use EADDRINUSE bind failed port",
         "Configuration_Error":"ImproperlyConfigured could not resolve placeholder invalid config",
+        "Path_Not_Found":     "ENOENT no such file or directory path not found",
+        "Network_Unreachable":"no route to host network unreachable",
+        "DB_Timeout":         "query timeout statement timeout lock wait timeout",
+        "DB_Deadlock":        "deadlock detected transaction rolled back",
     }
     all_ok = True
     for cat, probe in probes.items():
