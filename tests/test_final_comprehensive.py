@@ -760,5 +760,64 @@ class TestSystemDiagnosticsPidContext(unittest.TestCase):
         self.assertEqual(result, "")
 
 
+# ─────────────────────────────────────────────────────────────
+# 서버 설정 config화 (2026-09-06)
+# 9/3 세션 결정: 서버 접속정보/로그경로/타겟앱URL을 리스트화 대비 구조로
+# 정리 — 지금은 단일 서버라 fallback이 기존 하드코딩 값과 동일해야 한다.
+# ─────────────────────────────────────────────────────────────
+class TestServerConfig(unittest.TestCase):
+    def test_get_server_fallback_matches_pre_config_defaults(self):
+        """설정 파일이 없을 때 config화 이전과 동일한 값을 반환해야 한다(회귀 방지)."""
+        from unittest.mock import patch
+        from src import server_config
+        with patch.object(server_config, "_CONFIG_PATH", "/nonexistent/path.yaml"):
+            server = server_config.get_server()
+        self.assertEqual(server["log_path"], "./data/realtime_system.log")
+        self.assertEqual(server["target_app_url"], "http://localhost:9000")
+
+    def test_load_servers_reads_yaml_file(self):
+        from unittest.mock import patch
+        from src import server_config
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(
+                "servers:\n"
+                "  - name: test-server\n"
+                "    log_path: /tmp/test.log\n"
+                "    target_app_url: http://localhost:1234\n"
+                "    exec_method: docker\n"
+            )
+            tmp_path = f.name
+        try:
+            with patch.object(server_config, "_CONFIG_PATH", tmp_path):
+                servers = server_config.load_servers()
+                self.assertEqual(len(servers), 1)
+                self.assertEqual(servers[0]["name"], "test-server")
+
+                server = server_config.get_server("test-server")
+                self.assertEqual(server["log_path"], "/tmp/test.log")
+                self.assertEqual(server["exec_method"], "docker")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_get_server_unknown_name_raises(self):
+        """서버 목록엔 뭔가 있는데 요청한 이름이 없는 경우에만 KeyError (목록이 아예
+        비어있으면 fallback 반환이 우선이라 이 케이스와 다름)."""
+        from unittest.mock import patch
+        from src import server_config
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("servers:\n  - name: only-server\n    log_path: /tmp/x.log\n")
+            tmp_path = f.name
+        try:
+            with patch.object(server_config, "_CONFIG_PATH", tmp_path):
+                with self.assertRaises(KeyError):
+                    server_config.get_server("no-such-server")
+        finally:
+            os.unlink(tmp_path)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

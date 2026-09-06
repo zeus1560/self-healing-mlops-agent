@@ -8,7 +8,11 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 LOCK_FILE="/tmp/chaos_injector.lock"
 AUDIT_LOG="$REPO_DIR/data/chaos_injector.log"
-TARGET_URL="http://localhost:9000"
+# 2026-09-06 config화: .env의 TARGET_URL을 우선 사용, 없으면 기존 기본값 유지
+# (config/servers.yaml의 target_app_url과 같은 값 — 서버가 여러 대가 되면
+# 서버별 .env에 각자 TARGET_URL을 채워 넣는 방식으로 확장 가능).
+TARGET_URL="$(grep -E '^TARGET_URL=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)"
+TARGET_URL="${TARGET_URL:-http://localhost:9000}"
 FAULT_TYPES=(oom cpu diskfull process_crash permission_denied path_not_found config_error)
 
 if [ -f "$ENV_FILE" ] && ! grep -qE '^CHAOS_ENABLED=true\b' "$ENV_FILE"; then

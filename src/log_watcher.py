@@ -376,5 +376,8 @@ if __name__ == "__main__":
         logging.disable(logging.CRITICAL)
         print("self-healing agent started. watching logs...", flush=True)
 
-    targets = sys.argv[1:] if len(sys.argv) > 1 else ["./data/realtime_system.log"]
+    # CLI 인자가 있으면 그대로 우선 사용(기존 동작 유지), 없으면 config/servers.yaml의
+    # 기본 서버 log_path를 사용한다 — 2026-09-06 config화, 값 자체는 안 바뀜.
+    from src.server_config import get_server
+    targets = sys.argv[1:] if len(sys.argv) > 1 else [get_server()["log_path"]]
     start_watching(targets)

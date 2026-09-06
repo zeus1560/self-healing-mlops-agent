@@ -1,0 +1,18 @@
+# 서버 목록 설정 (2026-09-06 추가)
+#
+# 지금은 서버가 1대뿐이지만, Phase 3 k8s 연동 전에 구조만 미리 리스트화해둔다
+# (9/3 /grill-me 세션 결정). 서버가 여러 대가 돼도 이 파일 구조 자체는 안 바뀌고
+# servers 리스트에 항목만 추가하면 되도록 설계.
+#
+# exec_method: 이 서버에서 복구 명령을 어떤 방식으로 실행하는지 (docker/systemd/k8s).
+#   서버마다 같은 "고치는 방법"도 실행 메커니즘이 다를 수 있어서 예약해둔 필드 —
+#   지금은 실제로 이 값을 코드에서 분기 처리하지 않음(단일 systemd 서버라 불필요).
+#
+# 에러 카테고리 → 복구 액션 매핑은 여기 안 두고 코드(src/llm_engine.py 등)에
+# 그대로 유지한다 — 그건 서버 다중화와는 다른 축의 관심사.
+
+servers:
+  - name: gcp-primary
+    log_path: ./data/realtime_system.log
+    target_app_url: http://localhost:9000
+    exec_method: systemd

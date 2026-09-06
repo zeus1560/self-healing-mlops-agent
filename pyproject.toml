@@ -19,6 +19,7 @@ dependencies = [
     "python-json-logger>=2.0",
     "scikit-learn>=1.4",
     "python-dotenv>=1.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
