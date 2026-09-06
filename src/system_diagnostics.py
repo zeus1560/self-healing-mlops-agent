@@ -23,7 +23,7 @@ _MAX_CMD_OUTPUT = int(os.getenv("DIAG_MAX_OUTPUT_CHARS", "500"))
 # 진단 명령어 실행 허용 목록.
 # _DIAG_RULES 에 등록된 명령어는 반드시 이 집합 안에 있어야 실행된다.
 # 향후 규칙 추가 시 이 목록도 함께 갱신해야 한다.
-_ALLOWED_DIAG_CMDS: frozenset[str] = frozenset({"free", "df", "ss", "uptime"})
+_ALLOWED_DIAG_CMDS: frozenset[str] = frozenset({"free", "df", "ss", "uptime", "ps"})
 
 # 에러 키워드 → (섹션 레이블, 사전 토크나이즈된 진단 명령어) 매핑.
 # 문자열 대신 list[str]을 사용해 런타임 shlex.split 반복 호출을 제거하고,
@@ -33,6 +33,16 @@ _DIAG_RULES: list[tuple[tuple[str, ...], str, list[str]]] = [
         ("oom", "memory"),
         "[System Memory Status]",
         ["free", "-m"],
+    ),
+    (
+        # 2026-09-06 추가 — FP/FN 분석(9/4)에서 발견된 문제 수정:
+        # gather_system_context()가 원인 프로세스의 실제 PID를 넘겨준 적이
+        # 없어서, Groq가 OOM 복구 명령을 만들 때 PID를 추측(주로 PID 1,
+        # 즉 컨테이너 자기 자신)해버리는 사례가 있었음. 메모리 최다 사용
+        # 프로세스 목록(PID 포함)을 실제로 제공해 이 추측을 없앤다.
+        ("oom", "memory"),
+        "[Top Memory-Consuming Processes]",
+        ["ps", "-eo", "pid,ppid,%mem,%cpu,comm", "--sort=-%mem"],
     ),
     (
         ("space", "disk", "no space"),

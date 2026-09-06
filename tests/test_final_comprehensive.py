@@ -733,5 +733,32 @@ class TestRecoveryVerification(unittest.TestCase):
         self.assertTrue(hasattr(self.ex, "_verify_service_active"))
 
 
+# ─────────────────────────────────────────────────────────────
+# 시스템 진단 컨텍스트 — 원인 프로세스 PID 식별 (2026-09-06)
+# 9/4 FP/FN 분석에서 발견: gather_system_context()가 PID를 안 넘겨줘서
+# Groq가 OOM 복구 명령을 만들 때 PID 1(컨테이너 자기 자신)을 추측해버림.
+# ─────────────────────────────────────────────────────────────
+class TestSystemDiagnosticsPidContext(unittest.TestCase):
+    def test_oom_context_includes_process_list_with_pid(self):
+        from src.system_diagnostics import gather_system_context
+        ctx = gather_system_context("ERROR: CUDA out of memory. OOM killer invoked.")
+        self.assertIn("Top Memory-Consuming Processes", ctx)
+        self.assertIn("PID", ctx)
+
+    def test_non_memory_error_does_not_include_process_list(self):
+        from src.system_diagnostics import gather_system_context
+        ctx = gather_system_context("ERROR: connection timeout to upstream")
+        self.assertNotIn("Top Memory-Consuming Processes", ctx)
+
+    def test_ps_is_in_allowed_diag_commands(self):
+        from src.system_diagnostics import _ALLOWED_DIAG_CMDS
+        self.assertIn("ps", _ALLOWED_DIAG_CMDS)
+
+    def test_disallowed_command_is_blocked(self):
+        from src.system_diagnostics import _run_safe_command
+        result = _run_safe_command(["rm", "-rf", "/"])
+        self.assertEqual(result, "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
