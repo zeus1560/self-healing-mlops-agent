@@ -1,0 +1,10 @@
+{
+  "metric_name": "l2_production_path_end_to_end_rate",
+  "caveat": "이 지표는 '실제 운영 L2 코드 경로가 신규 에러에 안전하게 끝까지 도달하는가'만 잰다 — 생성된 명령어가 그 에러의 객관적으로 올바른 해결책인지는 사람이 command 컬럼(CSV)을 직접 검토해야 한다. run_l2_accuracy.py의 92%(별도 분류 프롬프트, 운영 미사용)와는 완전히 다른 축이니 같이 인용하지 말 것.",
+  "n_samples": 50,
+  "generation_rate": 0.98,
+  "whitelist_pass_rate": 0.14,
+  "self_reflection_pass_rate": 0.42,
+  "end_to_end_pass_rate": 0.08,
+  "avg_latency_ms": 2407.5
+}
