@@ -263,7 +263,9 @@ def load_metrics() -> pd.DataFrame:
         df["timestamp"]       = pd.to_datetime(df["timestamp"], format="mixed", utc=True).dt.tz_convert(None)
         df["latency_ms"]      = (df["latency_sec"] * 1000).round(1)
         df["result_category"] = df["result_category"].fillna("SUCCESS")
-        # error_category: LLM이 분류한 도메인 카테고리 (우선). 없으면 텍스트 추론.
+        # error_category: L1 캐시 히트 시엔 저장된 실제 카테고리, L2(LLM) 해결 시엔
+        # 항상 리터럴 "LLM_Inferred"(실제 분류 결과 아님 — llm_engine.py 참고).
+        # 둘 다 없는 경우만 error_log 텍스트로 추론.
         if "error_category" not in df.columns or df["error_category"].isna().all():
             df["error_category"] = df["error_log"].apply(_infer_error_type)
         else:

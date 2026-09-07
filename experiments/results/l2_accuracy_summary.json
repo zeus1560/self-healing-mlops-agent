@@ -1,4 +1,6 @@
 {
+  "metric_name": "llm_backbone_standalone_classification_accuracy",
+  "caveat": "이 수치는 운영 L2 파이프라인의 정확도가 아니다. 운영 L2는 카테고리를 LLM에게 물어본 적이 없고 error_category를 항상 'LLM_Inferred'로 고정한다 (src/llm_engine.py의 _build_prompt()/_make_llm_response() 참고). 이 값은 그와 별개인 전용 분류 프롬프트(run_l2_accuracy.py의 CLASSIFY_PROMPT)로 LLM 백본 자체의 taxonomy 분류 능력만 독립적으로 측정한 것 — 논문/발표에서 '운영 L2 정확도'로 인용 금지. (2026-09-07 재검토로 추가된 주석, 이 파일이 처음 생성된 2026-05-26 당시엔 없었음)",
   "n_samples": 50,
   "cat_accuracy": 0.08,
   "act_accuracy": 0.28,
