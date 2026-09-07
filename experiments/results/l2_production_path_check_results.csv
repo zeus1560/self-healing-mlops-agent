@@ -1,0 +1,51 @@
+idx,true_cat,resolution_source,command,generated,whitelist_ok,reflection_ok,end_to_end_ok,reasoning,latency_ms
+1,Out_Of_Memory,L2_LLM,pkill -f python,True,True,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: pkill -f python,866.5
+2,Out_Of_Memory,L2_LLM,kill -9 566,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 566,684.7
+3,Out_Of_Memory,L2_LLM,kill -9 566,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 566,766.0
+4,Out_Of_Memory,L2_LLM,kill -9 18743,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 18743,974.5
+5,Out_Of_Memory,L2_LLM,pkill -f python,True,True,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: pkill -f python,625.4
+6,Memory_Leak,L2_LLM,kill -9 566,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 566,807.8
+7,Memory_Leak,L2_LLM,kill -9 566,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 566,679.1
+8,Memory_Leak,L2_LLM,kill -9 7821,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 7821,1062.8
+9,Memory_Leak,L2_LLM,jcmd $(pgrep -f java) GC.heap_dump /tmp/heapdump.hprof,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: jcmd $(pgrep -f java) GC.heap_dump /tmp/heapdump.hprof,2969.3
+10,Memory_Leak,L2_LLM,kill -9 566,True,False,True,False,Groq 추론 성공,5148.5
+11,Network_Timeout,L2_LLM,curl -I https://s3.us-east-1.amazonaws.com,True,False,True,False,Groq 추론 성공,2959.9
+12,Network_Timeout,L2_LLM,systemctl restart inference-server,True,True,True,True,Groq 추론 성공,2553.2
+13,Network_Timeout,L2_LLM,ray stop,True,False,True,False,Groq 추론 성공,2810.1
+14,Network_Timeout,L2_LLM,kafka-consumer-groups.sh --bootstrap-server kafka:9092 --describe --group ml-predictions,True,False,True,False,Groq 추론 성공,2920.4
+15,Network_Timeout,L2_LLM,curl -v http://feature-store:8080/features/batch,True,False,True,False,Groq 추론 성공,5234.5
+16,DB_Connection,L2_LLM,systemctl restart pgbouncer,True,True,True,True,Groq 추론 성공,2606.5
+17,DB_Connection,L2_LLM,ALTER SYSTEM SET max_connections = 200; SELECT pg_reload_conf();,True,False,True,False,Groq 추론 성공,2980.2
+18,DB_Connection,L2_LLM,systemctl restart mongod,True,True,True,True,Groq 추론 성공,319.3
+19,DB_Connection,L2_LLM,redis-cli -h redis-sentinel -p 26379 sentinel master mymaster,True,False,True,False,Groq 추론 성공,2942.7
+20,DB_Connection,L2_LLM,,False,False,False,False,"모든 Fallback 실패 (Groq: ERROR: Groq not reachable - HTTP 429: {""error"":{""message"":""Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kskz5fekf41sh7x6chdgkf4a` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 6418,, Ollama: None, ipex: ERROR: ipex worker crashed without response (OOM or fatal signal))",2840.6
+21,Configuration_Error,L2_LLM,sed -i '47s/^[[:space:]]*//' config/training.yaml,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: sed -i '47s/^[[:space:]]*//' config/training.yaml,643.5
+22,Configuration_Error,L2_LLM,export BATCH_SIZE=32,True,False,True,False,Groq 추론 성공,657.6
+23,Configuration_Error,L2_LLM,sed -i 's/256x/256/g' $(grep -rl '256,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: sed -i 's/256x/256/g' $(grep -rl '256,776.8
+24,Configuration_Error,L2_LLM,sed -i '23s/ /_/g' pyproject.toml,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: sed -i '23s/ /_/g' pyproject.toml,666.2
+25,Configuration_Error,L2_LLM,"sed -i '/""model_config""/a\    ""dropout_rate"": 0.1' model_config.json",True,False,False,False,"⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: sed -i '/""model_config""/a\    ""dropout_rate"": 0.1' model_config.json",3123.5
+26,Permission_Denied,L2_LLM,chown -R mlops-svc:mlops-svc /mnt/nfs/checkpoints/model_v3,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: chown -R mlops-svc:mlops-svc /mnt/nfs/checkpoints/model_v3,3022.4
+27,Permission_Denied,L2_LLM,aws sts get-caller-identity,True,False,True,False,Groq 추론 성공,621.2
+28,Permission_Denied,L2_LLM,usermod -aG mlflow-log $(id -un 1002),True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: usermod -aG mlflow-log $(id -un 1002),2965.9
+29,Permission_Denied,L2_LLM,kubectl create rolebinding trainer-pod-creator --clusterrole=edit --serviceaccount=ml-team:trainer --namespace,True,False,True,False,Groq 추론 성공,2918.9
+30,Permission_Denied,L2_LLM,usermod -aG docker mlops,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: usermod -aG docker mlops,666.1
+31,Disk_Full,L2_LLM,"find /data -type f -name ""*.pt"" -mtime +7 -delete",True,False,True,False,Groq 추론 성공,3023.5
+32,Disk_Full,L2_LLM,rm -rf /tmp/tensorboard_logs/*,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: rm -rf /tmp/tensorboard_logs/*,3124.7
+33,Disk_Full,L2_LLM,du -sh /var/lib/postgresql/*,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: du -sh /var/lib/postgresql/*,5154.7
+34,Disk_Full,L2_LLM,docker system prune -af --volumes,True,False,True,False,Groq 추론 성공,5187.1
+35,Disk_Full,L2_LLM,du -sh /local/disk1/spark-shuffle/* | sort -rh | head -n 10,True,False,True,False,Groq 추론 성공,3084.4
+36,Process_Crash,L2_LLM,gdb -batch -ex bt /usr/bin/python3 /tmp/core.23841,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: gdb -batch -ex bt /usr/bin/python3 /tmp/core.23841,2885.3
+37,Process_Crash,L2_LLM,kill -9 566,True,False,True,False,Groq 추론 성공,5144.2
+38,Process_Crash,L2_LLM,dmesg | tail -n 20,True,False,True,False,Groq 추론 성공,668.5
+39,Process_Crash,L2_LLM,kill -9 9923 && systemctl restart gunicorn,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 9923 && systemctl restart gunicorn,663.2
+40,Process_Crash,L2_LLM,kill -9 4412,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill -9 4412,664.5
+41,Port_Conflict,L2_LLM,kill 8823,True,False,True,False,Groq 추론 성공,5181.0
+42,Port_Conflict,L2_LLM,kill $(lsof -t -i:5000),True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: kill $(lsof -t -i:5000),3167.2
+43,Port_Conflict,L2_LLM,fuser -k 8080/tcp,True,True,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: fuser -k 8080/tcp,618.6
+44,Port_Conflict,L2_LLM,pkill redis-server,True,False,True,False,Groq 추론 성공,5171.0
+45,Port_Conflict,L2_LLM,lsof -ti:8888 | xargs kill -9,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: lsof -ti:8888 | xargs kill -9,5172.9
+46,Auth_Error,L2_LLM,wandb login --relogin,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: wandb login --relogin,2922.0
+47,Auth_Error,L2_LLM,"mlflow.set_tracking_uri(""https://mlflow.internal"")",True,False,False,False,"⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: mlflow.set_tracking_uri(""https://mlflow.internal"")",662.8
+48,Auth_Error,L2_LLM,"gcloud projects add-iam-policy-binding project --member=""serviceAccount:ml-trainer@project.iam.gservice",True,False,False,False,"⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: gcloud projects add-iam-policy-binding project --member=""serviceAccount:ml-trainer@project.iam.gservice",5787.9
+49,Auth_Error,L2_LLM,"echo ""Re-login required""",True,True,True,True,Groq 추론 성공,358.3
+50,Auth_Error,L2_LLM,vault token create -policy=ml-secrets-read,True,False,False,False,⚠️ 자가 반성이 위험 판정(Groq 제안) — 승인 시 주의: vault token create -policy=ml-secrets-read,2918.5
