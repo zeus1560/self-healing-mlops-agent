@@ -1,12 +1,28 @@
 """
 run_l2_accuracy.py
-L2(LLM) 정확도 독립 평가 실험
+LLM 백본 단독 분류능력 프로브 (실제 운영 L2 파이프라인과는 다른 실험이다 — 아래 경고 참고)
 
-ChromaDB에 없는 신규 에러 50건을 L2 모델에 직접 분류하게 하여
-L2 계층의 error_category 및 action_type 정확도를 측정한다.
+⚠️ 중요 — 이 스크립트가 측정하는 것은 "운영 L2 정확도"가 아니다:
+실제 운영 L2(`src/llm_engine.py`의 `_l2_slow_track()`/`_build_prompt()`)는
+"이 에러를 고칠 셸 명령어 하나만 답하라"는 명령어 생성 프롬프트만 쓰고, 카테고리를
+LLM에게 물어본 적이 없다 — `AgentResponse.error_category`는 LLM 출력과 무관하게
+항상 리터럴 문자열 `"LLM_Inferred"`로 고정된다(`_make_llm_response()`).
+반면 이 스크립트(`CLASSIFY_PROMPT`)는 "이 에러는 무슨 카테고리·액션이냐"를 직접
+묻는 별개의 분류 전용 프롬프트를 쓴다 — 운영 파이프라인이 절대 하지 않는 질문이다.
 
-GROQ_API_KEY가 설정되어 있으면 Groq를 사용하고(현재 운영 중인 L2 1순위와 동일),
-없으면 Ollama로 폴백한다 — RAGEngine의 L2 우선순위와 동일한 규칙.
+2026-05-26 Ollama 전용 시절 작성된 뒤 2026-08-27 Groq 전환 때 전송 방식(헤더,
+reasoning_effort 등)만 맞췄을 뿐, 이 근본적인 프롬프트/과제 차이는 그때도 지금도
+조정된 적이 없다(2026-09-07 재검토로 확인).
+
+여기서 나오는 "Category Accuracy"는 **"이 LLM 백본이 우리 카테고리 taxonomy를
+얼마나 잘 아는가"라는 독립된 능력 지표**로만 유효하다 — "운영 L2가 신규 에러를
+얼마나 잘 처리하는가"의 증거로 논문/발표에 쓰지 말 것. 운영 L2의 실제 행동을
+재려면 명령어 생성 프롬프트(`_build_prompt()`)를 그대로 재사용하는 별도 스크립트
+(예: run_l2_action_accuracy.py)가 필요하다.
+
+GROQ_API_KEY가 설정되어 있으면 Groq를 사용하고(현재 운영 중인 L2 1순위와 동일한
+백엔드 선택 규칙일 뿐, 아래에서 실제로 던지는 질문 자체는 운영과 다름),
+없으면 Ollama로 폴백한다.
 """
 import csv
 import json
@@ -226,7 +242,9 @@ def main():
         backend, model, call_fn = "ollama", OLLAMA_MODEL, call_ollama
 
     print("=" * 65)
-    print("  L2(LLM) 정확도 독립 평가 — 신규 에러 50건")
+    print("  LLM 백본 단독 분류능력 프로브 — 신규 에러 50건")
+    print("  ⚠️  운영 L2 정확도 아님 — 운영 L2는 카테고리를 분류하지 않고 항상")
+    print("      'LLM_Inferred'를 반환함 (자세한 내용은 파일 상단 docstring 참고)")
     print("=" * 65)
     print(f"  백엔드: {backend} ({model}) | 에러 수: {len(NOVEL_ERRORS)}건\n")
 
@@ -295,7 +313,7 @@ def main():
         print(f"  {cat:<22} {acc*100:>5.1f}%  {bar}")
 
     print("\n" + "=" * 65)
-    print("  종합 결과 (n=50)")
+    print("  종합 결과 (n=50) — LLM 백본 단독 분류능력, 운영 L2 지표 아님")
     print("=" * 65)
     print(f"  Category Accuracy : {cat_acc*100:.1f}%  ({cat_correct}/{n})")
     print(f"  Action Accuracy   : {act_acc*100:.1f}%  ({act_correct}/{n})")
@@ -312,6 +330,14 @@ def main():
 
     # 요약 JSON 저장
     summary = {
+        "metric_name":     "llm_backbone_standalone_classification_accuracy",
+        "caveat": (
+            "이 수치는 운영 L2 파이프라인의 정확도가 아니다. 운영 L2는 카테고리를 "
+            "LLM에게 물어본 적이 없고 error_category를 항상 'LLM_Inferred'로 고정한다 "
+            "(src/llm_engine.py의 _build_prompt()/_make_llm_response() 참고). 이 스크립트는 "
+            "그와 별개인 전용 분류 프롬프트(CLASSIFY_PROMPT)로 LLM 백본 자체의 taxonomy "
+            "분류 능력만 독립적으로 측정한다 — 논문/발표에서 '운영 L2 정확도'로 인용 금지."
+        ),
         "backend":         backend,
         "model":           model,
         "n_samples":       n,
