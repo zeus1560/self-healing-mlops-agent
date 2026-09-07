@@ -471,18 +471,42 @@ def _is_bounded_state_change_command(command: str) -> bool:
     return len(tokens) >= 2 and tokens[1] in allowed
 
 
+def _is_self_destructive_kill(command: str) -> bool:
+    """
+    kill로 PID 1을 지정하는지 판별한다.
+
+    컨테이너에선 PID 1이 target-app 자기 자신(uvicorn)이고, 실서버에선
+    init/systemd다 — 어느 쪽이든 죽이면 안 되는 대상이라는 사실 자체로 이미
+    답이 나와있는 구조적 위험이다. 2026-09-04 FP/FN 분석에서 실제로 관찰된
+    사례(Groq가 'kill -9 1'을 제안)가 이 부류: executor.py 화이트리스트는
+    -9(SIGKILL)는 막아주지만 -TERM/-HUP(허용된 소프트 신호)로 PID 1을
+    지정하면 여전히 통과한다 — systemctl restart 노이즈와 마찬가지로
+    LLM 판정에만 맡기면 매번 뒤섞이는 문제가 재현되므로, "PID 1"이라는
+    사실만으로 LLM 호출 없이 항상 거부한다.
+    """
+    tokens = command.split()
+    if len(tokens) < 3 or tokens[0] != "kill":
+        return False
+    return any(t == "1" for t in tokens[2:])
+
+
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     """
     자가 반성 루프 — LLM이 생성한 명령어의 안전성을 재검증한다.
 
-    조회성 명령어(_is_read_only_command)와 화이트리스트가 이미 좁혀 검증하는
-    상태변경 명령어(_is_bounded_state_change_command)는 LLM 호출 없이 항상
-    통과시킨다. 나머지(kill/pkill/fuser 등 대상 지정 위험이 남는 명령)는
-    Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
-    YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
+    PID 1을 지정하는 kill(_is_self_destructive_kill)은 LLM 호출 없이 항상
+    거부한다. 조회성 명령어(_is_read_only_command)와 화이트리스트가 이미
+    좁혀 검증하는 상태변경 명령어(_is_bounded_state_change_command)는 LLM
+    호출 없이 항상 통과시킨다. 나머지(kill/pkill/fuser 등 대상 지정 위험이
+    남는 명령)는 Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시
+    Ollama로 폴백한다. YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
     """
+    if _is_self_destructive_kill(command):
+        logging.info(f"[자가 반성] '{command}' — PID 1(자기 자신/init) 대상, LLM 판정 없이 항상 거부")
+        return False
+
     if _is_read_only_command(command):
         logging.info(f"[자가 반성] '{command}' — 조회성 명령어, LLM 판정 없이 통과")
         return True
