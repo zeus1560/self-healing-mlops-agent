@@ -140,6 +140,14 @@ src/
 **Human-in-the-Loop**: 보안 필터 통과 후 Slack 승인 요청 발송 → `y/n` 대기  
 `AUTO_APPROVE=true` 환경변수로 실험/테스트 모드 자동 승인 전환
 
+### Progressive Autonomy 승급 거버넌스
+
+에러 카테고리별로 자동화 신뢰 수준을 4단계(읽기전용→제안→승인후실행→자동)로 관리합니다(`src/autonomy_store.py`). 정식 승급 절차는 카테고리를 "Shadow 검토" 상태로 표시(`scripts/set_autonomy_level.py --shadow <목표레벨>`)한 뒤, 최소 50건 + 최소 2주 경과 + FN/FP 5% 이하(전환 방향에 따라 분리 판정) 기준을 `experiments/run_shadow_gate_report.py`로 확인하고, 사람이 최종적으로 `set_autonomy_level.py`로 승급을 실행합니다 — 코드 어디에도 자동 승급 로직은 없습니다.
+
+**예외 사항 (2026-09-04~05)**: `Out_Of_Memory`/`Disk_Full`/`Process_Crash`/`Permission_Denied`/`Path_Not_Found`/`Configuration_Error` 6개 카테고리는 이 정식 절차를 거치지 않고 `auto`로 직접 승격되었습니다. 이유: 이 카테고리들은 Progressive Autonomy 게이트 도입 이전부터 카오스 인젝터로 수 주간 실측 검증되어 있었고(L1 캐시 히트로 승인 없이 즉시 실행되던 기존 동작), 게이트 도입 직후 전 카테고리를 보수적 기본값(`approve_then_execute`)으로 되돌리면 카오스 테스트가 트리거하는 복구 액션마다 5분 승인 대기 후 타임아웃되어 실행/복구 결과 데이터 수집에 공백이 생길 위험이 있었기 때문입니다. 즉 "기준 미달인데 승급"이 아니라 "이미 별도 경로로 기준을 충족한 상태였다"는 판단이었습니다.
+
+**앞으로의 정책**: 이 6개 이후 새로 추가되는 카테고리(예: 향후 확장될 `DB_Connection`/`Network_Timeout` 등)는 반드시 정식 Shadow 절차를 거쳐야 하며, 위와 같은 직접 승격은 반복하지 않습니다. 2026-09-07에 Shadow gate 리포트를 실제로 처음 실행해 확인한 결과, 이 6개 외에는 현재 Shadow 검토 대상 카테고리가 없습니다(카오스 인젝터가 없는 다른 카테고리는 애초에 실행 이력이 쌓이지 않음).
+
 ---
 
 ## 실험 결과 요약 (`experiments/`)

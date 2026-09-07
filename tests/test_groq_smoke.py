@@ -135,17 +135,61 @@ class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
         mock_urlopen.assert_not_called()
 
     def test_reflect_still_calls_llm_for_mutating_command(self):
-        """부작용 있는 명령어는 그대로 LLM 판정 경로를 탄다 (회귀 방지)."""
+        """대상(PID) 지정 위험이 남는 명령어는 그대로 LLM 판정 경로를 탄다 (회귀 방지)."""
 
         def fake_urlopen(req, timeout=None):
             return _FakeResponse({"choices": [{"message": {"content": "YES"}}]})
 
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
-             patch.object(llm_engine.urllib.request, "urlopen", side_effect=fake_urlopen):
+             patch.object(llm_engine.urllib.request, "urlopen", side_effect=fake_urlopen) as mock_urlopen:
+            safe = llm_engine._reflect_on_command(
+                "kill -TERM 4821", "ERROR: timeout", "N/A"
+            )
+        self.assertTrue(safe)
+        mock_urlopen.assert_called_once()
+
+
+class TestSelfReflectionBoundedStateChangeBypass(unittest.TestCase):
+    """
+    2026-09-07: \'systemctl restart postgresql\' 노이즈(동일 명령 온도=0에도 YES/NO
+    뒤섞임, 2026-09-05 발견)의 근본 원인은 executor.py 화이트리스트가 이미 인자/
+    서비스 이름까지 좁게 검증하는 상태변경 명령어까지 매번 LLM한테 재판정을
+    맡겼기 때문이다. systemctl(restart/start/stop)/nginx(-s reload·test)/
+    journalctl(--vacuum-*)/ulimit는 LLM 호출 없이 결정론적으로 통과시키고,
+    대상 지정 위험이 남는 kill/pkill/fuser는 계속 LLM 판정을 거치게 한다.
+    """
+
+    def test_systemctl_restart_start_stop_are_bounded(self):
+        for cmd in ["systemctl restart postgresql", "systemctl start nginx", "systemctl stop worker"]:
+            self.assertTrue(llm_engine._is_bounded_state_change_command(cmd), cmd)
+
+    def test_nginx_reload_and_test_are_bounded(self):
+        for cmd in ["nginx -s reload", "nginx test"]:
+            self.assertTrue(llm_engine._is_bounded_state_change_command(cmd), cmd)
+
+    def test_journalctl_and_ulimit_are_bounded(self):
+        for cmd in ["journalctl --vacuum-size=100M", "ulimit -n 4096"]:
+            self.assertTrue(llm_engine._is_bounded_state_change_command(cmd), cmd)
+
+    def test_nginx_invalid_arg_is_not_bounded(self):
+        """화이트리스트에 없는 인자 조합은 구조적으로 안전하다고 볼 근거가 없다."""
+        self.assertFalse(llm_engine._is_bounded_state_change_command("nginx restart"))
+
+    def test_kill_pkill_fuser_are_not_bounded(self):
+        for cmd in ["kill -TERM 4821", "pkill -f zombie_worker", "fuser -k /var/lock/db.lock"]:
+            self.assertFalse(llm_engine._is_bounded_state_change_command(cmd), cmd)
+
+    def test_empty_command_is_not_bounded(self):
+        self.assertFalse(llm_engine._is_bounded_state_change_command(""))
+
+    def test_reflect_skips_llm_call_for_bounded_state_change_command(self):
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
             safe = llm_engine._reflect_on_command(
                 "systemctl restart postgresql", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
+        mock_urlopen.assert_not_called()
 
 
 class TestSelfReflectionNoForcedEscalation(unittest.TestCase):

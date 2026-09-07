@@ -439,18 +439,56 @@ def _is_read_only_command(command: str) -> bool:
     return False
 
 
+# systemctl(restart/start/stop, status는 이미 _is_read_only_command에서 처리)/
+# nginx(-s reload·test만)/journalctl(--vacuum-*만)/ulimit(세션 범위, 타 프로세스
+# 영향 없음)는 executor.py 화이트리스트에서 인자·서비스 이름까지 정규식으로
+# 좁게 검증되므로 "위험한가"는 이미 구조적으로 답이 나와있다. LLM 판정이 실제로
+# 의미 있는 건 kill/pkill/fuser처럼 대상(PID·패턴)을 잘못 지정할 위험이 남는
+# 명령뿐 — 2026-09-05에 확인된 노이즈('systemctl restart postgresql' 온도=0에도
+# YES/NO 뒤섞임)는 전부 이 부류였다.
+_BOUNDED_STATE_CHANGE_ARGS: dict[str, frozenset[str] | None] = {
+    "systemctl":  frozenset({"restart", "start", "stop"}),
+    "nginx":      frozenset({"-s", "reload", "test"}),
+    "journalctl": None,
+    "ulimit":     None,
+}
+
+
+def _is_bounded_state_change_command(command: str) -> bool:
+    """
+    부작용은 있지만 executor.py 화이트리스트가 이미 인자까지 좁혀 검증해서
+    "위험한가"에 대한 답이 구조적으로 끝난 명령어인지 판별한다.
+    """
+    tokens = command.split()
+    if not tokens:
+        return False
+    base = tokens[0]
+    if base not in _BOUNDED_STATE_CHANGE_ARGS:
+        return False
+    allowed = _BOUNDED_STATE_CHANGE_ARGS[base]
+    if allowed is None:
+        return True
+    return len(tokens) >= 2 and tokens[1] in allowed
+
+
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     """
     자가 반성 루프 — LLM이 생성한 명령어의 안전성을 재검증한다.
 
-    조회성 명령어(_is_read_only_command)는 LLM 호출 없이 항상 통과시킨다.
-    나머지는 Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
+    조회성 명령어(_is_read_only_command)와 화이트리스트가 이미 좁혀 검증하는
+    상태변경 명령어(_is_bounded_state_change_command)는 LLM 호출 없이 항상
+    통과시킨다. 나머지(kill/pkill/fuser 등 대상 지정 위험이 남는 명령)는
+    Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시 Ollama로 폴백한다.
     YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
     """
     if _is_read_only_command(command):
         logging.info(f"[자가 반성] '{command}' — 조회성 명령어, LLM 판정 없이 통과")
+        return True
+
+    if _is_bounded_state_change_command(command):
+        logging.info(f"[자가 반성] '{command}' — 화이트리스트로 이미 좁혀 검증된 명령어, LLM 판정 없이 통과")
         return True
 
     prompt = (
