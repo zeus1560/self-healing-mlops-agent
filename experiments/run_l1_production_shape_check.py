@@ -36,6 +36,8 @@ FAULT_TO_CATEGORY = {
     "permission_denied": "Permission_Denied",
     "path_not_found":    "Path_Not_Found",
     "config_error":      "Configuration_Error",
+    "db_connection":     "DB_Connection",
+    "network_timeout":   "Network_Timeout",
 }
 
 EVIDENCE_MARKERS = {
@@ -45,6 +47,8 @@ EVIDENCE_MARKERS = {
     "permission_denied": r"no execute bit set",
     "path_not_found":    r"FileNotFoundError — \[Errno 2\] No such file or directory",
     "config_error":      r"Configuration Error — JSONDecodeError parsing",
+    "db_connection":     r"redis\.exceptions\.ConnectionError — Could not connect to Redis",
+    "network_timeout":   r"psycopg2\.OperationalError — connection to server",
 }
 
 _INJECTOR_SELF_FAILURE_MARKER = "investigate"

@@ -146,7 +146,9 @@ src/
 
 **예외 사항 (2026-09-04~05)**: `Out_Of_Memory`/`Disk_Full`/`Process_Crash`/`Permission_Denied`/`Path_Not_Found`/`Configuration_Error` 6개 카테고리는 이 정식 절차를 거치지 않고 `auto`로 직접 승격되었습니다. 이유: 이 카테고리들은 Progressive Autonomy 게이트 도입 이전부터 카오스 인젝터로 수 주간 실측 검증되어 있었고(L1 캐시 히트로 승인 없이 즉시 실행되던 기존 동작), 게이트 도입 직후 전 카테고리를 보수적 기본값(`approve_then_execute`)으로 되돌리면 카오스 테스트가 트리거하는 복구 액션마다 5분 승인 대기 후 타임아웃되어 실행/복구 결과 데이터 수집에 공백이 생길 위험이 있었기 때문입니다. 즉 "기준 미달인데 승급"이 아니라 "이미 별도 경로로 기준을 충족한 상태였다"는 판단이었습니다.
 
-**앞으로의 정책**: 이 6개 이후 새로 추가되는 카테고리(예: 향후 확장될 `DB_Connection`/`Network_Timeout` 등)는 반드시 정식 Shadow 절차를 거쳐야 하며, 위와 같은 직접 승격은 반복하지 않습니다. 2026-09-07에 Shadow gate 리포트를 실제로 처음 실행해 확인한 결과, 이 6개 외에는 현재 Shadow 검토 대상 카테고리가 없습니다(카오스 인젝터가 없는 다른 카테고리는 애초에 실행 이력이 쌓이지 않음).
+**앞으로의 정책**: 이 6개 이후 새로 추가되는 카테고리는 반드시 정식 Shadow 절차를 거쳐야 하며, 위와 같은 직접 승격은 반복하지 않습니다. 2026-09-07에 Shadow gate 리포트를 실제로 처음 실행해 확인한 결과, 이 6개 외에는 현재 Shadow 검토 대상 카테고리가 없습니다(카오스 인젝터가 없는 다른 카테고리는 애초에 실행 이력이 쌓이지 않음).
+
+**카테고리 커버리지 확장 (2026-09-07)**: `DB_Connection`(`/inject/db_connection` — redis-py로 127.0.0.1:6379에 접속 시도, 리스닝 프로세스가 없어 실제 `redis.exceptions.ConnectionError` 발생)과 `Network_Timeout`(`/inject/network_timeout` — psycopg2로 `192.0.2.1`(RFC 5737 TEST-NET-1, 아무도 응답하지 않는 예약 주소)에 접속 시도, 실제 `psycopg2.OperationalError`로 타임아웃 발생)에 실제 카오스 인젝터를 신규 배포했습니다(`scripts/chaos_cron.sh` 로테이션 7종→9종). 두 카테고리 모두 autonomy 기본값(`approve_then_execute`)을 그대로 유지하며, 위 예외 사항의 6개와 달리 **정식 Shadow 절차를 그대로 따릅니다** — 최소 50건 + 최소 2주 데이터가 쌓이기 전까지 직접 승격하지 않습니다.
 
 ---
 
