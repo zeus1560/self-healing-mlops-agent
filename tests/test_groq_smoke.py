@@ -149,6 +149,37 @@ class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
         mock_urlopen.assert_called_once()
 
 
+class TestSelfReflectionSelfDestructiveKillBlock(unittest.TestCase):
+    """
+    2026-09-07: 2026-09-04 FP/FN 분석에서 관찰된 'kill -9 1' 제안의 근본 원인 —
+    executor.py 화이트리스트는 -9(SIGKILL)는 막아주지만 -TERM/-HUP(허용된
+    소프트 신호)로 PID 1(컨테이너 자기 자신/실서버 init)을 지정하면 여전히
+    통과한다. LLM 판정에만 맡기면 systemctl restart와 같은 뒤섞임이 재현되므로,
+    "PID 1"이라는 사실 자체로 이미 답이 나와있는 이 경우는 LLM 호출 없이 항상 거부한다.
+    """
+
+    def test_kill_targeting_pid_1_is_self_destructive(self):
+        for cmd in ["kill -TERM 1", "kill -HUP 1", "kill -TERM 1 4821"]:
+            self.assertTrue(llm_engine._is_self_destructive_kill(cmd), cmd)
+
+    def test_kill_targeting_other_pid_is_not_self_destructive(self):
+        for cmd in ["kill -TERM 4821", "kill -HUP 10234"]:
+            self.assertFalse(llm_engine._is_self_destructive_kill(cmd), cmd)
+
+    def test_non_kill_commands_are_never_self_destructive(self):
+        for cmd in ["pkill -f zombie_worker", "systemctl restart nginx", ""]:
+            self.assertFalse(llm_engine._is_self_destructive_kill(cmd), cmd)
+
+    def test_reflect_rejects_pid_1_without_llm_call(self):
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
+            safe = llm_engine._reflect_on_command(
+                "kill -TERM 1", "ERROR: process unresponsive", "N/A"
+            )
+        self.assertFalse(safe)
+        mock_urlopen.assert_not_called()
+
+
 class TestSelfReflectionBoundedStateChangeBypass(unittest.TestCase):
     """
     2026-09-07: \'systemctl restart postgresql\' 노이즈(동일 명령 온도=0에도 YES/NO
