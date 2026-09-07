@@ -6,9 +6,10 @@
 라우트가 전부 등록돼 있고, /health가 정상 응답하는지만 확인하는 구조적 스모크
 테스트다.
 
-반면 permission_denied/path_not_found/config_error는 로컬 파일 연산으로 실제
-Python 예외를 유발할 뿐 리소스를 소모하거나 프로세스를 죽이지 않아 파괴적이지
-않으므로, 실제로 호출해 evidence 로그에 진짜 예외가 기록되는지까지 검증한다.
+반면 permission_denied/path_not_found/config_error(로컬 파일 연산)와
+db_connection/network_timeout(실제 소켓 연결 시도, 아무 것도 파괴하지 않음)는
+리소스를 소모하거나 프로세스를 죽이지 않아 파괴적이지 않으므로, 실제로 호출해
+evidence 로그에 진짜 예외가 기록되는지까지 검증한다.
 """
 import os
 import sys
@@ -38,6 +39,8 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/permission_denied",
             "/inject/path_not_found",
             "/inject/config_error",
+            "/inject/db_connection",
+            "/inject/network_timeout",
             "/stop",
         ):
             self.assertIn(expected, paths, f"{expected} 라우트가 없음")
@@ -57,13 +60,15 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/permission_denied",
             "/inject/path_not_found",
             "/inject/config_error",
+            "/inject/db_connection",
+            "/inject/network_timeout",
         ):
             route = next(r for r in self.app.routes if r.path == path)
             self.assertEqual(set(route.methods) - {"HEAD"}, {"POST"}, f"{path}가 POST 전용이 아님")
 
 
 class TestNonDestructiveInjectors(unittest.TestCase):
-    """OS 리소스를 소모하지 않는 3종은 실제로 호출해 진짜 예외 발생을 검증한다."""
+    """OS 리소스를 소모하지 않는 5종은 실제로 호출해 진짜 예외 발생을 검증한다."""
 
     @classmethod
     def setUpClass(cls):
@@ -100,6 +105,23 @@ class TestNonDestructiveInjectors(unittest.TestCase):
         self.assertEqual(resp.json().get("injected"), "config_error")
         tail = "".join(self._tail_evidence_log())
         self.assertIn("JSONDecodeError", tail)
+
+    def test_db_connection_raises_real_redis_connection_error(self):
+        """127.0.0.1:6379엔 아무 것도 리스닝하지 않아 실제 ConnectionError가 난다."""
+        resp = self.client.post("/inject/db_connection")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("injected"), "db_connection")
+        tail = "".join(self._tail_evidence_log())
+        self.assertIn("redis.exceptions.ConnectionError", tail)
+        self.assertNotIn("expected redis.exceptions.ConnectionError", tail, "127.0.0.1:6379에 뭔가 실제로 응답함 — 격리 확인 필요")
+
+    def test_network_timeout_raises_real_operational_error(self):
+        """192.0.2.1(RFC 5737 TEST-NET-1)은 응답하는 호스트가 없어 실제로 접속이 타임아웃된다."""
+        resp = self.client.post("/inject/network_timeout")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("injected"), "network_timeout")
+        tail = "".join(self._tail_evidence_log())
+        self.assertIn("psycopg2.OperationalError", tail)
 
     def test_injectors_clean_up_after_themselves(self):
         """장애 주입용으로 만든 임시 파일이 뒤에 남지 않는지 확인 (컨테이너 /app 오염 방지)."""

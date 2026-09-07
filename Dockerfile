@@ -26,7 +26,9 @@ RUN pip install --no-cache-dir \
     "python-json-logger>=2.0" \
     "scikit-learn>=1.4" \
     "python-dotenv>=1.0" \
-    "psutil>=5.9"
+    "psutil>=5.9" \
+    "psycopg2-binary>=2.9" \
+    "redis>=5.0"
 
 # 소스 복사
 COPY src/ src/

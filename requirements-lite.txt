@@ -19,6 +19,7 @@ watchdog
 SQLAlchemy==2.0.44
 alembic==1.17.2
 psycopg2-binary
+redis
 
 # --- 5. Data Science & ML 생태계 ---
 pandas==2.3.3

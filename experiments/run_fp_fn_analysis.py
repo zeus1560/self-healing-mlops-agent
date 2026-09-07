@@ -50,6 +50,8 @@ FAULT_TO_CATEGORY = {
     "permission_denied": "Permission_Denied",
     "path_not_found":    "Path_Not_Found",
     "config_error":      "Configuration_Error",
+    "db_connection":     "DB_Connection",
+    "network_timeout":   "Network_Timeout",
 }
 
 # fault_type -> realtime_system.log에 남는 고유 증거 문구(정규식).
@@ -62,6 +64,8 @@ EVIDENCE_MARKERS = {
     "permission_denied": r"no execute bit set",
     "path_not_found":    r"FileNotFoundError — \[Errno 2\] No such file or directory",
     "config_error":      r"Configuration Error — JSONDecodeError parsing",
+    "db_connection":     r"redis\.exceptions\.ConnectionError — Could not connect to Redis",
+    "network_timeout":   r"psycopg2\.OperationalError — connection to server",
 }
 
 # 인젝터 자신이 기대한 예외를 못 일으켰을 때 남기는 표식 — 이런 사건은 정답 자체가

@@ -236,6 +236,47 @@ async def inject_config_error():
             _injection_lock.release()
 
 
+@app.post("/inject/db_connection")
+async def inject_db_connection():
+    """redis-py로 127.0.0.1:6379(리스닝 프로세스 없음)에 접속 시도해 실제 ConnectionError 유발."""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "db_connection", "skipped": "another injection in progress"}
+    try:
+        import redis
+        try:
+            client = redis.Redis(host="127.0.0.1", port=6379, socket_connect_timeout=2, socket_timeout=2)
+            client.ping()
+            _append_evidence("ERROR", "expected redis.exceptions.ConnectionError pinging 127.0.0.1:6379 but it succeeded — investigate")
+        except redis.exceptions.ConnectionError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"redis.exceptions.ConnectionError — Could not connect to Redis at 127.0.0.1:6379: Connection refused: {e}",
+            )
+        return {"injected": "db_connection"}
+    finally:
+        _injection_lock.release()
+
+
+@app.post("/inject/network_timeout")
+async def inject_network_timeout():
+    """psycopg2로 예약 주소(192.0.2.1, RFC 5737 TEST-NET-1)에 접속 시도해 실제 접속 타임아웃 유발."""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "network_timeout", "skipped": "another injection in progress"}
+    try:
+        import psycopg2
+        try:
+            psycopg2.connect(host="192.0.2.1", port=5432, dbname="postgres", user="postgres", connect_timeout=3)
+            _append_evidence("ERROR", "expected psycopg2.OperationalError connecting to 192.0.2.1:5432 but it succeeded — investigate")
+        except psycopg2.OperationalError as e:
+            _append_evidence(
+                "CRITICAL",
+                f'psycopg2.OperationalError — connection to server at "192.0.2.1", port 5432 failed: timeout expired: {e}',
+            )
+        return {"injected": "network_timeout"}
+    finally:
+        _injection_lock.release()
+
+
 @app.post("/stop")
 async def stop_app():
     _stop_event.set()

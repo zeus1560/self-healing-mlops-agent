@@ -26,6 +26,16 @@ log_watcher._build_context_window()가 만드는 것과 같은 형태로 앞뒤 
     cd ~/agent && sudo .venv/bin/python -m scripts.add_chaos_injector_signatures
     sudo .venv/bin/python -m scripts.add_chaos_injector_signatures --dry-run
     sudo .venv/bin/python -m scripts.add_chaos_injector_signatures --remove
+
+추가 (2026-09-07): 카테고리 커버리지 확장으로 DB_Connection(/inject/db_connection,
+redis-py로 127.0.0.1:6379에 접속 시도 → 실제 ConnectionError)과 Network_Timeout
+(/inject/network_timeout, psycopg2로 192.0.2.1(RFC 5737 TEST-NET-1)에 접속 시도 →
+실제 접속 타임아웃)을 target-app에 신규 배포하면서 같은 train-serving skew를
+반복하지 않도록 처음부터 문구를 같이 넣는다. action/target_process는 기존
+train_set.json의 다수 라벨(DB_Connection→redis, Network_Timeout→postgres_pool)과
+일치시켰다 — 이 두 카테고리는 Progressive Autonomy 정식 Shadow 절차 대상이라
+(README 참고) autonomy_state에 직접 auto로 승격하지 않는다: 여기서 하는 일은
+어디까지나 L1 데이터 품질 보정이고, 실행 권한 승급과는 무관하다.
 """
 import argparse
 import hashlib
@@ -76,6 +86,16 @@ _CLEAN_LINES: dict[str, list[str]] = {
     "Configuration_Error": [
         "CRITICAL chaos-injector: Configuration Error — JSONDecodeError parsing "
         "./data/app_config.json: Expecting value: line 1 column 26 (char 25)",
+    ],
+    "DB_Connection": [
+        "CRITICAL chaos-injector: redis.exceptions.ConnectionError — Could not connect to "
+        "Redis at 127.0.0.1:6379: Connection refused: Error 111 connecting to 127.0.0.1:6379. "
+        "Connection refused.",
+    ],
+    "Network_Timeout": [
+        'CRITICAL chaos-injector: psycopg2.OperationalError — connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired: connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired',
     ],
 }
 
@@ -147,6 +167,28 @@ _WRAPPED_LINES: dict[str, str] = {
         "./data/app_config.json: Expecting value: line 1 column 26 (char 25)\n"
         "INFO api: request handled id=7782"
     ),
+    "DB_Connection": (
+        "CRITICAL chaos-injector: redis.exceptions.ConnectionError — Could not connect to "
+        "Redis at 127.0.0.1:6379: Connection refused: Error 111 connecting to 127.0.0.1:6379. "
+        "Connection refused.\n"
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=9101\n"
+        ">>> CRITICAL chaos-injector: redis.exceptions.ConnectionError — Could not connect to "
+        "Redis at 127.0.0.1:6379: Connection refused: Error 111 connecting to 127.0.0.1:6379. "
+        "Connection refused.\n"
+        "INFO api: request handled id=9102"
+    ),
+    "Network_Timeout": (
+        'CRITICAL chaos-injector: psycopg2.OperationalError — connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired: connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired\n'
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=9201\n"
+        '>>> CRITICAL chaos-injector: psycopg2.OperationalError — connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired: connection to server at '
+        '"192.0.2.1", port 5432 failed: timeout expired\n'
+        "WARNING healthcheck: container restarting"
+    ),
 }
 
 # 기존 train_set.json/etl_github_to_chroma.py의 ACTION_MAP과 일치시킴.
@@ -157,6 +199,8 @@ ACTION_MAP: dict[str, tuple[str, str, str]] = {
     "Permission_Denied":   ("escalate_to_human",     "", ""),
     "Path_Not_Found":      ("escalate_to_human",     "", ""),
     "Configuration_Error": ("escalate_to_human",     "", ""),
+    "DB_Connection":       ("restart_service",       "redis", ""),
+    "Network_Timeout":     ("restart_service",       "postgres_pool", ""),
 }
 
 
