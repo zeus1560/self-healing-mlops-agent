@@ -198,22 +198,8 @@ QUERIES = [
         "q": 'repo:kubernetes/kubernetes "is forbidden" OR "RBAC" OR "cannot get" is:closed label:kind/bug',
     },
 
-    # ── Port_Conflict ────────────────────────────────────────────────────────
-    {
-        "cat": "Port_Conflict",
-        "name": "Docker port already allocated",
-        "q": 'repo:docker/compose "port is already allocated" OR "address already in use" OR "EADDRINUSE" is:closed',
-    },
-    {
-        "cat": "Port_Conflict",
-        "name": "Traefik bind failed",
-        "q": 'repo:traefik/traefik "address already in use" OR "bind" AND "failed" is:closed label:kind/bug',
-    },
-    {
-        "cat": "Port_Conflict",
-        "name": "Kubernetes port conflict",
-        "q": 'repo:kubernetes/kubernetes "already in use" OR "hostPort" AND "conflict" is:closed label:kind/bug',
-    },
+    # Port_Conflict는 2026-09-08부터 QUERIES에서 빠짐 — 아래 CURATED_SPARSE_CATEGORIES
+    # 주석 참고(자동 재크롤링 시 노이즈 50건이 큐레이션된 10건과 같이 upsert되는 문제 방지).
 
     # ── Configuration_Error ───────────────────────────────────────────────────
     {
@@ -257,6 +243,10 @@ QUERIES = [
 #   DB_Deadlock:          repo:go-sql-driver/mysql deadlock is:closed
 #                         repo:PyMySQL/PyMySQL deadlock is:closed
 #                         repo:django/django deadlock is:closed
+#   Port_Conflict (2026-09-08, 위와 같은 이유로 QUERIES에서 뺌):
+#                         repo:docker/compose "port is already allocated" OR "address already in use" OR "EADDRINUSE" is:closed
+#                         repo:traefik/traefik "address already in use" OR "bind" AND "failed" is:closed label:kind/bug
+#                         repo:kubernetes/kubernetes "already in use" OR "hostPort" AND "conflict" is:closed label:kind/bug
 CURATED_SPARSE_CATEGORIES: dict[str, list[str]] = {
     "Path_Not_Found": [
         "Error removing home directory: Error opening `/home/testuser_move_create_test': No such file or directory.",
@@ -299,6 +289,24 @@ CURATED_SPARSE_CATEGORIES: dict[str, list[str]] = {
         "I'm running many concurrent transactions with tx_isolation=serializable, and rerunning transactions where any statement returns a MySQLError with Number == ER_LOCK_DEADLOCK (1213). There are very often deadlock errors.",
         "Map LOCK_DEADLOCK error to OperationalError",
         "This PR resolves flakiness and deadlocks in SQLite threading/locking tests under the parallel test runner.",
+    ],
+    # 2026-09-08 추가: train_set 3건뿐이던 Port_Conflict 보강. 위 QUERIES에 이미
+    # 정의돼있던 3개 쿼리(Docker/Traefik/Kubernetes)로 실제 크롤링(비인증 모드,
+    # GITHUB_TOKEN 만료돼있었음 — 폴백으로 정상 수집됨) → 50건 후보 중 직접 검토해서
+    # 10건만 채택(나머지는 무관한 PR 설명/테스트 로그/잘린 문장 — 다른 희소 카테고리와
+    # 동일한 노이즈 패턴). Docker 쪽이 실제 에러 문장 품질이 훨씬 좋았고, Kubernetes
+    # 쪽은 대부분 e2e 테스트 리포트/PR 본문이라 1건만 건질 만했음.
+    "Port_Conflict": [
+        "Error response from daemon: driver failed programming external connectivity on endpoint docker-jitsi-meet-stable-10184-jvb-1 (08c62243ee4fbfacf1f96c39352eeb2c08bacca665f2771c24282be3e4e33d49): Bind for 127.0.0.1:8080 failed: port is already allocated",
+        "Error response from daemon: driver failed programming external connectivity on endpoint postgres-db-1 (de5273980b69fbf9294910457e7acaed86f39d91e2d56ee1a4a5c61737384cc6): Error starting userland proxy: listen tcp4 0.0.0.0:5432: bind: address already in use",
+        "Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:8080 -> 0.0.0.0:0: listen tcp 0.0.0.0:8080: bind: address already in use",
+        "Error response from daemon: driver failed programming external connectivity on endpoint some-api-2: Bind for 0.0.0.0:8010 failed: port is already allocated",
+        "Error response from daemon: Address already in use",
+        "Error response from daemon: driver failed programming external connectivity on endpoint docker-compose-issue_dummy_1 (6d9cff4937b3b6946e0bb949a36362cf91477f841be34ac9bd2693453b6e8837): Bind for 0.0.0.0:6009 failed: port is already allocated",
+        "Error response from daemon: Ports are not available: listen tcp 0.0.0.0:5001: bind: address already in use",
+        "/usr/bin/docker-current: Error response from daemon: driver failed programming external connectivity on endpoint unruffled_bhabha (9a05845ce9f631926221059cb259bebfc1f73d9fb2be46bfabd7bb4bb3ef1f75): Error starting userland proxy: listen tcp 0.0.0.0:80: bind: address already in use.",
+        "docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint e2e-dind-builder (b6c6ef56255e36311caf121fdc29e0ad85f608a89aacafd152dd489a71fb0863): Bind for 0.0.0.0:2376 failed: port is already allocated",
+        "Predicate PodFitsHostPorts failed — root cause was a host port conflict for port 21017. This port was in-use as an ephemeral port by another application running on the node.",
     ],
 }
 
