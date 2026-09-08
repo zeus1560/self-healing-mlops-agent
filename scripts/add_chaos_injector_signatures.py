@@ -111,6 +111,12 @@ _CLEAN_LINES: dict[str, list[str]] = {
         "42.0MB -> 57.0MB -> 72.0MB -> 87.0MB -> 102.0MB over ~8s — gradual leak signature "
         "(distinct from an immediate OOM-Killer event)",
     ],
+    # 2026-09-08 추가 (계속): DB_Deadlock 실제 인젝터(SQLite 자체 락 경합, 별도 DB
+    # 서버 불필요). 문구는 로컬 실제 실행으로 캡처(3회 반복 재현 확인, 매번 동일 문구).
+    "DB_Deadlock": [
+        "CRITICAL chaos-injector: sqlite3.OperationalError — database is locked (concurrent "
+        "transaction holding EXCLUSIVE lock): database is locked",
+    ],
 }
 
 # log_watcher._build_context_window()가 실제로 만드는 것과 같은 형태(앞뒤 일반
@@ -225,6 +231,15 @@ _WRAPPED_LINES: dict[str, str] = {
         "signature (distinct from an immediate OOM-Killer event)\n"
         "INFO api: request handled id=7702"
     ),
+    "DB_Deadlock": (
+        "CRITICAL chaos-injector: sqlite3.OperationalError — database is locked (concurrent "
+        "transaction holding EXCLUSIVE lock): database is locked\n"
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=8801\n"
+        ">>> CRITICAL chaos-injector: sqlite3.OperationalError — database is locked (concurrent "
+        "transaction holding EXCLUSIVE lock): database is locked\n"
+        "INFO api: request handled id=8802"
+    ),
 }
 
 # 기존 train_set.json/etl_github_to_chroma.py의 ACTION_MAP과 일치시킴.
@@ -239,6 +254,7 @@ ACTION_MAP: dict[str, tuple[str, str, str]] = {
     "Network_Timeout":     ("restart_service",       "postgres_pool", ""),
     "Auth_Error":          ("escalate_to_human",     "vault", ""),
     "Memory_Leak":         ("kill_process",          "", ""),
+    "DB_Deadlock":         ("escalate_to_human",     "", ""),
 }
 
 

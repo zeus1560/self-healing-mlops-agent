@@ -54,6 +54,7 @@ FAULT_TO_CATEGORY = {
     "network_timeout":   "Network_Timeout",
     "auth_error":        "Auth_Error",
     "memory_leak":       "Memory_Leak",
+    "db_deadlock":       "DB_Deadlock",
 }
 
 # fault_type -> realtime_system.log에 남는 고유 증거 문구(정규식).
@@ -70,6 +71,7 @@ EVIDENCE_MARKERS = {
     "network_timeout":   r"psycopg2\.OperationalError — connection to server",
     "auth_error":        r"requests\.exceptions\.HTTPError — 401 Unauthorized",
     "memory_leak":       r"MemoryLeak — background process .* RSS steadily growing",
+    "db_deadlock":       r"sqlite3\.OperationalError — database is locked",
 }
 
 # 인젝터 자신이 기대한 예외를 못 일으켰을 때 남기는 표식 — 이런 사건은 정답 자체가

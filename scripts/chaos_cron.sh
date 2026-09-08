@@ -13,7 +13,7 @@ AUDIT_LOG="$REPO_DIR/data/chaos_injector.log"
 # 서버별 .env에 각자 TARGET_URL을 채워 넣는 방식으로 확장 가능).
 TARGET_URL="$(grep -E '^TARGET_URL=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)"
 TARGET_URL="${TARGET_URL:-http://localhost:9000}"
-FAULT_TYPES=(oom cpu diskfull process_crash permission_denied path_not_found config_error db_connection network_timeout auth_error memory_leak)
+FAULT_TYPES=(oom cpu diskfull process_crash permission_denied path_not_found config_error db_connection network_timeout auth_error memory_leak db_deadlock)
 
 if [ -f "$ENV_FILE" ] && ! grep -qE '^CHAOS_ENABLED=true\b' "$ENV_FILE"; then
     exit 0

@@ -40,6 +40,7 @@ FAULT_TO_CATEGORY = {
     "network_timeout":   "Network_Timeout",
     "auth_error":        "Auth_Error",
     "memory_leak":       "Memory_Leak",
+    "db_deadlock":       "DB_Deadlock",
 }
 
 EVIDENCE_MARKERS = {
@@ -53,6 +54,7 @@ EVIDENCE_MARKERS = {
     "network_timeout":   r"psycopg2\.OperationalError — connection to server",
     "auth_error":        r"requests\.exceptions\.HTTPError — 401 Unauthorized",
     "memory_leak":       r"MemoryLeak — background process .* RSS steadily growing",
+    "db_deadlock":       r"sqlite3\.OperationalError — database is locked",
 }
 
 _INJECTOR_SELF_FAILURE_MARKER = "investigate"
