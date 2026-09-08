@@ -750,6 +750,26 @@ class TestSystemDiagnosticsPidContext(unittest.TestCase):
         ctx = gather_system_context("ERROR: connection timeout to upstream")
         self.assertNotIn("Top Memory-Consuming Processes", ctx)
 
+    def test_process_crash_context_includes_running_processes_with_pid(self):
+        """
+        2026-09-08: Process_Crash 등 kill 대상을 특정해야 하는 상황도 PID 목록을
+        받아야 한다 — oom/memory 키워드에만 있던 9/6 수정의 사각지대였음
+        (PID 1이 아닌 엉뚱한 프로세스를 잘못 지목하는 경우, 자가파괴적 kill
+        가드로도 못 잡음).
+        """
+        from src.system_diagnostics import gather_system_context
+        ctx = gather_system_context(
+            "target-app process (pid=42, rss=10.0MB, uptime=5.0s) about to crash — "
+            "real process crash injection"
+        )
+        self.assertIn("Running Processes", ctx)
+        self.assertIn("PID", ctx)
+
+    def test_disk_error_does_not_include_running_processes(self):
+        from src.system_diagnostics import gather_system_context
+        ctx = gather_system_context("ERROR: no space left on device")
+        self.assertNotIn("Running Processes", ctx)
+
     def test_ps_is_in_allowed_diag_commands(self):
         from src.system_diagnostics import _ALLOWED_DIAG_CMDS
         self.assertIn("ps", _ALLOWED_DIAG_CMDS)
