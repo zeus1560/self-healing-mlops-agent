@@ -77,6 +77,10 @@ class AgentResponse:
         reasoning:          판단 근거 설명.
         resolution_source:  해결책 출처 ("L1_CACHE" | "L2_LLM" | "RULE").
         command:            실행할 셸 명령어 (L2/RULE 경로에서 명시적으로 설정).
+        l1_doc_id:          L1_CACHE 히트 시 실제로 매칭된 ChromaDB 문서 ID (그 외 None).
+                             온라인학습 엔트리의 실행 결과를 다시 그 문서에 되먹이는 데 쓰인다.
+        l1_source:          매칭된 ChromaDB 문서의 "source" 메타데이터
+                             (예: "online_learning", "chaos_injector_signature"). L1_CACHE 히트 시에만 의미 있음.
     """
 
     error_category:    str
@@ -86,6 +90,8 @@ class AgentResponse:
     reasoning:         str           = ""
     resolution_source: str           = "L1_CACHE"
     command:           Optional[str] = None
+    l1_doc_id:         Optional[str] = None
+    l1_source:         Optional[str] = None
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""

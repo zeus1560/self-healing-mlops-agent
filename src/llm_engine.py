@@ -70,6 +70,13 @@ _OLLAMA_KEEP_ALIVE  = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 # L1 캐시 적중 판별 거리 임계치 — 낮을수록 엄격
 _RAG_THRESHOLD      = float(os.getenv("RAG_THRESHOLD", "0.6"))
 
+# 온라인학습(learn_from_feedback) 엔트리 품질관리 — 반복 실패 시 자동 제거하는 기준.
+# 실패 1건으로 바로 없애지 않고(우연한 실패 방어), 최소 실패 건수 + 실패율 둘 다 넘어야 삭제한다.
+_LEARNED_ENTRY_MAX_FAILURES = int(os.getenv("LEARNED_ENTRY_MAX_FAILURES", "2"))
+_LEARNED_ENTRY_FAILURE_RATE_THRESHOLD = float(
+    os.getenv("LEARNED_ENTRY_FAILURE_RATE_THRESHOLD", "0.5")
+)
+
 # ChromaDB 퍼시스턴트 디렉터리.
 # __file__ 기준 경로를 사용해 os.getcwd() 변경에 독립적으로 동작한다.
 CHROMA_PERSIST_DIR = os.getenv(
@@ -657,8 +664,15 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
 
 
 # ── 공통 헬퍼 ─────────────────────────────────────────────────────────────────
-def _build_response_from_meta(meta: dict, source: str) -> AgentResponse:
-    """ChromaDB 메타데이터 dict → AgentResponse. L1 fast track과 배치 쿼리가 공유."""
+def _build_response_from_meta(
+    meta: dict, source: str, doc_id: str | None = None
+) -> AgentResponse:
+    """ChromaDB 메타데이터 dict → AgentResponse. L1 fast track과 배치 쿼리가 공유.
+
+    doc_id/meta의 "source" 필드는 L1_CACHE 히트에서 실제로 매칭된 문서를 다시
+    식별하기 위함이다(온라인학습 엔트리의 실행 결과 되먹임에 사용, learn_from_feedback/
+    record_learned_outcome 참고).
+    """
     action_str = meta.get("action_type", "escalate_to_human")
     try:
         action_enum = ActionType(action_str)
@@ -672,6 +686,8 @@ def _build_response_from_meta(meta: dict, source: str) -> AgentResponse:
         target_process=meta.get("target_process") or None,
         reasoning=meta.get("reasoning", "No reasoning found in DB"),
         resolution_source=source,
+        l1_doc_id=doc_id,
+        l1_source=meta.get("source"),
     )
 
 
@@ -703,22 +719,28 @@ def _make_llm_response(command: str, error_log: str, system_context: str, backen
     )
 
 
-def _ensemble_vote(candidates: list[tuple[dict, float]]) -> dict:
+def _ensemble_vote(candidates: list[tuple[dict, float, str]]) -> tuple[dict, str]:
     """
     후보 목록에서 action_type 다수결로 최적 메타데이터를 선택한다.
 
     같은 action_type 후보 중 거리(distance)가 가장 작은 것을 반환한다.
     Counter는 모듈 레벨에서 import돼 매 호출마다 재임포트되지 않는다.
+
+    후보는 (메타데이터, 거리, ChromaDB 문서 ID) 튜플이며, 다수결로 뽑힌 단일
+    문서의 ID도 같이 반환한다 — 이 ID가 실제로 응답을 만든 문서이므로, 나중에
+    실행 결과를 그 문서 하나에 정확히 되먹일 수 있다(record_learned_outcome 참고).
     """
-    action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _ in candidates)
+    action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _, _ in candidates)
     top_action   = action_votes.most_common(1)[0][0]
 
-    best_meta, best_dist = None, float("inf")
-    for meta, dist in candidates:
+    best_meta, best_dist, best_id = None, float("inf"), None
+    for meta, dist, doc_id in candidates:
         if meta.get("action_type") == top_action and dist < best_dist:
-            best_meta, best_dist = meta, dist
+            best_meta, best_dist, best_id = meta, dist, doc_id
 
-    return best_meta if best_meta is not None else candidates[0][0]
+    if best_meta is None:
+        best_meta, _, best_id = candidates[0]
+    return best_meta, best_id
 
 
 # ── RAGEngine ─────────────────────────────────────────────────────────────────
@@ -754,7 +776,7 @@ class RAGEngine:
         except TypeError:
             # ChromaDB 0.5.x 버그: 빈 컬렉션 쿼리 시 TypeError 발생.
             n = len(log_texts)
-            return {"documents": [[]] * n, "metadatas": [[]] * n, "distances": [[]] * n}
+            return {"documents": [[]] * n, "metadatas": [[]] * n, "distances": [[]] * n, "ids": [[]] * n}
 
     def _l2_slow_track(self, error_log: str, best_distance: float) -> AgentResponse:
         """L1 미스 시 Groq → Ollama → ipex_llm → Rule-based → Escalation 5단계 폴백 체인."""
@@ -831,6 +853,7 @@ class RAGEngine:
         docs  = results["documents"][0]
         metas = results["metadatas"][0]
         dists = results["distances"][0]
+        ids   = results["ids"][0]
 
         if not docs:
             return AgentResponse(
@@ -841,17 +864,17 @@ class RAGEngine:
             )
 
         candidates = [
-            (metas[i], dists[i]) for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD
+            (metas[i], dists[i], ids[i]) for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD
         ]
         logging.info(f"  [매칭된 과거 에러] {docs[0][:60]}... (거리: {dists[0]:.4f})")
 
         if candidates:
-            best_meta = _ensemble_vote(candidates)
+            best_meta, best_id = _ensemble_vote(candidates)
             logging.info(
                 f"  [앙상블] {len(candidates)}/{len(dists)}개 후보 "
                 f"→ 다수결 action: {best_meta.get('action_type')}"
             )
-            return _build_response_from_meta(best_meta, "L1_CACHE")
+            return _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id)
 
         return self._l2_slow_track(log_text, dists[0])
 
@@ -878,6 +901,7 @@ class RAGEngine:
             docs  = results["documents"][i]
             metas = results["metadatas"][i]
             dists = results["distances"][i]
+            ids   = results["ids"][i]
 
             if not docs:
                 responses.append(AgentResponse(
@@ -889,7 +913,7 @@ class RAGEngine:
                 continue
 
             candidates = [
-                (metas[j], dists[j]) for j in range(len(dists)) if dists[j] <= _RAG_THRESHOLD
+                (metas[j], dists[j], ids[j]) for j in range(len(dists)) if dists[j] <= _RAG_THRESHOLD
             ]
 
             if not candidates:
@@ -897,18 +921,42 @@ class RAGEngine:
                 responses.append(self._l2_slow_track(log_text, dists[0]))
                 continue
 
-            best_meta = _ensemble_vote(candidates)
+            best_meta, best_id = _ensemble_vote(candidates)
             logging.info(
                 f"  [배치 {i + 1}/{len(log_texts)}] 앙상블 {len(candidates)}개 후보 "
                 f"→ {best_meta.get('action_type')}"
             )
-            responses.append(_build_response_from_meta(best_meta, "L1_CACHE"))
+            responses.append(_build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id))
 
         return responses
 
     def learn_from_feedback(self, error_log: str, successful_command: str) -> None:
-        """L2 성공 명령어를 L1 Cache(ChromaDB)에 upsert해 지속 학습한다."""
+        """
+        L2/Rule 성공 명령어를 L1 Cache(ChromaDB)에 upsert해 지속 학습한다.
+
+        source="online_learning" 태깅으로 다른 데이터 유입 경로(GitHub 크롤링,
+        카오스 시그니처 등)와 출처를 구분한다(add_chaos_injector_signatures.py 등과 동일 컨벤션).
+        같은 에러 텍스트에 같은 커맨드가 다시 학습되면(반복 성공) success_count를
+        누적하고, 다른 커맨드로 대체되면(같은 에러에 새 해결책) 카운터를 리셋한다 —
+        record_learned_outcome()이 이 카운터를 보고 반복 실패 엔트리를 제거한다.
+        """
         doc_id = f"learned_{hashlib.md5(error_log.encode('utf-8')).hexdigest()}"
+
+        prev_meta = None
+        try:
+            existing = self.collection.get(ids=[doc_id])
+            if existing.get("ids"):
+                prev_meta = existing["metadatas"][0]
+        except Exception:
+            logging.error(f"[온라인학습] 기존 엔트리 조회 실패:\n{traceback.format_exc()}")
+
+        if prev_meta and prev_meta.get("command") == successful_command:
+            success_count = int(prev_meta.get("success_count", 0)) + 1
+            failure_count = int(prev_meta.get("failure_count", 0))
+        else:
+            success_count = 1
+            failure_count = 0
+
         try:
             self.collection.upsert(
                 ids=[doc_id],
@@ -920,13 +968,76 @@ class RAGEngine:
                     "reasoning":      f"L2 학습 성공 명령어: {successful_command}",
                     "target_process": "unknown",
                     "learned_at":     int(time.time()),
+                    "source":         "online_learning",
+                    "success_count":  success_count,
+                    "failure_count":  failure_count,
                 }],
             )
-            logging.info(f"[Phase 4] 지식 학습 완료 (ID={doc_id[:16]})")
+            logging.info(f"[온라인학습] 지식 학습 완료 (ID={doc_id[:16]}, 성공 {success_count}회)")
             logging.info(f"  에러: {error_log[:50]}...")
             logging.info(f"  해결: {successful_command}")
         except Exception:
-            logging.error(f"[Phase 4] Vector DB 학습 실패:\n{traceback.format_exc()}")
+            logging.error(f"[온라인학습] Vector DB 학습 실패:\n{traceback.format_exc()}")
+
+    def record_learned_outcome(self, doc_id: str, success: bool) -> None:
+        """
+        온라인학습(learn_from_feedback)으로 생성된 L1 엔트리가 L1_CACHE 히트로
+        실제 실행된 결과를 되먹여 success_count/failure_count를 갱신한다.
+
+        source가 "online_learning"이 아닌 엔트리(GitHub 크롤링·카오스 시그니처 등
+        사람이 직접 큐레이션한 데이터)는 런타임 실행 결과로 건드리지 않는다 —
+        이 엔트리들의 신뢰도는 별도 검증 절차(FP/FN 분석 등)로 관리한다.
+
+        최소 실패 건수(_LEARNED_ENTRY_MAX_FAILURES)와 실패율
+        (_LEARNED_ENTRY_FAILURE_RATE_THRESHOLD)을 모두 넘으면 엔트리를 삭제해
+        다음 히트부터 L2가 새 해결책을 다시 시도하게 한다.
+        """
+        try:
+            existing = self.collection.get(ids=[doc_id])
+        except Exception:
+            logging.error(f"[온라인학습] 결과 되먹임 중 조회 실패:\n{traceback.format_exc()}")
+            return
+
+        if not existing.get("ids"):
+            logging.warning(f"[온라인학습] 되먹임 대상 엔트리 없음(이미 삭제됐을 수 있음): {doc_id}")
+            return
+
+        meta = existing["metadatas"][0]
+        if meta.get("source") != "online_learning":
+            return
+
+        success_count = int(meta.get("success_count", 0))
+        failure_count = int(meta.get("failure_count", 0))
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
+
+        total        = success_count + failure_count
+        failure_rate = (failure_count / total) if total else 0.0
+
+        if (failure_count >= _LEARNED_ENTRY_MAX_FAILURES
+                and failure_rate > _LEARNED_ENTRY_FAILURE_RATE_THRESHOLD):
+            try:
+                self.collection.delete(ids=[doc_id])
+                logging.warning(
+                    f"[온라인학습] 반복 실패로 엔트리 제거: {doc_id[:24]} "
+                    f"(성공 {success_count} / 실패 {failure_count})"
+                )
+            except Exception:
+                logging.error(f"[온라인학습] 엔트리 삭제 실패:\n{traceback.format_exc()}")
+            return
+
+        meta["success_count"] = success_count
+        meta["failure_count"] = failure_count
+        try:
+            self.collection.update(ids=[doc_id], metadatas=[meta])
+            logging.info(
+                f"[온라인학습] 결과 되먹임: {doc_id[:24]} "
+                f"(성공 {success_count} / 실패 {failure_count})"
+            )
+        except Exception:
+            logging.error(f"[온라인학습] 카운터 갱신 실패:\n{traceback.format_exc()}")
 
 
 if __name__ == "__main__":
