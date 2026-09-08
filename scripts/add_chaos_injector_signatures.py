@@ -75,17 +75,17 @@ _CLEAN_LINES: dict[str, list[str]] = {
     ],
     "Permission_Denied": [
         "CRITICAL chaos-injector: PermissionError — [Errno 13] Permission denied: "
-        "'./data/locked_reload.sh' (mode=000, no execute bit set): "
-        "[Errno 13] Permission denied: './data/locked_reload.sh'",
+        "'/app/data/locked_reload.sh' (mode=000, no execute bit set): "
+        "[Errno 13] Permission denied: '/app/data/locked_reload.sh'",
     ],
     "Path_Not_Found": [
         "CRITICAL chaos-injector: FileNotFoundError — [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf': [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf'",
+        "'/app/data/missing_module_v2.conf': [Errno 2] No such file or directory: "
+        "'/app/data/missing_module_v2.conf'",
     ],
     "Configuration_Error": [
         "CRITICAL chaos-injector: Configuration Error — JSONDecodeError parsing "
-        "./data/app_config.json: Expecting value: line 1 column 26 (char 25)",
+        "/app/data/app_config.json: Expecting value: line 1 column 26 (char 25)",
     ],
     "DB_Connection": [
         "CRITICAL chaos-injector: redis.exceptions.ConnectionError — Could not connect to "
@@ -96,6 +96,20 @@ _CLEAN_LINES: dict[str, list[str]] = {
         'CRITICAL chaos-injector: psycopg2.OperationalError — connection to server at '
         '"192.0.2.1", port 5432 failed: timeout expired: connection to server at '
         '"192.0.2.1", port 5432 failed: timeout expired',
+    ],
+    # 2026-09-08 추가: MVP 8종 중 실제 카오스 인젝터가 없던 마지막 2개(Auth_Error/Memory_Leak).
+    # 문구는 실제 로컬 uvicorn 실행으로 캡처한 형태를 그대로 씀(단, pid/RSS 수치는 매 실행마다
+    # 달라지므로 Process_Crash의 기존 관례와 동일하게 대표값으로 고정 — 임베딩 거리는 정확한
+    # 숫자가 아니라 문장 형태로 매칭되므로 문제 없음).
+    "Auth_Error": [
+        "CRITICAL chaos-injector: requests.exceptions.HTTPError — 401 Unauthorized calling "
+        "/internal/protected with invalid bearer token: 401 Client Error: Unauthorized for "
+        "url: http://127.0.0.1:9000/internal/protected",
+    ],
+    "Memory_Leak": [
+        "CRITICAL chaos-injector: MemoryLeak — background process pid=4821 RSS steadily growing: "
+        "42.0MB -> 57.0MB -> 72.0MB -> 87.0MB -> 102.0MB over ~8s — gradual leak signature "
+        "(distinct from an immediate OOM-Killer event)",
     ],
 }
 
@@ -138,33 +152,33 @@ _WRAPPED_LINES: dict[str, str] = {
     ),
     "Permission_Denied": (
         "CRITICAL chaos-injector: PermissionError — [Errno 13] Permission denied: "
-        "'./data/locked_reload.sh' (mode=000, no execute bit set): "
-        "[Errno 13] Permission denied: './data/locked_reload.sh'\n"
+        "'/app/data/locked_reload.sh' (mode=000, no execute bit set): "
+        "[Errno 13] Permission denied: '/app/data/locked_reload.sh'\n"
         "[LOG CONTEXT]\n"
         "INFO api: request handled id=3341\n"
         ">>> CRITICAL chaos-injector: PermissionError — [Errno 13] Permission denied: "
-        "'./data/locked_reload.sh' (mode=000, no execute bit set): "
-        "[Errno 13] Permission denied: './data/locked_reload.sh'\n"
+        "'/app/data/locked_reload.sh' (mode=000, no execute bit set): "
+        "[Errno 13] Permission denied: '/app/data/locked_reload.sh'\n"
         "INFO api: request handled id=3342"
     ),
     "Path_Not_Found": (
         "CRITICAL chaos-injector: FileNotFoundError — [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf': [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf'\n"
+        "'/app/data/missing_module_v2.conf': [Errno 2] No such file or directory: "
+        "'/app/data/missing_module_v2.conf'\n"
         "[LOG CONTEXT]\n"
         "INFO api: request handled id=5561\n"
         ">>> CRITICAL chaos-injector: FileNotFoundError — [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf': [Errno 2] No such file or directory: "
-        "'./data/missing_module_v2.conf'\n"
+        "'/app/data/missing_module_v2.conf': [Errno 2] No such file or directory: "
+        "'/app/data/missing_module_v2.conf'\n"
         "INFO api: request handled id=5562"
     ),
     "Configuration_Error": (
         "CRITICAL chaos-injector: Configuration Error — JSONDecodeError parsing "
-        "./data/app_config.json: Expecting value: line 1 column 26 (char 25)\n"
+        "/app/data/app_config.json: Expecting value: line 1 column 26 (char 25)\n"
         "[LOG CONTEXT]\n"
         "INFO api: request handled id=7781\n"
         ">>> CRITICAL chaos-injector: Configuration Error — JSONDecodeError parsing "
-        "./data/app_config.json: Expecting value: line 1 column 26 (char 25)\n"
+        "/app/data/app_config.json: Expecting value: line 1 column 26 (char 25)\n"
         "INFO api: request handled id=7782"
     ),
     "DB_Connection": (
@@ -189,6 +203,28 @@ _WRAPPED_LINES: dict[str, str] = {
         '"192.0.2.1", port 5432 failed: timeout expired\n'
         "WARNING healthcheck: container restarting"
     ),
+    "Auth_Error": (
+        "CRITICAL chaos-injector: requests.exceptions.HTTPError — 401 Unauthorized calling "
+        "/internal/protected with invalid bearer token: 401 Client Error: Unauthorized for "
+        "url: http://127.0.0.1:9000/internal/protected\n"
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=6601\n"
+        ">>> CRITICAL chaos-injector: requests.exceptions.HTTPError — 401 Unauthorized calling "
+        "/internal/protected with invalid bearer token: 401 Client Error: Unauthorized for "
+        "url: http://127.0.0.1:9000/internal/protected\n"
+        "INFO api: request handled id=6602"
+    ),
+    "Memory_Leak": (
+        "CRITICAL chaos-injector: MemoryLeak — background process pid=4821 RSS steadily growing: "
+        "42.0MB -> 57.0MB -> 72.0MB -> 87.0MB -> 102.0MB over ~8s — gradual leak signature "
+        "(distinct from an immediate OOM-Killer event)\n"
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=7701\n"
+        ">>> CRITICAL chaos-injector: MemoryLeak — background process pid=4821 RSS steadily "
+        "growing: 42.0MB -> 57.0MB -> 72.0MB -> 87.0MB -> 102.0MB over ~8s — gradual leak "
+        "signature (distinct from an immediate OOM-Killer event)\n"
+        "INFO api: request handled id=7702"
+    ),
 }
 
 # 기존 train_set.json/etl_github_to_chroma.py의 ACTION_MAP과 일치시킴.
@@ -201,6 +237,8 @@ ACTION_MAP: dict[str, tuple[str, str, str]] = {
     "Configuration_Error": ("escalate_to_human",     "", ""),
     "DB_Connection":       ("restart_service",       "redis", ""),
     "Network_Timeout":     ("restart_service",       "postgres_pool", ""),
+    "Auth_Error":          ("escalate_to_human",     "vault", ""),
+    "Memory_Leak":         ("kill_process",          "", ""),
 }
 
 

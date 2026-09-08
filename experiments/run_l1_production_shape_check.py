@@ -38,6 +38,8 @@ FAULT_TO_CATEGORY = {
     "config_error":      "Configuration_Error",
     "db_connection":     "DB_Connection",
     "network_timeout":   "Network_Timeout",
+    "auth_error":        "Auth_Error",
+    "memory_leak":       "Memory_Leak",
 }
 
 EVIDENCE_MARKERS = {
@@ -49,6 +51,8 @@ EVIDENCE_MARKERS = {
     "config_error":      r"Configuration Error — JSONDecodeError parsing",
     "db_connection":     r"redis\.exceptions\.ConnectionError — Could not connect to Redis",
     "network_timeout":   r"psycopg2\.OperationalError — connection to server",
+    "auth_error":        r"requests\.exceptions\.HTTPError — 401 Unauthorized",
+    "memory_leak":       r"MemoryLeak — background process .* RSS steadily growing",
 }
 
 _INJECTOR_SELF_FAILURE_MARKER = "investigate"

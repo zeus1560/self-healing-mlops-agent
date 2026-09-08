@@ -52,6 +52,8 @@ FAULT_TO_CATEGORY = {
     "config_error":      "Configuration_Error",
     "db_connection":     "DB_Connection",
     "network_timeout":   "Network_Timeout",
+    "auth_error":        "Auth_Error",
+    "memory_leak":       "Memory_Leak",
 }
 
 # fault_type -> realtime_system.log에 남는 고유 증거 문구(정규식).
@@ -66,6 +68,8 @@ EVIDENCE_MARKERS = {
     "config_error":      r"Configuration Error — JSONDecodeError parsing",
     "db_connection":     r"redis\.exceptions\.ConnectionError — Could not connect to Redis",
     "network_timeout":   r"psycopg2\.OperationalError — connection to server",
+    "auth_error":        r"requests\.exceptions\.HTTPError — 401 Unauthorized",
+    "memory_leak":       r"MemoryLeak — background process .* RSS steadily growing",
 }
 
 # 인젝터 자신이 기대한 예외를 못 일으켰을 때 남기는 표식 — 이런 사건은 정답 자체가
@@ -142,9 +146,22 @@ def _identify_fault(error_log: str) -> str | None:
     return None
 
 
-def analyze() -> dict:
+def analyze(since: datetime | None = None) -> dict:
+    """
+    since가 주어지면 그 시각 이전 이벤트/metrics는 전부 제외한다.
+
+    2026-09-08 발견: 이 분석은 metrics.db에 그 당시 실제로 기록된 판정을 그대로
+    읽으므로, 이후 카오스 시그니처를 고쳐도 고치기 전 기록은 영원히 "미탐"으로 남는다
+    — 카테고리별 recall이 낮게 나오는 게 지금도 살아있는 문제인지 수정 전 과거
+    이력이 누적된 것뿐인지 구분하려면, 마지막 수정 시각 이후만 필터링해서
+    재실행하는 게 훨씬 정직한 지표다.
+    """
     chaos_events = _parse_chaos_log(CHAOS_LOG)
     metrics_rows = _load_chaos_metrics_rows(METRICS_DB)
+
+    if since is not None:
+        chaos_events = [e for e in chaos_events if e["timestamp"] >= since]
+        metrics_rows = [r for r in metrics_rows if r["timestamp"] >= since]
 
     # 1) metrics row별로 진짜 fault_type을 증거 문구로 역추적
     labeled = []
@@ -208,6 +225,7 @@ def analyze() -> dict:
 
     summary = {
         "generated_at":            datetime.now(timezone.utc).isoformat(),
+        "since":                   since.isoformat() if since else None,
         "chaos_injector_log_events": len(chaos_events),
         "matched_and_labeled":     len(labeled),
         "missed_entirely":         len(missed),
@@ -227,6 +245,8 @@ def analyze() -> dict:
 def print_report(summary: dict) -> None:
     print("=" * 65)
     print("  False Positive / False Negative 원인 분석 — 실서비스 카오스 기준")
+    if summary.get("since"):
+        print(f"  (필터: {summary['since']} 이후 이벤트만)")
     print("=" * 65)
     print(f"  chaos_injector.log 주입 이벤트 : {summary['chaos_injector_log_events']}건")
     print(f"  실서비스 파이프라인이 라벨링됨  : {summary['matched_and_labeled']}건")
@@ -259,16 +279,35 @@ def print_report(summary: dict) -> None:
     print("=" * 65)
 
 
-def main() -> dict:
+def main(since: datetime | None = None) -> dict:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    summary = analyze()
+    summary = analyze(since=since)
     print_report(summary)
 
-    out_path = RESULTS_DIR / "fp_fn_analysis_summary.json"
+    if since is not None:
+        out_path = RESULTS_DIR / f"fp_fn_analysis_summary_since_{since.date().isoformat()}.json"
+    else:
+        out_path = RESULTS_DIR / "fp_fn_analysis_summary.json"
     out_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\n  JSON 저장: {out_path}")
     return summary
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--since", default=None,
+        help="이 ISO 타임스탬프(예: 2026-09-08T00:00:00+00:00) 이후 이벤트만 집계 — "
+             "카오스 시그니처 등을 고친 이후의 '진짜 현재' recall을 보고 싶을 때 사용",
+    )
+    args = parser.parse_args()
+
+    _since = None
+    if args.since:
+        _since = datetime.fromisoformat(args.since)
+        if _since.tzinfo is None:
+            _since = _since.replace(tzinfo=timezone.utc)
+
+    main(since=_since)

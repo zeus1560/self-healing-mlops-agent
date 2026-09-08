@@ -7,9 +7,16 @@
 테스트다.
 
 반면 permission_denied/path_not_found/config_error(로컬 파일 연산)와
-db_connection/network_timeout(실제 소켓 연결 시도, 아무 것도 파괴하지 않음)는
+db_connection/network_timeout(실제 소켓 연결 시도, 아무 것도 파괴하지 않음),
+memory_leak(90MB만 쓰는 백그라운드 프로세스, cgroup 한도의 극히 일부)는
 리소스를 소모하거나 프로세스를 죽이지 않아 파괴적이지 않으므로, 실제로 호출해
-evidence 로그에 진짜 예외가 기록되는지까지 검증한다.
+evidence 로그에 진짜 예외/증거가 기록되는지까지 검증한다.
+
+auth_error는 비파괴적이지만 여기선 구조적 테스트(라우트 등록·POST 전용)만
+한다 — /internal/protected를 자기 자신(127.0.0.1:9000)에게 실제로 호출하는
+구조라, FastAPI TestClient는 실제 포트를 바인딩하지 않아 이 자기참조 호출이
+ConnectionError로 실패한다(HTTPError로 잡히지 않아 500이 남). 실제 동작은
+로컬에서 uvicorn을 실제로 띄워 수동 검증했다(2026-09-08).
 """
 import os
 import sys
@@ -41,6 +48,8 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/config_error",
             "/inject/db_connection",
             "/inject/network_timeout",
+            "/inject/auth_error",
+            "/inject/memory_leak",
             "/stop",
         ):
             self.assertIn(expected, paths, f"{expected} 라우트가 없음")
@@ -62,6 +71,8 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/config_error",
             "/inject/db_connection",
             "/inject/network_timeout",
+            "/inject/auth_error",
+            "/inject/memory_leak",
         ):
             route = next(r for r in self.app.routes if r.path == path)
             self.assertEqual(set(route.methods) - {"HEAD"}, {"POST"}, f"{path}가 POST 전용이 아님")
@@ -122,6 +133,19 @@ class TestNonDestructiveInjectors(unittest.TestCase):
         self.assertEqual(resp.json().get("injected"), "network_timeout")
         tail = "".join(self._tail_evidence_log())
         self.assertIn("psycopg2.OperationalError", tail)
+
+    def test_memory_leak_raises_real_gradual_growth(self):
+        """
+        90MB(15MB*6단계, cgroup 512m 한도의 극히 일부)만 쓰는 백그라운드 프로세스를
+        실제로 띄워 RSS를 psutil로 측정 — 완료까지 최대 ~10초 걸리는 유일한
+        '비파괴적' 인젝터(다른 4종은 즉시 끝남).
+        """
+        resp = self.client.post("/inject/memory_leak")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("injected"), "memory_leak")
+        tail = "".join(self._tail_evidence_log())
+        self.assertIn("MemoryLeak", tail)
+        self.assertNotIn("too few samples", tail, "RSS 샘플링이 실제로 추세를 못 잡음 — 환경 이슈 가능성")
 
     def test_injectors_clean_up_after_themselves(self):
         """장애 주입용으로 만든 임시 파일이 뒤에 남지 않는지 확인 (컨테이너 /app 오염 방지)."""
