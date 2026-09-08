@@ -54,6 +54,17 @@ _DIAG_RULES: list[tuple[tuple[str, ...], str, list[str]]] = [
         "[System Network Ports]",
         ["ss", "-tuln"],
     ),
+    (
+        # 2026-09-08 추가 — 9/6에 oom/memory 키워드에만 PID 목록을 붙였는데,
+        # Process_Crash 등 kill 대상을 특정해야 하는 다른 상황은 여전히 실제
+        # 프로세스 정보 없이 Groq가 추측하고 있었음(9/7의 자가파괴적 kill
+        # 가드는 PID 1 타겟만 잡고, PID 1이 아닌 엉뚱한 프로세스를 잘못
+        # 지목하는 경우는 여전히 못 막음 — 이 갭을 메운다).
+        ("crash", "sigsegv", "sigkill", "core dumped", "segmentation fault",
+         "died", "terminated unexpectedly", "exited unexpectedly"),
+        "[Running Processes]",
+        ["ps", "-eo", "pid,ppid,%mem,%cpu,comm", "--sort=-%cpu"],
+    ),
 ]
 _DEFAULT_DIAG: tuple[str, list[str]] = ("[System Uptime & Load Average]", ["uptime"])
 
