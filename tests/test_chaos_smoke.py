@@ -8,7 +8,8 @@
 
 반면 permission_denied/path_not_found/config_error(로컬 파일 연산)와
 db_connection/network_timeout(실제 소켓 연결 시도, 아무 것도 파괴하지 않음),
-memory_leak(90MB만 쓰는 백그라운드 프로세스, cgroup 한도의 극히 일부)는
+memory_leak(90MB만 쓰는 백그라운드 프로세스, cgroup 한도의 극히 일부),
+db_deadlock(로컬 SQLite 파일에 락 경합만 유발, 다른 프로세스에 영향 없음)는
 리소스를 소모하거나 프로세스를 죽이지 않아 파괴적이지 않으므로, 실제로 호출해
 evidence 로그에 진짜 예외/증거가 기록되는지까지 검증한다.
 
@@ -50,6 +51,7 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/network_timeout",
             "/inject/auth_error",
             "/inject/memory_leak",
+            "/inject/db_deadlock",
             "/stop",
         ):
             self.assertIn(expected, paths, f"{expected} 라우트가 없음")
@@ -73,6 +75,7 @@ class TestTargetAppRoutes(unittest.TestCase):
             "/inject/network_timeout",
             "/inject/auth_error",
             "/inject/memory_leak",
+            "/inject/db_deadlock",
         ):
             route = next(r for r in self.app.routes if r.path == path)
             self.assertEqual(set(route.methods) - {"HEAD"}, {"POST"}, f"{path}가 POST 전용이 아님")
@@ -146,6 +149,32 @@ class TestNonDestructiveInjectors(unittest.TestCase):
         tail = "".join(self._tail_evidence_log())
         self.assertIn("MemoryLeak", tail)
         self.assertNotIn("too few samples", tail, "RSS 샘플링이 실제로 추세를 못 잡음 — 환경 이슈 가능성")
+
+    def test_db_deadlock_raises_real_lock_error(self):
+        """
+        로컬 SQLite 파일에 대해 한 커넥션이 EXCLUSIVE 락을 쥔 채 대기하는 동안
+        다른 커넥션이 짧은 timeout으로 쓰기를 시도해 실제 database-is-locked를
+        유발한다 — 별도 DB 서버 없이 self-contained.
+        """
+        resp = self.client.post("/inject/db_deadlock")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("injected"), "db_deadlock")
+        tail = "".join(self._tail_evidence_log())
+        self.assertIn("sqlite3.OperationalError", tail)
+        self.assertIn("database is locked", tail)
+        self.assertNotIn(
+            "expected sqlite3.OperationalError", tail,
+            "락 경합이 실제로 재현 안 됨 — 두 번째 커넥션이 그냥 성공함",
+        )
+
+    def test_db_deadlock_cleans_up_temp_db_file(self):
+        resp = self.client.post("/inject/db_deadlock")
+        self.assertEqual(resp.status_code, 200)
+        data_dir = "/app/data" if os.path.isdir("/app/data") else "./data"
+        self.assertFalse(
+            os.path.exists(os.path.join(data_dir, "deadlock_test.db")),
+            "deadlock_test.db가 정리되지 않고 남아있음",
+        )
 
     def test_injectors_clean_up_after_themselves(self):
         """장애 주입용으로 만든 임시 파일이 뒤에 남지 않는지 확인 (컨테이너 /app 오염 방지)."""

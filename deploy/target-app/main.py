@@ -1,5 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
-import threading, time, os, subprocess, sys, json
+import sqlite3, threading, time, os, subprocess, sys, json
 from datetime import datetime
 
 app = FastAPI(title="Target App (Simulated)")
@@ -392,6 +392,62 @@ async def inject_memory_leak():
         return {"injected": "memory_leak"}
     finally:
         _injection_lock.release()
+
+
+@app.post("/inject/db_deadlock")
+def inject_db_deadlock():
+    """
+    SQLite 자체의 락 경합으로 실제 sqlite3.OperationalError("database is locked")를
+    유발한다 — 별도 DB 서버 없이 self-contained로 진짜 락 경합 예외를 만든다.
+
+    일반 def(async 아님)로 선언 — auth_error와 같은 이유: 아래에서 백그라운드
+    스레드가 락을 쥐고 있는 동안 join()으로 대기하는 블로킹 코드라, async def면
+    단일 이벤트루프가 이 대기 때문에 다른 요청을 처리 못 하게 된다.
+    """
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "db_deadlock", "skipped": "another injection in progress"}
+    db_path = "/app/data/deadlock_test.db" if os.path.isdir('/app/data') else "./data/deadlock_test.db"
+    holder_ready   = threading.Event()
+    release_holder = threading.Event()
+
+    def _hold_exclusive_lock():
+        conn = sqlite3.connect(db_path, timeout=5, isolation_level=None)
+        conn.execute("CREATE TABLE IF NOT EXISTS t (id INTEGER)")
+        conn.execute("BEGIN EXCLUSIVE")
+        conn.execute("INSERT INTO t VALUES (1)")
+        holder_ready.set()
+        release_holder.wait(timeout=5)
+        conn.execute("COMMIT")
+        conn.close()
+
+    holder = threading.Thread(target=_hold_exclusive_lock, daemon=True)
+    holder.start()
+    holder_ready.wait(timeout=3)
+
+    try:
+        try:
+            conn2 = sqlite3.connect(db_path, timeout=0.5, isolation_level=None)
+            conn2.execute("INSERT INTO t VALUES (2)")
+            conn2.close()
+            _append_evidence(
+                "ERROR",
+                "expected sqlite3.OperationalError (database is locked) but write succeeded — investigate",
+            )
+        except sqlite3.OperationalError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"sqlite3.OperationalError — database is locked (concurrent transaction holding "
+                f"EXCLUSIVE lock): {e}",
+            )
+        return {"injected": "db_deadlock"}
+    finally:
+        release_holder.set()
+        holder.join(timeout=5)
+        try:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+        finally:
+            _injection_lock.release()
 
 
 @app.post("/stop")
