@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Header, HTTPException
 import threading, time, os, subprocess, sys, json
 from datetime import datetime
 
@@ -48,6 +48,25 @@ def _append_evidence(level: str, message: str) -> None:
     """에이전트(log_watcher)가 실제로 tail하는 realtime_system.log에 실측 증거를 기록."""
     with open(EVIDENCE_LOG, "a", encoding="utf-8") as f:
         f.write(f"{datetime.utcnow().isoformat()} {level} chaos-injector: {message}\n")
+
+
+# inject_auth_error()가 잘못된 토큰으로 호출해 실제 401을 유발하는 대상 —
+# 새 외부 인증 서비스를 세우지 않고 컨테이너 자기 자신의 포트를 호출해 자기완결적으로 유지한다.
+_INTERNAL_AUTH_SECRET = os.getenv("TARGET_APP_INTERNAL_SECRET", "chaos-injector-internal-secret")
+
+# inject_memory_leak()이 구동하는, 15MB씩 6단계(총 90MB, cgroup 512m 한도의 극히 일부)에 걸쳐
+# 1.5초 간격으로 서서히 할당하는 프로세스 — Out_Of_Memory(즉시 대량 할당, OOM Killer 개입)와
+# 구분되는 "서서히 커지는 실제 RSS 증가 추세" 시그니처를 만드는 게 목적이라 한도를 넘기지 않는다.
+_LEAK_SRC = (
+    "import time\n"
+    "blocks = []\n"
+    "for i in range(6):\n"
+    "    b = bytearray(15 * 1024 * 1024)\n"
+    "    for j in range(0, len(b), 4096):\n"
+    "        b[j] = 1\n"
+    "    blocks.append(b)\n"
+    "    time.sleep(1.5)\n"
+)
 
 
 @app.get("/health")
@@ -273,6 +292,104 @@ async def inject_network_timeout():
                 f'psycopg2.OperationalError — connection to server at "192.0.2.1", port 5432 failed: timeout expired: {e}',
             )
         return {"injected": "network_timeout"}
+    finally:
+        _injection_lock.release()
+
+
+@app.get("/internal/protected")
+async def internal_protected(authorization: str = Header(default="")):
+    """Bearer 토큰 검증이 필요한 내부 리소스 — inject_auth_error()가 이걸 잘못된
+    토큰으로 호출해 실제 인증 실패를 유발하는 대상."""
+    if authorization != f"Bearer {_INTERNAL_AUTH_SECRET}":
+        raise HTTPException(status_code=401, detail="invalid or missing bearer token")
+    return {"status": "ok"}
+
+
+@app.post("/inject/auth_error")
+def inject_auth_error():
+    """
+    자체 보호 엔드포인트를 잘못된 토큰으로 호출해 실제 401(HTTPError) 유발.
+
+    일반 def(async 아님)로 선언 — FastAPI가 이런 핸들러를 스레드풀에서 실행한다.
+    async def였다면 아래 requests.get()이 단일 이벤트루프를 블로킹해서, 자기 자신에게
+    보낸 이 요청을 그 이벤트루프가 처리 못 해 데드락(클라이언트 타임아웃)이 났었음 —
+    로컬 재현으로 실제 확인함.
+    """
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "auth_error", "skipped": "another injection in progress"}
+    try:
+        import requests
+        try:
+            resp = requests.get(
+                "http://127.0.0.1:9000/internal/protected",
+                headers={"Authorization": "Bearer wrong-token-xyz"},
+                timeout=3,
+            )
+            resp.raise_for_status()
+            _append_evidence(
+                "ERROR",
+                "expected 401 from /internal/protected with invalid bearer token but request succeeded — investigate",
+            )
+        except requests.exceptions.HTTPError as e:
+            _append_evidence(
+                "CRITICAL",
+                f"requests.exceptions.HTTPError — 401 Unauthorized calling /internal/protected "
+                f"with invalid bearer token: {e}",
+            )
+        return {"injected": "auth_error"}
+    finally:
+        _injection_lock.release()
+
+
+@app.post("/inject/memory_leak")
+async def inject_memory_leak():
+    """OOM(즉시 대량 할당)과 달리, 서서히 커지는 백그라운드 프로세스의 실제 RSS를
+    주기적으로 측정해 점진적 누수 시그니처를 만든다. cgroup 한도(512m)의 극히
+    일부만 쓰므로 OOM Killer는 개입하지 않는다 — 이 프로세스는 스스로 정리한다."""
+    if not _injection_lock.acquire(blocking=False):
+        return {"injected": "memory_leak", "skipped": "another injection in progress"}
+    proc = None
+    try:
+        import psutil
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _LEAK_SRC],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        samples = []
+        try:
+            ps_proc = psutil.Process(proc.pid)
+            for _ in range(6):
+                time.sleep(1.6)
+                # sleep 직후(측정 직전)에 종료 여부를 확인 — 이미 끝난 뒤에 RSS를
+                # 읽으면 0에 가까운 값이 찍혀 "누수 추세"가 끝에서 뚝 떨어져 보임.
+                if proc.poll() is not None:
+                    break
+                try:
+                    samples.append(ps_proc.memory_info().rss / (1024 * 1024))
+                except psutil.NoSuchProcess:
+                    break
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+
+        if len(samples) >= 2:
+            trend = " -> ".join(f"{s:.1f}MB" for s in samples)
+            _append_evidence(
+                "CRITICAL",
+                f"MemoryLeak — background process pid={proc.pid} RSS steadily growing: "
+                f"{trend} over ~{len(samples) * 1.6:.0f}s — gradual leak signature "
+                f"(distinct from an immediate OOM-Killer event)",
+            )
+        else:
+            _append_evidence(
+                "ERROR",
+                "expected steady RSS growth from leak subprocess but too few samples captured — investigate",
+            )
+        return {"injected": "memory_leak"}
     finally:
         _injection_lock.release()
 

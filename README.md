@@ -150,6 +150,8 @@ src/
 
 **카테고리 커버리지 확장 (2026-09-07)**: `DB_Connection`(`/inject/db_connection` — redis-py로 127.0.0.1:6379에 접속 시도, 리스닝 프로세스가 없어 실제 `redis.exceptions.ConnectionError` 발생)과 `Network_Timeout`(`/inject/network_timeout` — psycopg2로 `192.0.2.1`(RFC 5737 TEST-NET-1, 아무도 응답하지 않는 예약 주소)에 접속 시도, 실제 `psycopg2.OperationalError`로 타임아웃 발생)에 실제 카오스 인젝터를 신규 배포했습니다(`scripts/chaos_cron.sh` 로테이션 7종→9종). 두 카테고리 모두 autonomy 기본값(`approve_then_execute`)을 그대로 유지하며, 위 예외 사항의 6개와 달리 **정식 Shadow 절차를 그대로 따릅니다** — 최소 50건 + 최소 2주 데이터가 쌓이기 전까지 직접 승격하지 않습니다.
 
+**카테고리 커버리지 확장 (2026-09-08)**: MVP 8종 중 마지막까지 실제 카오스 인젝터가 없던 `Auth_Error`(`/inject/auth_error` — 컨테이너 자체 보호 엔드포인트(`/internal/protected`)를 잘못된 Bearer 토큰으로 호출해 실제 `requests.exceptions.HTTPError`(401) 발생)와 `Memory_Leak`(`/inject/memory_leak` — OOM처럼 즉시 대량 할당하는 게 아니라 90MB만 6단계에 걸쳐 서서히 점유하는 백그라운드 프로세스의 실제 RSS를 psutil로 측정, cgroup 512m 한도의 극히 일부만 써서 OOM Killer는 개입 안 함)를 신규 배포했습니다(로테이션 9종→11종). MVP 8종 전 카테고리에 실제 카오스 인젝터가 갖춰졌습니다. 두 카테고리 모두 autonomy 기본값(`approve_then_execute`) 유지, 정식 Shadow 절차 대상.
+
 ### 온라인학습 데이터 유입 정책
 
 L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오스 인젝터 시그니처 등) 외에 **런타임 실행 결과로부터도 자동으로 학습**합니다(`src/llm_engine.py::learn_from_feedback`, `src/log_watcher.py`에서 호출). L1 미스로 L2(Groq)/Rule 경로가 명령어를 생성해 **실제 실행에 성공**하면, 그 (에러 로그 → 명령어) 쌍을 `source="online_learning"` 태그와 함께 L1에 upsert합니다 — 다음에 같은 에러가 다시 발생하면 L2를 다시 거치지 않고 즉시 재사용합니다.
