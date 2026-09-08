@@ -150,6 +150,19 @@ src/
 
 **카테고리 커버리지 확장 (2026-09-07)**: `DB_Connection`(`/inject/db_connection` — redis-py로 127.0.0.1:6379에 접속 시도, 리스닝 프로세스가 없어 실제 `redis.exceptions.ConnectionError` 발생)과 `Network_Timeout`(`/inject/network_timeout` — psycopg2로 `192.0.2.1`(RFC 5737 TEST-NET-1, 아무도 응답하지 않는 예약 주소)에 접속 시도, 실제 `psycopg2.OperationalError`로 타임아웃 발생)에 실제 카오스 인젝터를 신규 배포했습니다(`scripts/chaos_cron.sh` 로테이션 7종→9종). 두 카테고리 모두 autonomy 기본값(`approve_then_execute`)을 그대로 유지하며, 위 예외 사항의 6개와 달리 **정식 Shadow 절차를 그대로 따릅니다** — 최소 50건 + 최소 2주 데이터가 쌓이기 전까지 직접 승격하지 않습니다.
 
+### 온라인학습 데이터 유입 정책
+
+L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오스 인젝터 시그니처 등) 외에 **런타임 실행 결과로부터도 자동으로 학습**합니다(`src/llm_engine.py::learn_from_feedback`, `src/log_watcher.py`에서 호출). L1 미스로 L2(Groq)/Rule 경로가 명령어를 생성해 **실제 실행에 성공**하면, 그 (에러 로그 → 명령어) 쌍을 `source="online_learning"` 태그와 함께 L1에 upsert합니다 — 다음에 같은 에러가 다시 발생하면 L2를 다시 거치지 않고 즉시 재사용합니다.
+
+**안전장치 — 왜 이게 위험하지 않은가:**
+- 학습된 엔트리는 실제 분류된 `ErrorCategory`가 아니라 항상 가짜 카테고리(`Learned_from_LLM`)로 저장됩니다(운영 L2 자체가 애초에 진짜 카테고리를 모르고 자유형식 명령어만 생성하기 때문 — 정보 손실이 아니라 원래도 없던 정보). 이 가짜 카테고리는 `autonomy_state`에 등록된 적이 없어 항상 기본값(`approve_then_execute`)으로 남고, **절대 `auto`로 승급되지 않습니다** — 온라인학습으로 생긴 커맨드는 항상 사람 승인을 거칩니다.
+- `OBSERVED_ONLY`/`PROPOSED_ONLY`(READ_ONLY/PROPOSE 레벨, 실제로 실행 안 함)는 학습 대상에서 제외됩니다 — 실행해본 적 없는 커맨드를 "성공한 해결책"으로 학습하지 않습니다.
+- 사람이 큐레이션한 데이터(`source`가 `chaos_injector_signature`/GitHub 크롤링 등)는 런타임 피드백으로 **절대 건드리지 않습니다** — 아래 품질관리는 `source="online_learning"` 엔트리에만 적용됩니다.
+
+**품질관리 — 반복 실패 엔트리 자동 제거 (2026-09-08)**: L1 히트가 학습된 엔트리에서 왔고(`AgentResponse.l1_source == "online_learning"`) 그 실행이 성공/실패했는지를 `record_learned_outcome()`이 그 엔트리의 `success_count`/`failure_count`에 되먹입니다. 실패 건수가 `LEARNED_ENTRY_MAX_FAILURES`(기본 2) 이상이고 실패율이 `LEARNED_ENTRY_FAILURE_RATE_THRESHOLD`(기본 0.5) 초과일 때만 엔트리를 삭제합니다 — 우연한 실패 1건으로 바로 지우지 않고, 반복적으로 안 통하는 해결책만 걸러내 다음 히트부터 L2가 새 해결책을 다시 시도하게 합니다.
+
+**감사/백필**: `scripts/audit_online_learning_entries.py`로 현재 몇 건이 쌓여 있는지, provenance 태깅이 없는 구버전 엔트리가 있는지 확인·백필할 수 있습니다(기본은 리포트만, `--backfill`로 실제 반영).
+
 ---
 
 ## 실험 결과 요약 (`experiments/`)

@@ -212,6 +212,17 @@ class LogTailHandler(FileSystemEventHandler):
             except Exception:
                 logging.error(f"[파이프라인] Feedback 학습 실패:\n{traceback.format_exc()}")
 
+        # 온라인학습으로 생성된 L1 엔트리가 실제로 재사용된 경우, 이번 실행 결과를
+        # 그 엔트리에 되먹여 반복 실패 시 자동으로 걸러낸다(record_learned_outcome 참고).
+        # OBSERVED_ONLY/PROPOSED_ONLY는 실제로 실행해본 게 아니므로 위와 동일하게 제외한다.
+        if (result_category not in ("OBSERVED_ONLY", "PROPOSED_ONLY")
+                and source == "L1_CACHE" and decision.l1_source == "online_learning"
+                and decision.l1_doc_id):
+            try:
+                self.engine.record_learned_outcome(decision.l1_doc_id, success)
+            except Exception:
+                logging.error(f"[파이프라인] 온라인학습 결과 되먹임 실패:\n{traceback.format_exc()}")
+
         self.circuit_breaker.record_result(error_log, success)
 
         self.observer_agent.log_event(
