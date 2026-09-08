@@ -373,6 +373,8 @@ def load_vector_quality() -> dict:
     result = {
         "total": 0, "categories": {}, "learned": 0,
         "hit_rate": None, "dead_count": 0, "sources": {},
+        "online_learning_count": 0, "online_learning_success": 0,
+        "online_learning_failure": 0,
         "_error": None,
     }
     chroma_sqlite = CHROMA_PATH / "chroma.sqlite3"
@@ -403,6 +405,20 @@ def load_vector_quality() -> dict:
             result["sources"] = {r[0]: r[1] for r in src_rows if r[0]}
             if no_src:
                 result["sources"]["etl_demo"] = no_src
+
+            # 온라인학습(learn_from_feedback) 엔트리 품질 — 2026-09-08 추가.
+            # source="online_learning" 태깅된 엔트리의 success_count/failure_count 합계.
+            online_rows = conn.execute(
+                "SELECT em.id, "
+                "MAX(CASE WHEN em.key='success_count' THEN em.int_value END), "
+                "MAX(CASE WHEN em.key='failure_count' THEN em.int_value END) "
+                "FROM embedding_metadata em WHERE em.id IN ("
+                "  SELECT id FROM embedding_metadata WHERE key='source' AND string_value='online_learning'"
+                ") GROUP BY em.id"
+            ).fetchall()
+            result["online_learning_count"]   = len(online_rows)
+            result["online_learning_success"] = sum(r[1] or 0 for r in online_rows)
+            result["online_learning_failure"] = sum(r[2] or 0 for r in online_rows)
     except Exception as e:
         result["_error"] = str(e)
 
@@ -1137,7 +1153,7 @@ with tab3:
             best_d = ddf.loc[ddf["defense_rate_pct"].idxmax()]
             st.metric("최고 방어율",    f"{ddf['defense_rate_pct'].max():.1f}%")
             st.metric("최적 윈도우",    f"{best_d['window_sec']} 초")
-            st.metric("버스트 처리 수", f"{int(ddf['burst_count'].iloc[0])} 건")
+            st.metric("버스트 처리 수", f"{int(ddf['event_count'].iloc[0])} 건")
             st.metric("최저 누락률",    f"{ddf['miss_rate_pct'].min():.1f}%")
 
     st.divider()
@@ -1443,6 +1459,22 @@ with tab4:
                 help="과거 기억에서 즉시 답을 찾아낸 비율입니다. 높을수록 AI 추론 없이 빠르게 처리됩니다.",
             )
 
+        # 온라인학습 품질 — 2026-09-08 추가. 반복 실패 시 자동 제거되는 엔트리라
+        # (record_learned_outcome 참고), 지금 살아있는 건수의 성공/실패 이력을 보여준다.
+        if vq["online_learning_count"] > 0:
+            _ol_total = vq["online_learning_success"] + vq["online_learning_failure"]
+            _ol_rate  = (vq["online_learning_success"] / _ol_total * 100) if _ol_total else 0.0
+            st.caption(
+                f"🔁 온라인학습 품질: 현재 {vq['online_learning_count']}건 보유 — "
+                f"실행 결과 성공 {vq['online_learning_success']}건 / 실패 {vq['online_learning_failure']}건 "
+                f"(성공률 {_ol_rate:.0f}%). 반복 실패한 엔트리는 자동으로 제거됩니다."
+            )
+        else:
+            st.caption(
+                "🔁 온라인학습: 아직 자동 축적된 엔트리 없음 — L2가 끝까지 성공 실행된 사례가 "
+                "아직 없어서 정상입니다(보안 게이트가 보수적으로 설계됨)."
+            )
+
         st.divider()
 
         # ── 검색 품질 — Threshold 최적화 결과 ─────────────────────────────
@@ -1511,9 +1543,11 @@ with tab4:
             st.markdown('<p class="section-title">데이터 수집 출처 분포</p>',
                         unsafe_allow_html=True)
             _SRC_LABELS = {
-                "github_v2":  "GitHub 공식 이슈 (30개 레포)",
-                "loghub_v1":  "Loghub 연구 데이터셋",
-                "etl_demo":   "ETL + 데모 시나리오",
+                "github_v2":               "GitHub 공식 이슈 (30개 레포)",
+                "loghub_v1":                "Loghub 연구 데이터셋",
+                "etl_demo":                 "ETL + 데모 시나리오",
+                "chaos_injector_signature": "카오스 인젝터 실측 시그니처",
+                "online_learning":          "온라인학습 (실행 결과 자동 축적)",
             }
             src_data = vq.get("sources", {})
             if src_data:
@@ -1537,7 +1571,10 @@ with tab4:
                     height=380,
                 )
                 st.plotly_chart(fig_src, width='stretch')
-                st.caption("합성 데이터 없음 — 모두 실제 오픈소스 프로젝트 이슈에서 수집한 원본 에러")
+                st.caption(
+                    "합성 데이터 없음 — 전부 실제 오픈소스 이슈, 실제 카오스 인젝터 실행 로그, "
+                    "또는 실제 운영 환경의 실행 결과에서 수집한 원본 데이터"
+                )
             else:
                 st.info("출처 정보가 없습니다.")
 
