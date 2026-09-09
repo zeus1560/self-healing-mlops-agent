@@ -1,0 +1,13 @@
+# target-app Deployment를 클러스터 내부에 노출하는 Service.
+# 로컬 접근은 `kubectl port-forward svc/target-app 9000:9000`으로.
+apiVersion: v1
+kind: Service
+metadata:
+  name: target-app
+spec:
+  selector:
+    app: target-app
+  ports:
+    - port: 9000
+      targetPort: 9000
+  type: ClusterIP

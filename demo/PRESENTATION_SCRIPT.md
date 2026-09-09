@@ -130,7 +130,7 @@ Prometheus, Grafana 같은 기존 모니터링 도구는 **탐지만** 합니다
 
 | 질문 | 답변 |
 |---|---|
-| 실제 Kubernetes에서 돌아가나요? | 현재 로컬 시뮬레이션이며, `executor.py`에 K8s API 연동 코드 구현 완료. 설정만 바꾸면 됩니다. |
+| 실제 Kubernetes에서 돌아가나요? | 로컬 minikube 클러스터로 실증 검증 완료(재시작/프로세스 종료 2개 핵심 액션이 `kubectl`을 통해 Deployment/Pod에 실제로 적용됨). 자유형식 LLM 명령의 k8s 지원과 실서비스(GCP VM) 이관은 다음 단계입니다. |
 | LLM이 잘못된 명령을 내리면? | 보안 검증이 실행 전에 차단. 위험 명령 30종 100% 차단, 나머지는 ESCALATE_TO_HUMAN. |
 | RAG DB는 어디서 구축했나요? | GitHub API, LogHub, 공식 레포지토리에서 수집, 10개 카테고리 1,016건 ChromaDB에 저장. |
 | LLM 비용 문제는? | L1 캐시가 98.8% 처리, LLM은 1.2%만 호출. Qwen 2.5 로컬 실행으로 API 비용 없음. |

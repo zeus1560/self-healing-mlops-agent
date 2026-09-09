@@ -387,8 +387,11 @@ if __name__ == "__main__":
         logging.disable(logging.CRITICAL)
         print("self-healing agent started. watching logs...", flush=True)
 
-    # CLI 인자가 있으면 그대로 우선 사용(기존 동작 유지), 없으면 config/servers.yaml의
-    # 기본 서버 log_path를 사용한다 — 2026-09-06 config화, 값 자체는 안 바뀜.
+    # CLI 인자가 있으면 그대로 우선 사용(기존 동작 유지), 없으면 config/servers.yaml에서
+    # TARGET_SERVER 환경변수로 선택된 서버(미설정 시 첫 서버)의 log_path를 사용한다.
+    # src/executor.py의 서버 선택 로직과 반드시 동일해야 함 — 그렇지 않으면 TARGET_SERVER=
+    # local-minikube로 돌릴 때 executor는 k8s를 보는데 log_watcher는 여전히 이전 서버의
+    # 로그를 감시하는 불일치가 생긴다(2026-09-09 발견).
     from src.server_config import get_server
-    targets = sys.argv[1:] if len(sys.argv) > 1 else [get_server()["log_path"]]
+    targets = sys.argv[1:] if len(sys.argv) > 1 else [get_server(os.getenv("TARGET_SERVER"))["log_path"]]
     start_watching(targets)

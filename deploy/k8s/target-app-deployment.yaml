@@ -1,0 +1,73 @@
+# target-app을 minikube(로컬 검증)에 배포하는 Deployment.
+#
+# docker-compose.yml의 target-app 서비스(60번째 줄 부근)와 최대한 동일하게 맞춤:
+#   - 동일 이미지(루트 Dockerfile로 빌드), 동일 command, 동일 포트(9000)
+#   - mem_limit 512m / cpus 1.0 → resources.limits로 이관
+#   - ./data 바인드 마운트 → emptyDir (로컬 검증용, 재시작 시 데이터 유지 안 됨)
+#   - tmpfs /fill:150m → emptyDir(medium: Memory, sizeLimit: 150Mi)
+#
+# pids_limit(100)은 k8s stable API에 대응 필드가 없어(alpha kubelet 기능) 생략함 —
+# 로컬 검증 범위에선 영향 없음(fork bomb 방어 등은 이번 라운드 범위 밖).
+#
+# readinessProbe(/health)를 넣어야 executor.py의 _verify_deployment_ready()가 부르는
+# `kubectl rollout status`가 컨테이너 프로세스 시작만이 아니라 실제 앱 헬스까지 확인한다 —
+# probe가 없으면 컨테이너가 뜨자마자 바로 Ready로 잡혀 검증 의미가 없어짐.
+#
+# imagePullPolicy: Never — 레지스트리에 안 올리고 `eval $(minikube docker-env) && docker build`로
+# minikube 내부 도커 데몬에 직접 빌드한 이미지를 그대로 씀.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-app
+  labels:
+    app: target-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: target-app
+  template:
+    metadata:
+      labels:
+        app: target-app
+    spec:
+      containers:
+        - name: target-app
+          image: self-healing-target-app:local
+          imagePullPolicy: Never
+          command: ["uvicorn", "deploy.target_app:app", "--host", "0.0.0.0", "--port", "9000"]
+          ports:
+            - containerPort: 9000
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: "1"
+            requests:
+              memory: 128Mi
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: fill
+              mountPath: /fill
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: fill
+          emptyDir:
+            medium: Memory
+            sizeLimit: 150Mi
