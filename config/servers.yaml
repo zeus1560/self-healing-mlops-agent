@@ -4,9 +4,11 @@
 # (9/3 /grill-me 세션 결정). 서버가 여러 대가 돼도 이 파일 구조 자체는 안 바뀌고
 # servers 리스트에 항목만 추가하면 되도록 설계.
 #
-# exec_method: 이 서버에서 복구 명령을 어떤 방식으로 실행하는지 (docker/systemd/k8s).
-#   서버마다 같은 "고치는 방법"도 실행 메커니즘이 다를 수 있어서 예약해둔 필드 —
-#   지금은 실제로 이 값을 코드에서 분기 처리하지 않음(단일 systemd 서버라 불필요).
+# exec_method: 이 서버에서 복구 명령을 어떤 방식으로 실행하는지 (systemd/k8s).
+#   서버마다 같은 "고치는 방법"도 실행 메커니즘이 다를 수 있어서 예약해둔 필드.
+#   2026-09-09부터 src/executor.py가 이 값을 실제로 분기 처리함
+#   (RESTART_SERVICE/KILL_PROCESS 두 액션만; k8s_namespace는 exec_method: k8s 전용).
+#   TARGET_SERVER 환경변수로 어떤 서버를 쓸지 선택 — 미설정 시 목록의 첫 서버(gcp-primary).
 #
 # 에러 카테고리 → 복구 액션 매핑은 여기 안 두고 코드(src/llm_engine.py 등)에
 # 그대로 유지한다 — 그건 서버 다중화와는 다른 축의 관심사.
@@ -16,3 +18,12 @@ servers:
     log_path: ./data/realtime_system.log
     target_app_url: http://localhost:9000
     exec_method: systemd
+
+  # Phase 3 k8s 연동 로컬 검증용 (2026-09-09 추가). minikube 세팅은
+  # deploy/k8s/target-app-deployment.yaml 참고. VM(gcp-primary)엔 영향 없음
+  # — TARGET_SERVER=local-minikube로 명시적으로 선택해야만 이 서버가 쓰임.
+  - name: local-minikube
+    log_path: ./data/realtime_system.log
+    target_app_url: http://localhost:19000
+    exec_method: k8s
+    k8s_namespace: default

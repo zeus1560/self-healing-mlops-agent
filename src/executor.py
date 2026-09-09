@@ -33,7 +33,7 @@ from typing import Optional
 
 import requests
 
-from src import approval_store, autonomy_store
+from src import approval_store, autonomy_store, server_config
 from src.schemas import ActionType, AgentResponse, AutonomyLevel
 from src.slack_bot import SlackChatOps
 from src.telegram_bot import get_chatops_client
@@ -152,6 +152,12 @@ class ActionExecutor:
         logging.info("[ActionExecutor] 시스템 제어 및 보안 모듈 로드 완료. 대기 중...")
         self.slack_webhook_url = slack_webhook_url
         autonomy_store.init_table()
+
+        # TARGET_SERVER 미설정 시 config/servers.yaml의 첫 서버(gcp-primary, exec_method:
+        # systemd)로 귀결 — 기존 배포(VM) 동작은 완전히 무변경.
+        server = server_config.get_server(os.getenv("TARGET_SERVER"))
+        self.exec_method: str = server.get("exec_method", "systemd")
+        self.k8s_namespace: str = server.get("k8s_namespace", "default")
 
         # 허용 명령어 화이트리스트.
         # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 사용).
@@ -646,6 +652,9 @@ class ActionExecutor:
             logging.error(f"[조치] {msg}")
             return False, msg
 
+        if self.exec_method == "k8s":
+            return self._kill_pod_k8s(safe_name)
+
         logging.warning(f"[조치] '{safe_name}' 프로세스 종료 시도...")
         try:
             proc = subprocess.run(
@@ -680,6 +689,9 @@ class ActionExecutor:
             logging.error(f"[조치] {msg}")
             return False, msg
 
+        if self.exec_method == "k8s":
+            return self._restart_deployment_k8s(safe_name)
+
         logging.warning(f"[조치] '{safe_name}' 서비스 재시작 중...")
         try:
             proc = subprocess.run(
@@ -702,6 +714,108 @@ class ActionExecutor:
         except Exception:
             msg = traceback.format_exc()
             logging.error(f"'{safe_name}' 재시작 오류:\n{msg}")
+            return False, msg
+
+    # ── k8s 실행 경로 (exec_method: k8s) ─────────────────────────────────────
+    # RESTART_SERVICE/KILL_PROCESS 두 구조화 액션만 지원. LLM이 자유형식으로
+    # 생성하는 kubectl 명령(EXECUTE_LLM_COMMAND)은 이번 라운드 범위 밖 —
+    # 화이트리스트(ALLOWED_COMMANDS)가 "명령어당 첫 번째 인자만 검증"하는 구조라
+    # `kubectl rollout restart` 같은 다중 서브커맨드에 안 맞아 별도 재설계가 필요함.
+
+    def _verify_deployment_ready(self, name: str, wait_sec: float = 1.0) -> bool:
+        """kubectl rollout restart 후 Deployment가 실제로 롤아웃 완료됐는지 확인한다."""
+        time.sleep(wait_sec)
+        try:
+            proc = subprocess.run(
+                ["kubectl", "rollout", "status", f"deployment/{name}",
+                 "-n", self.k8s_namespace, "--timeout=30s"],
+                capture_output=True, text=True, shell=False, timeout=35,
+            )
+            if proc.returncode == 0:
+                logging.info(f"  [복구 검증 ✓] Deployment '{name}' 롤아웃 완료 확인됨.")
+                return True
+            logging.warning(f"  [복구 검증 ✗] Deployment '{name}' 롤아웃 미완료: {proc.stdout.strip()}")
+            return False
+        except Exception:
+            logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
+            return False
+
+    def _restart_deployment_k8s(self, name: str) -> tuple[bool, str | None]:
+        """kubectl rollout restart로 Deployment를 재시작한다 (systemctl restart의 k8s 대응)."""
+        logging.warning(f"[조치] Deployment '{name}' 롤아웃 재시작 중 (namespace={self.k8s_namespace})...")
+        try:
+            proc = subprocess.run(
+                ["kubectl", "rollout", "restart", f"deployment/{name}", "-n", self.k8s_namespace],
+                capture_output=True, text=True, shell=False, timeout=30,
+            )
+            if proc.returncode == 0:
+                logging.info(f"  Deployment '{name}' 롤아웃 재시작 신호 전송. 복구 검증 중...")
+                ok = self._verify_deployment_ready(name)
+                if ok:
+                    return True, None
+                subprocess.run(
+                    ["kubectl", "rollout", "undo", f"deployment/{name}", "-n", self.k8s_namespace],
+                    capture_output=True, text=True, shell=False, timeout=30,
+                )
+                return False, f"Deployment '{name}' 재시작 후 롤아웃 미완료, undo 시도함"
+            detail = proc.stderr.strip() or f"returncode={proc.returncode}"
+            logging.error(f"Deployment '{name}' 롤아웃 재시작 실패: {detail}")
+            return False, detail
+        except subprocess.TimeoutExpired:
+            msg = f"Deployment '{name}' 롤아웃 재시작 타임아웃 (30s 초과)"
+            logging.error(msg)
+            return False, msg
+        except Exception:
+            msg = traceback.format_exc()
+            logging.error(f"Deployment '{name}' 롤아웃 재시작 오류:\n{msg}")
+            return False, msg
+
+    def _verify_pod_running(self, name: str, wait_sec: float = 2.0) -> bool:
+        """pod 삭제 후 라벨 셀렉터로 새 파드가 Running 상태인지 확인한다."""
+        time.sleep(wait_sec)
+        try:
+            proc = subprocess.run(
+                ["kubectl", "get", "pods", "-l", f"app={name}", "-n", self.k8s_namespace,
+                 "--field-selector=status.phase=Running",
+                 "-o", "jsonpath={.items[*].metadata.name}"],
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                logging.info(f"  [복구 검증 ✓] '{name}' 새 파드 Running 확인됨: {proc.stdout.strip()}")
+                return True
+            logging.warning(f"  [복구 검증 ✗] '{name}' 라벨의 Running 파드 없음.")
+            return False
+        except Exception:
+            logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
+            return False
+
+    def _kill_pod_k8s(self, name: str) -> tuple[bool, str | None]:
+        """
+        라벨 셀렉터(app={name})로 파드를 삭제한다 (pkill의 k8s 대응).
+
+        Deployment가 컨트롤러라 삭제된 파드는 자동 재생성됨 — 이게 곧
+        "복구 검증"의 의미: 롤백은 불필요(pkill과 동일하게 _ROLLBACK_MAP 없음).
+        """
+        logging.warning(f"[조치] '{name}' 라벨 파드 삭제 시도 (namespace={self.k8s_namespace})...")
+        try:
+            proc = subprocess.run(
+                ["kubectl", "delete", "pod", "-l", f"app={name}", "-n", self.k8s_namespace],
+                capture_output=True, text=True, shell=False, timeout=15,
+            )
+            if proc.returncode == 0:
+                logging.info(f"  '{name}' 파드 삭제 신호 전송. 복구 검증 중...")
+                ok = self._verify_pod_running(name)
+                return ok, (None if ok else f"'{name}' 삭제 후 새 파드 Running 미확인")
+            msg = f"'{name}' 라벨 매칭 파드 없음 또는 삭제 실패: {proc.stderr.strip()}"
+            logging.warning(f"  {msg}.")
+            return False, msg
+        except subprocess.TimeoutExpired:
+            msg = f"'{name}' 파드 삭제 타임아웃 (15s 초과)"
+            logging.error(f"  {msg}.")
+            return False, msg
+        except Exception:
+            msg = traceback.format_exc()
+            logging.error(f"  '{name}' 파드 삭제 오류:\n{msg}")
             return False, msg
 
     def _escalate_to_human(self, reasoning: str) -> None:
