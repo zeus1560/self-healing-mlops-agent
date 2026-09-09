@@ -27,3 +27,14 @@ servers:
     target_app_url: http://localhost:19000
     exec_method: k8s
     k8s_namespace: default
+
+  # Phase 3 k8s 연동 GCP VM 검증용 (2026-09-09 추가). VM에 k3s(경량 프로덕션급
+  # k8s 배포판, minikube는 VM 자원 대비 오버헤드가 커서 제외 — 상세는
+  # project-roadmap-status 메모리 참고) 설치, 기존 docker-compose target-app
+  # (gcp-primary가 쓰는 실제 운영 컨테이너, 90일 데이터 수집 중)은 전혀 안 건드리고
+  # 별도 파드로 병행 배포. TARGET_SERVER=gcp-k3s로 명시적으로 선택해야만 쓰임.
+  - name: gcp-k3s
+    log_path: ./data/realtime_system.log
+    target_app_url: http://localhost:19100
+    exec_method: k8s
+    k8s_namespace: default

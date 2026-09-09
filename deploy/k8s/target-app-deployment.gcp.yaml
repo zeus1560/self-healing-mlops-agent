@@ -1,0 +1,67 @@
+# target-app을 GCP VM의 k3s(경량 프로덕션급 k8s, minikube 아님)에 배포하는 Deployment.
+#
+# target-app-deployment.yaml(로컬 minikube용)과 스펙은 동일, 차이는 image 필드뿐:
+# VM은 이미 docker-compose가 빌드해둔 `agent-target-app:latest` 이미지를 그대로
+# 재사용한다 — `sudo docker save agent-target-app:latest | sudo k3s ctr -n k8s.io
+# images import -`로 k3s의 containerd(k8s.io 네임스페이스, 여기가 아니면
+# ErrImageNeverPull 발생 — 2026-09-09에 실제로 겪음)에 넣은 뒤 이 매니페스트 적용.
+#
+# 기존 docker-compose의 target-app(gcp-primary가 쓰는 실제 운영 컨테이너, 90일
+# 실서비스 데이터 수집 중)은 이것과 완전히 별개 — 절대 안 건드림. 이 파드는 순수하게
+# "이 코드가 k8s에서도 동작한다"는 걸 증명하는 병행 사본.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-app
+  labels:
+    app: target-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: target-app
+  template:
+    metadata:
+      labels:
+        app: target-app
+    spec:
+      containers:
+        - name: target-app
+          image: docker.io/library/agent-target-app:latest
+          imagePullPolicy: Never
+          command: ["uvicorn", "deploy.target_app:app", "--host", "0.0.0.0", "--port", "9000"]
+          ports:
+            - containerPort: 9000
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: "1"
+            requests:
+              memory: 128Mi
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: fill
+              mountPath: /fill
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: fill
+          emptyDir:
+            medium: Memory
+            sizeLimit: 150Mi
