@@ -27,6 +27,11 @@ class TestExecutorDefaultsToSystemd(unittest.TestCase):
         ex = ActionExecutor()
         self.assertEqual(ex.k8s_namespace, "default")
 
+    def test_default_docker_target_app_matches_gcp_primary_config(self):
+        """gcp-primary(config/servers.yaml)의 docker_target_app이 그대로 읽혀야 한다."""
+        ex = ActionExecutor()
+        self.assertEqual(ex.docker_target_app, "mlops_target_app")
+
 
 class TestRestartDeploymentK8s(unittest.TestCase):
     def setUp(self):
@@ -264,8 +269,9 @@ class TestResolveK8sTargetName(unittest.TestCase):
         """회귀: exec_method가 systemd일 땐 resolver 자체를 호출하지 않아야 한다."""
         self.ex.exec_method = "systemd"
         with patch.object(self.ex, "_resolve_k8s_target_name") as mock_resolve, \
+             patch.object(self.ex, "_systemd_unit_exists", return_value=True), \
              patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = MagicMock(returncode=0, stdout="active", stderr="")
             self.ex._restart_service("nginx")
         mock_resolve.assert_not_called()
 

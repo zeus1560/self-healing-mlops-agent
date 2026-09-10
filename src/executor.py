@@ -159,6 +159,7 @@ class ActionExecutor:
         self.exec_method: str = server.get("exec_method", "systemd")
         self.k8s_namespace: str = server.get("k8s_namespace", "default")
         self.k8s_target_app: str | None = server.get("k8s_target_app")
+        self.docker_target_app: str | None = server.get("docker_target_app")
 
         # 허용 명령어 화이트리스트.
         # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 사용).
@@ -649,6 +650,10 @@ class ActionExecutor:
         """
         if self.exec_method == "k8s":
             target = self._resolve_k8s_target_name(target)
+        elif (self.exec_method == "systemd" and self.docker_target_app
+                and not self._systemd_unit_exists(target)):
+            return self._kill_container_docker(self.docker_target_app)
+
         safe_name = _validate_process_name(target or "")
         if safe_name is None:
             msg = f"[Security Block] 프로세스 이름 검증 실패: {target!r}"
@@ -688,6 +693,10 @@ class ActionExecutor:
         """
         if self.exec_method == "k8s":
             target = self._resolve_k8s_target_name(target)
+        elif (self.exec_method == "systemd" and self.docker_target_app
+                and not self._systemd_unit_exists(target)):
+            return self._restart_container_docker(self.docker_target_app)
+
         safe_name = _validate_process_name(target or "")
         if safe_name is None:
             msg = f"[Security Block] 서비스 이름 검증 실패: {target!r}"
@@ -719,6 +728,99 @@ class ActionExecutor:
         except Exception:
             msg = traceback.format_exc()
             logging.error(f"'{safe_name}' 재시작 오류:\n{msg}")
+            return False, msg
+
+    # ── systemd → docker 폴백 (exec_method: systemd 전용) ────────────────────
+    # 2026-09-10 VM 실측으로 발견: target-app은 systemd 유닛이 아니라 docker-compose
+    # 컨테이너라 target_process가 실제 systemd 유닛이 아니면 systemctl은 절대
+    # target-app을 고칠 수 없다(예: L1 캐시가 준 "rsyslog" — 실존하는 무관한
+    # 서비스를 조용히 "성공"으로 재시작함, AUTO 승급된 6개 카테고리엔 사람이 걸러줄
+    # 기회도 없어 더 위험). target_process가 실제 systemd 유닛이면 기존 경로 그대로,
+    # 아니면 servers.yaml의 docker_target_app(docker-compose의 실제 컨테이너, k8s의
+    # k8s_target_app과 동일한 역할)로 대체한다.
+
+    def _systemd_unit_exists(self, name: str | None) -> bool:
+        """이름이 실제 존재하는(LoadState=loaded) systemd 유닛인지 확인한다."""
+        safe = _validate_process_name(name or "")
+        if safe is None:
+            return False
+        try:
+            proc = subprocess.run(
+                ["systemctl", "show", safe, "--property=LoadState", "--value"],
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            return proc.returncode == 0 and proc.stdout.strip() == "loaded"
+        except Exception:
+            logging.error(f"  [systemd 유닛 확인 오류]\n{traceback.format_exc()}")
+            return False
+
+    def _verify_container_running(self, name: str, wait_sec: float = 2.0) -> bool:
+        """kill/restart 후 docker 컨테이너가 실제로 Running 상태인지 확인한다."""
+        time.sleep(wait_sec)
+        try:
+            proc = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Running}}", name],
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            if proc.returncode == 0 and proc.stdout.strip() == "true":
+                logging.info(f"  [복구 검증 ✓] 컨테이너 '{name}' Running 확인됨.")
+                return True
+            logging.warning(f"  [복구 검증 ✗] 컨테이너 '{name}' Running 아님: {proc.stdout.strip()}")
+            return False
+        except Exception:
+            logging.error(f"  [복구 검증 오류]\n{traceback.format_exc()}")
+            return False
+
+    def _restart_container_docker(self, name: str) -> tuple[bool, str | None]:
+        """docker restart로 컨테이너를 재시작한다 (systemd 유닛이 아닌 target_process의 대체 경로)."""
+        logging.warning(f"[조치] 컨테이너 '{name}' 재시작 중 (docker restart)...")
+        try:
+            proc = subprocess.run(
+                ["docker", "restart", name],
+                capture_output=True, text=True, shell=False, timeout=30,
+            )
+            if proc.returncode == 0:
+                ok = self._verify_container_running(name)
+                return ok, (None if ok else f"컨테이너 '{name}' 재시작 후 Running 미확인")
+            detail = proc.stderr.strip() or f"returncode={proc.returncode}"
+            logging.error(f"컨테이너 '{name}' 재시작 실패: {detail}")
+            return False, detail
+        except subprocess.TimeoutExpired:
+            msg = f"컨테이너 '{name}' 재시작 타임아웃 (30s 초과)"
+            logging.error(msg)
+            return False, msg
+        except Exception:
+            msg = traceback.format_exc()
+            logging.error(f"컨테이너 '{name}' 재시작 오류:\n{msg}")
+            return False, msg
+
+    def _kill_container_docker(self, name: str) -> tuple[bool, str | None]:
+        """
+        docker kill로 컨테이너를 종료한다.
+
+        docker-compose의 restart: unless-stopped 정책이 자동 재기동시켜주므로
+        (k8s Deployment의 파드 재생성과 동일한 원리) kill 자체엔 롤백이 필요
+        없다 — pkill/_kill_pod_k8s와 동일 패턴.
+        """
+        logging.warning(f"[조치] 컨테이너 '{name}' 종료 시도 (docker kill)...")
+        try:
+            proc = subprocess.run(
+                ["docker", "kill", name],
+                capture_output=True, text=True, shell=False, timeout=15,
+            )
+            if proc.returncode == 0:
+                ok = self._verify_container_running(name)
+                return ok, (None if ok else f"컨테이너 '{name}' 종료 후 재기동 미확인")
+            msg = f"컨테이너 '{name}' 종료 실패: {proc.stderr.strip()}"
+            logging.warning(f"  {msg}.")
+            return False, msg
+        except subprocess.TimeoutExpired:
+            msg = f"컨테이너 '{name}' 종료 타임아웃 (15s 초과)"
+            logging.error(f"  {msg}.")
+            return False, msg
+        except Exception:
+            msg = traceback.format_exc()
+            logging.error(f"  컨테이너 '{name}' 종료 오류:\n{msg}")
             return False, msg
 
     # ── k8s 실행 경로 (exec_method: k8s) ─────────────────────────────────────
