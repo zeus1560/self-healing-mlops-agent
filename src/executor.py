@@ -158,6 +158,7 @@ class ActionExecutor:
         server = server_config.get_server(os.getenv("TARGET_SERVER"))
         self.exec_method: str = server.get("exec_method", "systemd")
         self.k8s_namespace: str = server.get("k8s_namespace", "default")
+        self.k8s_target_app: str | None = server.get("k8s_target_app")
 
         # 허용 명령어 화이트리스트.
         # 빈 set   = 인자 제한 없음 (df, ps 등 읽기 전용 명령어에만 사용).
@@ -646,6 +647,8 @@ class ActionExecutor:
           - '-x' 플래그: 이름이 정확히 일치하는 프로세스만 종료 (부분 매칭 방지).
             예) target="nginx" 일 때 "nginx-helper" 같은 다른 프로세스를 종료하지 않는다.
         """
+        if self.exec_method == "k8s":
+            target = self._resolve_k8s_target_name(target)
         safe_name = _validate_process_name(target or "")
         if safe_name is None:
             msg = f"[Security Block] 프로세스 이름 검증 실패: {target!r}"
@@ -683,6 +686,8 @@ class ActionExecutor:
 
         보안: _validate_process_name()으로 플래그 인젝션 및 경로 트래버설을 차단한다.
         """
+        if self.exec_method == "k8s":
+            target = self._resolve_k8s_target_name(target)
         safe_name = _validate_process_name(target or "")
         if safe_name is None:
             msg = f"[Security Block] 서비스 이름 검증 실패: {target!r}"
@@ -721,6 +726,42 @@ class ActionExecutor:
     # 생성하는 kubectl 명령(EXECUTE_LLM_COMMAND)은 이번 라운드 범위 밖 —
     # 화이트리스트(ALLOWED_COMMANDS)가 "명령어당 첫 번째 인자만 검증"하는 구조라
     # `kubectl rollout restart` 같은 다중 서브커맨드에 안 맞아 별도 재설계가 필요함.
+
+    def _resolve_k8s_target_name(self, target: str | None) -> str | None:
+        """
+        target_process가 실제 존재하는 k8s Deployment 이름인지 확인하고, 아니면
+        이 서버의 유일한 관리 대상(servers.yaml의 k8s_target_app)으로 대체한다.
+
+        배경(2026-09-10 로컬 minikube 실측): L1 캐시의 target_process는 systemd
+        시절 설계라 k8s 리소스명과 항상 일치하지 않음 — Memory_Leak 카테고리는
+        None, Process_Crash 카테고리는 범용 placeholder("pod")로 나와 그대로 쓰면
+        보안 검증에 막히거나(None) 존재하지 않는 리소스를 대상으로 kubectl이
+        실패한다("pod"). LLM/L1이 준 값을 맹목적으로 신뢰하지 않고 실제 존재
+        여부를 확인한 뒤에만 그대로 쓴다 — 존재 확인 없이 신뢰하는 게 이번에
+        실제로 문제를 일으켰던 지점이라 검증을 생략하지 않는다.
+        """
+        if not self.k8s_target_app:
+            return target  # 폴백 미설정 — 기존 동작(None이면 아래서 보안 차단) 유지
+
+        candidate = target or self.k8s_target_app
+        if candidate == self.k8s_target_app:
+            return candidate  # 이미 폴백 값 — 재확인 불필요
+
+        try:
+            proc = subprocess.run(
+                ["kubectl", "get", "deployment", candidate, "-n", self.k8s_namespace],
+                capture_output=True, text=True, shell=False, timeout=10,
+            )
+            if proc.returncode == 0:
+                return candidate
+        except Exception:
+            logging.error(f"  [k8s 타겟 확인 오류]\n{traceback.format_exc()}")
+
+        logging.warning(
+            f"  [k8s 타겟 폴백] '{candidate}'는 존재하지 않는 Deployment — "
+            f"'{self.k8s_target_app}'로 대체"
+        )
+        return self.k8s_target_app
 
     def _verify_deployment_ready(self, name: str, wait_sec: float = 1.0) -> bool:
         """kubectl rollout restart 후 Deployment가 실제로 롤아웃 완료됐는지 확인한다."""

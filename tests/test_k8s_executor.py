@@ -191,5 +191,84 @@ class TestK8sExecutorSurvivesMissingKubectlBinary(unittest.TestCase):
         self.assertIsInstance(err, str)
 
 
+class TestResolveK8sTargetName(unittest.TestCase):
+    """
+    _resolve_k8s_target_name() 회귀 테스트 (2026-09-10 추가).
+
+    배경: 로컬 minikube 실측에서 L1 캐시의 target_process가 Memory_Leak은 None,
+    Process_Crash는 범용 placeholder("pod")로 나와 실제 k8s 리소스명과 안 맞는 걸
+    발견 — servers.yaml의 k8s_target_app으로 폴백하되, "존재 확인 없이 신뢰하지
+    않는다"가 핵심이라 존재 여부 확인 분기를 정확히 검증한다.
+    """
+
+    def setUp(self):
+        self.ex = ActionExecutor()
+        self.ex.exec_method = "k8s"
+        self.ex.k8s_namespace = "default"
+        self.ex.k8s_target_app = "target-app"
+
+    def test_none_target_falls_back_without_kubectl_call(self):
+        with patch("subprocess.run") as mock_run:
+            resolved = self.ex._resolve_k8s_target_name(None)
+        mock_run.assert_not_called()
+        self.assertEqual(resolved, "target-app")
+
+    def test_placeholder_target_falls_back_when_deployment_missing(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="not found")
+            resolved = self.ex._resolve_k8s_target_name("pod")
+        mock_run.assert_called_once_with(
+            ["kubectl", "get", "deployment", "pod", "-n", "default"],
+            capture_output=True, text=True, shell=False, timeout=10,
+        )
+        self.assertEqual(resolved, "target-app")
+
+    def test_real_target_kept_when_deployment_exists(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="target-app", stderr="")
+            resolved = self.ex._resolve_k8s_target_name("target-app-v2")
+        mock_run.assert_called_once()
+        self.assertEqual(resolved, "target-app-v2")
+
+    def test_already_fallback_value_skips_existence_check(self):
+        with patch("subprocess.run") as mock_run:
+            resolved = self.ex._resolve_k8s_target_name("target-app")
+        mock_run.assert_not_called()
+        self.assertEqual(resolved, "target-app")
+
+    def test_no_fallback_configured_returns_target_unchanged(self):
+        self.ex.k8s_target_app = None
+        with patch("subprocess.run") as mock_run:
+            resolved = self.ex._resolve_k8s_target_name(None)
+        mock_run.assert_not_called()
+        self.assertIsNone(resolved)
+
+    def test_kubectl_error_treated_as_not_found(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError("kubectl not found")):
+            resolved = self.ex._resolve_k8s_target_name("pod")
+        self.assertEqual(resolved, "target-app")
+
+    def test_restart_service_resolves_before_validating(self):
+        with patch.object(self.ex, "_resolve_k8s_target_name", return_value="target-app") as mock_resolve, \
+             patch.object(self.ex, "_restart_deployment_k8s", return_value=(True, None)):
+            self.ex._restart_service(None)
+        mock_resolve.assert_called_once_with(None)
+
+    def test_kill_process_resolves_before_validating(self):
+        with patch.object(self.ex, "_resolve_k8s_target_name", return_value="target-app") as mock_resolve, \
+             patch.object(self.ex, "_kill_pod_k8s", return_value=(True, None)):
+            self.ex._kill_process("pod")
+        mock_resolve.assert_called_once_with("pod")
+
+    def test_systemd_path_never_calls_resolver(self):
+        """회귀: exec_method가 systemd일 땐 resolver 자체를 호출하지 않아야 한다."""
+        self.ex.exec_method = "systemd"
+        with patch.object(self.ex, "_resolve_k8s_target_name") as mock_resolve, \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            self.ex._restart_service("nginx")
+        mock_resolve.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
