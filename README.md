@@ -196,11 +196,25 @@ L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오
 ### 원클릭 실행 (Makefile)
 
 ```bash
-make install   # 패키지 설치 + 환경 초기화 (최초 1회)
-make start     # Docker 인프라 + 에이전트 한 번에 기동
+make install   # venv+패키지, .env, Docker 인프라, ChromaDB 초기 데이터, systemd 유닛까지 전부 준비 (최초 1회, install.sh 실행)
+#                 → 이 단계 끝나면 .env에 GROQ_API_KEY/TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID만 채우면 됨
+make start     # Docker 인프라 + 에이전트(systemd) 한 번에 기동
 make stop      # 전체 종료
 make status    # 컨테이너 + 에이전트 상태 확인
 ```
+
+`install.sh`는 새 서버 한 대를 git clone 직후 상태에서 `make start`만 누르면
+되는 상태까지 만든다 — venv 생성(+pip 없는 환경 자동 폴백), `pyproject.toml`
+기준 패키지 설치, `.env.example` 복사, `docker compose up -d`(대시보드·승인
+서버·target-app), ChromaDB 초기 학습 데이터(`train_set.json` + 카오스 인젝터·
+ProactiveMonitor 큐레이션 시그니처) 적재, systemd 유닛 설치(enable만, 시작은
+안 함)까지 한 번에 처리한다. docker/systemd가 없는 환경(로컬 dev 등)에서는
+해당 단계만 건너뛰고 나머지는 정상 진행된다.
+
+**에이전트 본체(`log_watcher`)는 Docker로 실행하지 않는다** —
+`systemctl`/`pkill`/메모리 회수 등 커널 수준 제어가 필요해 호스트 OS
+네이티브(venv + systemd)로만 구동한다(`docker-compose.yml` 상단 주석 참고).
+Docker는 target-app/dashboard/approval-server 3개 인프라 서비스에만 쓴다.
 
 ### 데모 시연
 
@@ -220,30 +234,33 @@ make logs
 
 지원 장애 유형: `oom` / `memory_leak` / `disk_full` / `process_crash` / `port_conflict` / `auth_error` / `db_timeout` / `network_timeout` / `permission_denied` / `config_error`
 
-### 수동 환경 설정
+### 수동 환경 설정 (`install.sh`가 하는 일을 단계별로 직접 실행하고 싶을 때)
 
 ```bash
-# 1. 가상환경 생성 및 패키지 설치
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+# 1. 가상환경 생성 및 패키지 설치 (pyproject.toml 기준)
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e .                  # 개발 의존성(pytest 등)까지: pip install -e ".[dev]"
 
 # 2. 환경변수 설정
 cp .env.example .env
-# .env 파일에서 GITHUB_TOKEN, SLACK_WEBHOOK_URL 등 설정
+# 최소 GROQ_API_KEY / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 채우기
 ```
 
 ### 데이터 수집 및 학습
 
 ```bash
-# 1. GitHub 이슈 크롤링 (GITHUB_TOKEN 필요)
-python -m src.etl_github_crawler
-
-# 2. Train/Test 분리 (stratified 80/20)
-python scripts/split_dataset.py
-
-# 3. ChromaDB 벡터 동기화
+# 1. 기본 학습 데이터(train_set.json, 저장소에 포함) → ChromaDB 동기화
 python -m src.etl_vector_sync
+
+# 2. 카오스 인젝터/ProactiveMonitor가 실제로 남기는 문구 큐레이션 적재
+#    (train-serving skew 방지 — 문구 어휘가 학습 데이터와 달라 L1이 미스나는 문제를
+#     사전에 막는다, 2026-09-07/09-10 실측으로 확립된 패턴)
+python -m scripts.add_chaos_injector_signatures
+python -m scripts.add_proactive_monitor_signatures
+
+# (선택) 희소 카테고리 보강용 GitHub 이슈 크롤링 — GITHUB_TOKEN 없어도 동작(레이트리밋만 낮음)
+python -m src.etl_github_crawler
 ```
 
 ### 에이전트 수동 실행
@@ -277,27 +294,35 @@ python experiments/run_dataset_scale.py     # Learning curve
 
 ## Docker 배포
 
+`docker compose`는 인프라 3개(대시보드/승인 서버/target-app)만 다룬다 — 에이전트
+본체는 위 "원클릭 실행" 절 설명대로 항상 호스트 네이티브(systemd)로 별도 구동한다.
+
 ```bash
 cp .env.example .env   # 환경변수 설정
 
-# 기본 스택 (에이전트 + 대시보드 + 승인 서버)
+# 인프라 기동 (target-app + 대시보드 + 승인 서버)
 docker compose up -d
 
-# Ollama LLM 포함 (L2 추론 활성화)
+# Ollama LLM 포함 (Groq 미설정/실패 시 L2 폴백용)
 docker compose --profile llm up -d
+
+# 에이전트 본체는 별도로 (호스트 네이티브)
+sudo systemctl start self-healing-agent   # install.sh로 유닛을 미리 설치해뒀다면
 
 # 서비스 포트
 # 대시보드:     http://localhost:8501
 # 승인 서버:    http://localhost:8000
+# target-app:   http://localhost:9000  (카오스 엔지니어링 대상 워크로드)
 # Ollama:       http://localhost:11434
 ```
 
-| 서비스 | 역할 |
-|--------|------|
-| `agent` | 로그 감시 메인 에이전트 |
-| `dashboard` | Streamlit 실시간 대시보드 |
-| `approval-server` | Human-in-the-Loop FastAPI 승인 서버 |
-| `ollama` | 로컬 LLM 서버 (선택 — `--profile llm`) |
+| 서비스 | 실행 방식 | 역할 |
+|--------|----------|------|
+| `self-healing-agent` | systemd (호스트 네이티브) | 로그 감시 메인 에이전트 — `systemctl`/`pkill` 등 커널 제어 필요 |
+| `dashboard` | Docker | Streamlit 실시간 대시보드 |
+| `approval-server` | Docker | Human-in-the-Loop FastAPI 승인 서버 |
+| `target-app` | Docker | 카오스 엔지니어링 대상 워크로드(장애 주입용) |
+| `ollama` | Docker (선택 — `--profile llm`) | 로컬 LLM 서버, Groq 폴백용 |
 
 ---
 
