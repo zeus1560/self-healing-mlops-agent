@@ -1,13 +1,31 @@
 #!/usr/bin/env bash
 # Self-Healing MLOps Agent — 원클릭 설치 스크립트
-# 사용법: bash install.sh
+#
+# 새 서버 한 대를 git clone 이후 상태에서 `make start`(또는 `systemctl start
+# self-healing-agent`)만 누르면 되는 상태까지 끌어올린다:
+#   venv+패키지 설치 → .env 준비 → docker compose(인프라 3종) 기동 →
+#   ChromaDB 초기 학습 데이터 적재 → systemd 유닛 설치(enable, 미기동)
+#
+# 에이전트 본체(log_watcher)는 여기서 기동하지 않는다 — docker-compose.yml
+# 상단 주석 참고: systemctl/pkill 등 커널 수준 제어가 필요해 호스트 네이티브로만
+# 구동하며, .env에 실제 API 키를 채운 뒤 사람이 명시적으로 시작해야 한다.
+#
+# 사용법:
+#   bash install.sh          # 운영 설치
+#   bash install.sh --dev    # + pytest 등 개발 의존성(.[dev])까지 설치
 set -euo pipefail
 
 PYTHON=${PYTHON:-python3}
 VENV_DIR=".venv"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEV_EXTRAS=false
+[ "${1:-}" = "--dev" ] && DEV_EXTRAS=true
+
+cd "$REPO_DIR"
 
 echo "============================================================"
-echo "  Self-Healing MLOps Agent  —  설치 시작"
+echo "  Self-Healing MLOps Agent — 설치 시작"
+echo "  ($REPO_DIR)"
 echo "============================================================"
 
 # ── 1. Python 버전 확인 ──────────────────────────────────────────────
@@ -15,87 +33,97 @@ echo "[1/7] Python 버전 확인..."
 $PYTHON -c "import sys; assert sys.version_info >= (3,10), f'Python 3.10+ 필요 (현재: {sys.version})'"
 echo "  OK: $($PYTHON --version)"
 
-# ── 2. 가상환경 생성 ─────────────────────────────────────────────────
-echo "[2/7] 가상환경 생성: $VENV_DIR"
-if [ ! -d "$VENV_DIR" ]; then
-    $PYTHON -m venv "$VENV_DIR"
+# ── 2. 가상환경 + 패키지 설치 (pyproject.toml 기준) ──────────────────
+echo "[2/7] 가상환경 준비: $VENV_DIR"
+if [ ! -d "$VENV_DIR" ] || [ ! -x "$VENV_DIR/bin/pip" ]; then
+    rm -rf "$VENV_DIR"
+    if ! $PYTHON -m venv "$VENV_DIR" 2>/tmp/venv_err_$$.log; then
+        # 일부 배포판(Debian/Ubuntu 계열 등)은 ensurepip이 별도 패키지라
+        # 기본 venv 생성이 pip 없이 실패한다 — get-pip.py로 직접 부트스트랩.
+        cat /tmp/venv_err_$$.log
+        echo "  [WARN] 기본 venv 생성 실패(ensurepip 없음으로 추정) — pip 없이 재시도 후 부트스트랩..."
+        $PYTHON -m venv --without-pip "$VENV_DIR"
+        curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip_$$.py
+        "$VENV_DIR/bin/python" /tmp/get-pip_$$.py --quiet
+        rm -f /tmp/get-pip_$$.py
+    fi
+    rm -f /tmp/venv_err_$$.log
     echo "  생성 완료."
 else
     echo "  기존 가상환경 재사용."
 fi
 
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
-
-# ── 3. pip 업그레이드 + 패키지 설치 ─────────────────────────────────
-echo "[3/7] 패키지 설치 (requirements.txt)..."
-pip install --upgrade pip --quiet
-if [ -f requirements.txt ]; then
-    pip install -r requirements.txt --quiet
-    echo "  설치 완료."
+"$VENV_DIR/bin/pip" install --upgrade pip --quiet
+if $DEV_EXTRAS; then
+    "$VENV_DIR/bin/pip" install -e ".[dev]" --quiet
+    echo "  설치 완료 (개발 의존성 포함)."
 else
-    echo "  [WARN] requirements.txt 없음 — 개별 설치를 진행합니다."
-    pip install --quiet \
-        chromadb watchdog requests python-dotenv \
-        streamlit altair pandas matplotlib
+    "$VENV_DIR/bin/pip" install -e . --quiet
+    echo "  설치 완료."
 fi
 
-# ── 4. .env 설정 ─────────────────────────────────────────────────────
-echo "[4/7] 환경변수 파일 확인..."
+# ── 3. .env 준비 ─────────────────────────────────────────────────────
+echo "[3/7] 환경변수 파일 확인..."
+NEED_ENV_FILL=false
 if [ ! -f .env ]; then
     cp .env.example .env
+    NEED_ENV_FILL=true
     echo "  .env.example → .env 복사 완료."
-    echo "  !! .env 파일을 열어 GITHUB_TOKEN 등 실제 값을 채워주세요."
 else
     echo "  .env 이미 존재 — 건너뜀."
 fi
 
-# ── 5. data 디렉터리 생성 ────────────────────────────────────────────
-echo "[5/7] data/ 디렉터리 준비..."
+# ── 4. data 디렉터리 준비 ────────────────────────────────────────────
+echo "[4/7] data/ 디렉터리 준비..."
 mkdir -p data/chroma_db experiments/results
 echo "  OK"
 
-# ── 6. Ollama 설치 안내 ──────────────────────────────────────────────
-echo "[6/7] Ollama 확인..."
-if command -v ollama &>/dev/null; then
-    echo "  Ollama 설치됨: $(ollama --version 2>/dev/null || echo '버전 확인 불가')"
-    echo "  모델 풀: ollama pull qwen2.5:0.5b"
+# ── 5. Docker 인프라(target-app/dashboard/approval-server) 기동 ─────
+echo "[5/7] Docker 인프라 기동..."
+if command -v docker &>/dev/null && docker compose version &>/dev/null; then
+    docker compose up -d
+    echo "  OK (dashboard: 8501, approval-server: 8000, target-app: 9000)"
 else
-    echo "  [INFO] Ollama 미설치. L2 LLM 추론을 사용하려면 아래 명령어로 설치하세요:"
-    echo "    curl -fsSL https://ollama.com/install.sh | sh"
-    echo "    ollama pull qwen2.5:0.5b"
+    echo "  [SKIP] docker 또는 docker compose가 없음 — 나중에 직접"
+    echo "         'docker compose up -d' 실행 필요."
 fi
 
-# ── 7. 초기 ETL + Vector DB 구축 안내 ──────────────────────────────
-echo "[7/7] 초기 데이터 구축 방법 안내..."
-cat <<'GUIDE'
+# ── 6. ChromaDB 초기 학습 데이터 적재 ────────────────────────────────
+echo "[6/7] ChromaDB 초기 데이터 적재..."
+"$VENV_DIR/bin/python" -m src.etl_vector_sync
+"$VENV_DIR/bin/python" -m scripts.add_chaos_injector_signatures
+"$VENV_DIR/bin/python" -m scripts.add_proactive_monitor_signatures
+echo "  OK"
 
-  다음 명령어로 에러 플레이북 데이터를 구축하세요:
-
-  # (선택) GitHub 이슈 크롤링
-  python -m src.etl_github_crawler
-
-  # JSON → SQLite 적재
-  python -m src.etl_ingest
-
-  # train/test 분할 (80/20)
-  python scripts/split_dataset.py
-
-  # ChromaDB 벡터 인덱싱
-  python -m src.etl_vector_sync
-
-  # 에이전트 실행
-  python main.py
-
-  # 대시보드
-  streamlit run dashboard/app.py
-
-  # 실험 전체 실행
-  python experiments/run_all.py --skip 13   # Ollama 없을 경우 13번 스킵
-
-GUIDE
+# ── 7. systemd 유닛 설치 (에이전트 본체 — enable만, 시작은 안 함) ────
+echo "[7/7] systemd 유닛 준비..."
+if command -v systemctl &>/dev/null; then
+    UNIT_SRC="deploy/self-healing-agent.service"
+    UNIT_TMP="$(mktemp)"
+    sed "s#__REPO_DIR__#$REPO_DIR#g" "$UNIT_SRC" > "$UNIT_TMP"
+    if sudo -n true 2>/dev/null; then
+        sudo cp "$UNIT_TMP" /etc/systemd/system/self-healing-agent.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable self-healing-agent >/dev/null
+        echo "  OK — /etc/systemd/system/self-healing-agent.service 설치+enable 완료"
+        echo "  (아직 시작 안 함 — .env를 채운 뒤 'make start' 또는"
+        echo "   'sudo systemctl start self-healing-agent' 실행)"
+    else
+        echo "  [SKIP] passwordless sudo 없음 — 아래 명령을 직접 실행할 것:"
+        echo "    sudo cp $UNIT_TMP /etc/systemd/system/self-healing-agent.service"
+        echo "    sudo systemctl daemon-reload && sudo systemctl enable self-healing-agent"
+    fi
+else
+    echo "  [SKIP] systemd 없는 환경(예: 로컬 dev 컨테이너/WSL) — 에이전트는"
+    echo "         수동으로 '$VENV_DIR/bin/python -m src.log_watcher' 실행 가능."
+fi
 
 echo "============================================================"
 echo "  설치 완료!"
-echo "  가상환경 활성화: source $VENV_DIR/bin/activate"
 echo "============================================================"
+if $NEED_ENV_FILL; then
+    echo "  !! .env 파일을 열어 최소 아래 값을 채우세요:"
+    echo "       GROQ_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID"
+fi
+echo "  다음 단계: make start   (또는 위에서 SKIP된 단계를 수동 실행)"
+echo "  상태 확인: make status  /  로그: make logs"
