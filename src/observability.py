@@ -33,6 +33,12 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # NULL로 남아 "기록 이전 데이터"로 자연히 구분된다.
     ("reasoning",       "TEXT"),
     ("command",         "TEXT"),
+    # 2026-09-10 추가: SRE 문서(docs/SRE_PRACTICES.md)의 SLI "탐지 지연"이 그동안
+    # "아직 별도 계측 안 함"으로 비어있던 것을 실측하기 위함 — 에러 줄의 타임스탬프
+    # 부터 log_watcher가 파이프라인을 가동하기까지 걸린 시간(초). 로그 파일 tailing
+    # 경로(on_modified)에서만 채워지고, ProactiveMonitor 콜백처럼 지연이 없는 경로는
+    # NULL로 남는다(src/log_watcher.py 참고).
+    ("detection_latency_sec", "REAL"),
 )
 # 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
 _SAFE_COL_RE = re.compile(r'^[a-z_]+$')
@@ -76,7 +82,8 @@ class AgentObserver:
                 error_detail     TEXT,
                 error_category   TEXT,
                 reasoning        TEXT,
-                command          TEXT
+                command          TEXT,
+                detection_latency_sec REAL
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
@@ -105,12 +112,14 @@ class AgentObserver:
         error_category: str | None = None,
         reasoning: str | None = None,
         command: str | None = None,
+        detection_latency_sec: float | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다.
 
         reasoning/command는 대시보드 "인시던트 상세" 타임라인(self-reflection 결과·
         실행 조치 단계) 표시용 — L1_CACHE 히트에는 self-reflection이 적용되지
         않으므로 reasoning이 없는 게 정상이다(L2_LLM 경로에서만 채워짐).
+        detection_latency_sec는 탐지 지연 SLI 실측용(src/log_watcher.py 참고).
         """
         safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
@@ -122,14 +131,15 @@ class AgentObserver:
                 INSERT INTO metrics
                     (timestamp, error_log, resolution_source, action_type,
                      latency_sec, success, result_category, error_type,
-                     error_detail, error_category, reasoning, command)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     error_detail, error_category, reasoning, command,
+                     detection_latency_sec)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp, safe_log, source, action_type,
                     latency_sec, success, result_category,
                     error_type, error_detail, error_category,
-                    reasoning, command,
+                    reasoning, command, detection_latency_sec,
                 ),
             )
             conn.commit()
