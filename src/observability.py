@@ -27,6 +27,12 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("error_type",      "TEXT"),
     ("error_detail",    "TEXT"),
     ("error_category",  "TEXT"),
+    # 2026-09-10 추가: 대시보드 "인시던트 상세" 타임라인(감지→L1/L2 판단→
+    # self-reflection 결과→실행 조치→최종 기록)에서 self-reflection 판정 결과와
+    # 실제 실행 명령어를 보여주기 위함(specs/spec-sre-practices.md). 기존 행은
+    # NULL로 남아 "기록 이전 데이터"로 자연히 구분된다.
+    ("reasoning",       "TEXT"),
+    ("command",         "TEXT"),
 )
 # 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
 _SAFE_COL_RE = re.compile(r'^[a-z_]+$')
@@ -68,7 +74,9 @@ class AgentObserver:
                 result_category  TEXT DEFAULT 'SUCCESS',
                 error_type       TEXT,
                 error_detail     TEXT,
-                error_category   TEXT
+                error_category   TEXT,
+                reasoning        TEXT,
+                command          TEXT
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
@@ -95,8 +103,15 @@ class AgentObserver:
         error_type: str | None = None,
         error_detail: str | None = None,
         error_category: str | None = None,
+        reasoning: str | None = None,
+        command: str | None = None,
     ) -> None:
-        """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다."""
+        """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다.
+
+        reasoning/command는 대시보드 "인시던트 상세" 타임라인(self-reflection 결과·
+        실행 조치 단계) 표시용 — L1_CACHE 히트에는 self-reflection이 적용되지
+        않으므로 reasoning이 없는 게 정상이다(L2_LLM 경로에서만 채워짐).
+        """
         safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -107,13 +122,14 @@ class AgentObserver:
                 INSERT INTO metrics
                     (timestamp, error_log, resolution_source, action_type,
                      latency_sec, success, result_category, error_type,
-                     error_detail, error_category)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     error_detail, error_category, reasoning, command)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp, safe_log, source, action_type,
                     latency_sec, success, result_category,
                     error_type, error_detail, error_category,
+                    reasoning, command,
                 ),
             )
             conn.commit()

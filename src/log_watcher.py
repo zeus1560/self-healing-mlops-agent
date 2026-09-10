@@ -235,6 +235,8 @@ class LogTailHandler(FileSystemEventHandler):
             error_type=error_type,
             error_detail=error_detail,
             error_category=decision.error_category,
+            reasoning=decision.reasoning,
+            command=decision.command,
         )
         logging.info(
             f"[조치 완료] 소스:{source} | 결과:{result_category} ({latency:.2f}s)"

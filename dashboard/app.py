@@ -438,11 +438,12 @@ def load_vector_quality() -> dict:
 
 
 # ── 탭 레이아웃 ───────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏆  핵심 성과 요약",
     "📡  실시간 장애 조치",
     "🔬  아키텍처 성능 검증",
     "🧬  지식 저장소(Vector DB)",
+    "🕵️  인시던트 상세",
 ])
 
 
@@ -1587,6 +1588,95 @@ with tab4:
         tbl_df["비율(%)"] = (tbl_df["count"] / vq["total"] * 100).round(1)
         tbl_df.columns = ["에러 카테고리", "벡터 수", "비율(%)"]
         st.dataframe(tbl_df, width='stretch', hide_index=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TAB 5 — 인시던트 상세 (감지 → L1/L2 판단 → Self-Reflection → 실행 조치 → 최종 기록)
+# ════════════════════════════════════════════════════════════════════════════════
+with tab5:
+    if df.empty:
+        st.info(
+            "📭 표시할 인시던트가 없습니다. Agent가 에러를 하나라도 처리하면 "
+            "여기에 감지→판단→조치→기록 전 과정이 시간순으로 표시됩니다."
+        )
+    else:
+        st.caption(
+            "인시던트 하나를 고르면 감지부터 최종 기록까지 파이프라인이 "
+            "어떻게 통과했는지 시간순으로 볼 수 있습니다(docs/SRE_PRACTICES.md 참고)."
+        )
+
+        _inc_df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+
+        def _inc_label(row: pd.Series) -> str:
+            cat = _CATEGORY_DESC.get(str(row["error_category"]), (row["error_category"], ""))[0]
+            res_icon = {"SUCCESS": "✅", "FAILURE": "⚠️", "IMPOSSIBLE": "🚫"}.get(
+                str(row["result_category"]), "❓"
+            )
+            return f"#{int(row['id'])}  [{str(row['timestamp'])[:19]}]  {cat}  {res_icon}"
+
+        _options = {_inc_label(row): int(row["id"]) for _, row in _inc_df.iterrows()}
+        _picked  = st.selectbox("인시던트 선택", options=list(_options.keys()))
+        _sel_id  = _options[_picked]
+        row      = _inc_df[_inc_df["id"] == _sel_id].iloc[0]
+
+        icon, narrative, detail = _make_story(row)
+        cat_label = _CATEGORY_DESC.get(str(row["error_category"]), (row["error_category"], ""))[0]
+        src_raw   = str(row.get("resolution_source", ""))
+        st.markdown(f"### {icon} 인시던트 #{int(row['id'])} — {cat_label}")
+
+        with st.container(border=True):
+            st.markdown("**1️⃣ 감지 (Detection)**")
+            st.caption(str(row["timestamp"]))
+            raw_log = str(row.get("error_log", "")).strip()
+            if raw_log and raw_log != "nan":
+                st.code(raw_log[:500], language="text")
+
+        with st.container(border=True):
+            st.markdown("**2️⃣ 판단 (L1 캐시 / L2 AI 추론)**")
+            st.write(_SOURCE_DESC.get(src_raw, src_raw))
+            st.write(f"분류된 에러 카테고리: **{cat_label}**")
+            _action_raw = str(row.get("action_type", ""))
+            st.write(f"선택된 조치: **{_ACTION_DESC.get(_action_raw, _action_raw)}**")
+
+        with st.container(border=True):
+            st.markdown("**3️⃣ Self-Reflection 결과**")
+            _reasoning = row.get("reasoning")
+            _reasoning = (
+                None if _reasoning is None or str(_reasoning) in ("nan", "None", "")
+                else str(_reasoning)
+            )
+            if src_raw != "L2_LLM":
+                st.caption(
+                    "해당 없음 — Self-Reflection은 L2(AI 추론)가 생성한 명령어에만 "
+                    "적용됩니다. 이 인시던트는 L1 캐시/규칙 기반으로 즉시 해결돼 "
+                    "이 단계를 거치지 않았습니다."
+                )
+            elif _reasoning is None:
+                st.caption("이 필드가 기록되기 이전(2026-09-10 이전)의 인시던트라 값이 없습니다.")
+            elif _reasoning.startswith("⚠️"):
+                st.warning(_reasoning)
+            else:
+                st.success(_reasoning)
+
+        with st.container(border=True):
+            st.markdown("**4️⃣ 실행 조치 (Execution)**")
+            _cmd = row.get("command")
+            if _cmd and str(_cmd) not in ("nan", "None", ""):
+                st.code(str(_cmd), language="bash")
+            else:
+                _note = "(이 필드가 기록되기 이전 데이터)" if src_raw == "L1_CACHE" else ""
+                st.caption(f"구조화된 액션 실행: {_action_raw} {_note}")
+
+        with st.container(border=True):
+            st.markdown("**5️⃣ 최종 기록 (Outcome)**")
+            c1, c2, c3 = st.columns(3)
+            _res_kor = {"SUCCESS": "✅ 성공", "FAILURE": "⚠️ 실패", "IMPOSSIBLE": "🚫 불가"}
+            c1.metric("처리 결과", _res_kor.get(str(row.get("result_category", "")), str(row.get("result_category", ""))))
+            c2.metric("소요 시간", f"{row.get('latency_ms', 0):.0f} ms")
+            _is_success = str(row.get("success", "0")) in ("1", "True", "1.0", "true")
+            c3.metric("실행 성공 여부", "성공" if _is_success else "실패")
+            if detail:
+                st.warning(f"상세: {detail}")
 
 
 # ── 자동 새로고침 ─────────────────────────────────────────────────────────────
