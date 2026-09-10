@@ -344,10 +344,51 @@ class ActionExecutor:
                     f"'{base_cmd}' 의 인자 {first_arg!r} 미허용. 허용: {sorted(allowed_args)}",
                 )
 
+        # 6.4. kill로 PID 1(컨테이너 자기 자신/init) 지정 차단.
+        #    2026-09-10 adversarial testing 확장 중 발견: src/llm_engine.py의
+        #    _is_self_destructive_kill()이 "executor.py 화이트리스트가 최종
+        #    방어선"이라고 문서화해뒀는데, 실제로는 "kill -TERM 1"/"kill -HUP 1"이
+        #    여기 화이트리스트만으로는 그대로 통과했음(-9는 이미 막혀있었지만
+        #    허용된 -TERM/-HUP로는 못 막았음). self-reflection의 판정은 자문
+        #    성격(2026-09-05 결정, 노이즈가 커서 강제 차단 안 함)이라 이 계층이
+        #    실제 최종 방어선이 되도록 동일 로직을 여기에도 둔다.
+        #    문자열 "1" 정확 일치만으로는 "001"/"+1"처럼 실제 kill(1) 유틸리티가
+        #    똑같이 PID 1로 파싱하는 변형을 놓친다(직접 실측으로 확인) — 정수로
+        #    파싱해 값 자체를 비교한다.
+        if base_cmd == "kill":
+            for t in tokens[2:]:
+                try:
+                    if int(t) == 1:
+                        return _block("PID 1 대상 kill 차단", f"자기 자신/init 대상 지정: {tokens}")
+                except ValueError:
+                    continue
+
+        # 6.5. ss -K/--kill 명시적 차단.
+        #    2026-09-10 adversarial testing 확장 중 발견: `ss`는 읽기 전용 진단
+        #    도구로 보고 인자 제한 없음(빈 set)으로 등록했었는데, 실제로는
+        #    -K/--kill(매칭되는 소켓을 강제로 닫음)이라는 파괴적 플래그가 있어
+        #    "ss -K dst 0.0.0.0/0" 같은 명령이 그대로 통과했음(실측 확인). 다른
+        #    화이트리스트 인자 검증처럼 첫 토큰만 보면 뒤쪽 위치의 -K는 못 잡으므로
+        #    전체 토큰을 스캔한다.
+        if base_cmd == "ss" and any(t in ("-K", "--kill") for t in tokens[1:]):
+            return _block("ss 파괴적 플래그 차단", f"-K/--kill 플래그 감지: {tokens}")
+
         # 7. systemctl 서비스 이름 추가 검증.
         #    "systemctl restart ../etc/shadow" 같은 경로 트래버설 및
         #    "systemctl restart -f" 같은 플래그 인젝션을 명시적으로 차단한다.
-        if base_cmd == "systemctl" and len(tokens) >= 3:
+        #
+        #    2026-09-10 adversarial testing 확장 중 발견: 기존엔 len(tokens) >= 3
+        #    만 보고 tokens[2](서비스 이름)만 검증해서, "systemctl restart nginx
+        #    --now --force EXTRA" 같은 토큰 4개 이상짜리가 뒤쪽 토큰은 전혀
+        #    검증되지 않은 채 그대로 통과해 subprocess.run에 넘어갔음(실측 확인,
+        #    err=None). 이 시스템의 정당한 사용 형태는 항상 "systemctl <verb>
+        #    <service>" 3토큰뿐이라 그 외엔 무조건 차단한다.
+        if base_cmd == "systemctl":
+            if len(tokens) != 3:
+                return _block(
+                    "systemctl 토큰 개수 이상",
+                    f"'systemctl <verb> <service>' 3토큰만 허용, 실제 {len(tokens)}개: {tokens}",
+                )
             svc = tokens[2]
             if not _PROCESS_NAME_RE.match(svc):
                 return _block(

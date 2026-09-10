@@ -490,11 +490,21 @@ def _is_self_destructive_kill(command: str) -> bool:
     지정하면 여전히 통과한다 — systemctl restart 노이즈와 마찬가지로
     LLM 판정에만 맡기면 매번 뒤섞이는 문제가 재현되므로, "PID 1"이라는
     사실만으로 LLM 호출 없이 항상 거부한다.
+
+    2026-09-10 adversarial testing 중 발견: 문자열 "1" 정확 일치만 보면
+    "001"/"+1"처럼 실제 kill(1) 유틸리티가 정수로 파싱해 똑같이 PID 1을
+    지정하는 변형을 놓친다 — 정수로 파싱해 값을 비교한다.
     """
     tokens = command.split()
     if len(tokens) < 3 or tokens[0] != "kill":
         return False
-    return any(t == "1" for t in tokens[2:])
+    for t in tokens[2:]:
+        try:
+            if int(t) == 1:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
