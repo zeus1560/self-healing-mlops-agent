@@ -12,6 +12,12 @@
 #
 # 에러 카테고리 → 복구 액션 매핑은 여기 안 두고 코드(src/llm_engine.py 등)에
 # 그대로 유지한다 — 그건 서버 다중화와는 다른 축의 관심사.
+#
+# k8s_target_app: exec_method: k8s 전용. L1 캐시/LLM이 만든 target_process가
+#   None이거나(예: Memory_Leak 카테고리) 실제 리소스명과 안 맞는 범용 placeholder일
+#   때(예: Process_Crash 카테고리의 "pod") 대체할, 이 서버가 실제로 관리하는 단일
+#   Deployment 이름. src/executor.py의 _resolve_k8s_target_name()이 실제 존재
+#   여부를 확인한 뒤에만 폴백한다 — 2026-09-10 로컬 실측으로 필요성 확인됨.
 
 servers:
   - name: gcp-primary
@@ -27,6 +33,7 @@ servers:
     target_app_url: http://localhost:19000
     exec_method: k8s
     k8s_namespace: default
+    k8s_target_app: target-app
 
   # Phase 3 k8s 연동 GCP VM 검증용 (2026-09-09 추가). VM에 k3s(경량 프로덕션급
   # k8s 배포판, minikube는 VM 자원 대비 오버헤드가 커서 제외 — 상세는
@@ -38,3 +45,4 @@ servers:
     target_app_url: http://localhost:19100
     exec_method: k8s
     k8s_namespace: default
+    k8s_target_app: target-app
