@@ -298,6 +298,52 @@ class TestExecutorSecurity(unittest.TestCase):
         tokens, err = self.ex._validate_command("pkill nginx")
         self.assertIsNotNone(err)
 
+    # ── 2026-09-10 adversarial testing 확장 중 발견한 실제 취약점 3건 —
+    #    experiments/run_security_audit.py의 회귀 테스트와 별개로 CI에서
+    #    항상 도는 pytest에도 고정해 재발을 막는다.
+
+    def test_systemctl_extra_trailing_tokens_blocked(self):
+        # 이전엔 tokens[2](서비스 이름)만 검증하고 그 뒤는 안 봐서
+        # "systemctl restart nginx --now --force EXTRA"가 그대로 통과했었음.
+        _, err = self.ex._validate_command("systemctl restart nginx --now --force EXTRA")
+        self.assertIsNotNone(err)
+        self.assertEqual(err["error_type"], "SecurityBlock")
+
+    def test_systemctl_missing_service_name_blocked(self):
+        _, err = self.ex._validate_command("systemctl restart")
+        self.assertIsNotNone(err)
+
+    def test_ss_kill_flag_blocked(self):
+        # ss -K/--kill은 매칭되는 소켓을 강제로 닫는 파괴적 기능이라
+        # "읽기 전용 진단 도구"라는 가정(인자 제한 없음)이 틀렸었음.
+        for cmd in ["ss -K dst 0.0.0.0/0", "ss --kill dst 1.2.3.4", "ss -a -K"]:
+            _, err = self.ex._validate_command(cmd)
+            self.assertIsNotNone(err, f"'{cmd}' 차단 실패")
+
+    def test_ss_readonly_flags_still_pass(self):
+        tokens, err = self.ex._validate_command("ss -tuln")
+        self.assertIsNone(err)
+        self.assertEqual(tokens, ["ss", "-tuln"])
+
+    def test_kill_pid_1_blocked_even_with_allowed_signal(self):
+        # -9(SIGKILL)는 애초에 허용 인자 밖이라 막히지만, 허용된 -TERM/-HUP로도
+        # PID 1(컨테이너 자기 자신/init)을 지정하면 여전히 통과했었음.
+        for cmd in ["kill -TERM 1", "kill -HUP 1"]:
+            _, err = self.ex._validate_command(cmd)
+            self.assertIsNotNone(err, f"'{cmd}' 차단 실패")
+
+    def test_kill_pid_1_numeric_variants_blocked(self):
+        # "001"/"+1"처럼 실제 kill(1) 유틸리티가 동일하게 PID 1로 파싱하는
+        # 변형도 문자열 정확 일치가 아니라 정수 값으로 비교해 잡아야 한다.
+        for cmd in ["kill -TERM 001", "kill -HUP +1"]:
+            _, err = self.ex._validate_command(cmd)
+            self.assertIsNotNone(err, f"'{cmd}' 차단 실패")
+
+    def test_kill_other_pid_still_passes(self):
+        tokens, err = self.ex._validate_command("kill -TERM 1234")
+        self.assertIsNone(err)
+        self.assertEqual(tokens, ["kill", "-TERM", "1234"])
+
 
 # ─────────────────────────────────────────────────────────────
 # #16 Approval Store

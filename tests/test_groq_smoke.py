@@ -166,6 +166,13 @@ class TestSelfReflectionSelfDestructiveKillBlock(unittest.TestCase):
         for cmd in ["kill -TERM 4821", "kill -HUP 10234"]:
             self.assertFalse(llm_engine._is_self_destructive_kill(cmd), cmd)
 
+    def test_kill_targeting_pid_1_numeric_variants_still_caught(self):
+        # 2026-09-10 adversarial testing 확장 중 발견: 문자열 "1" 정확 일치만
+        # 보면 "001"/"+1"처럼 실제 kill(1) 유틸리티가 동일하게 PID 1로 파싱하는
+        # 변형을 놓친다 — 정수로 파싱해 값을 비교해야 한다.
+        for cmd in ["kill -TERM 001", "kill -HUP +1"]:
+            self.assertTrue(llm_engine._is_self_destructive_kill(cmd), cmd)
+
     def test_non_kill_commands_are_never_self_destructive(self):
         for cmd in ["pkill -f zombie_worker", "systemctl restart nginx", ""]:
             self.assertFalse(llm_engine._is_self_destructive_kill(cmd), cmd)
