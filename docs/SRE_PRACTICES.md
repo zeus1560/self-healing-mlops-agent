@@ -20,7 +20,7 @@
 
 | SLI | 정의 | 측정 방법 |
 |---|---|---|
-| **탐지 지연(Detection Latency)** | 로그에 에러가 찍힌 시점부터 `log_watcher`가 파이프라인을 가동하기까지 걸리는 시간 | `Debouncer`가 동일 시그니처를 묶어 처리(폭주 방지) — 실측 기반 평균 지연은 아직 별도 계측 안 함(향후 계측 항목) |
+| **탐지 지연(Detection Latency)** | 로그에 에러가 찍힌 시점부터 `log_watcher`가 파이프라인을 가동하기까지 걸리는 시간 | 2026-09-10부터 실측 계측 시작 — `agent_metrics.db`의 `detection_latency_sec` 컬럼(에러 줄의 타임스탬프와 파이프라인 가동 시각의 차이, `src/log_watcher.py::_parse_leading_timestamp`). 로그 파일 tailing 경로에서만 채워지고 `ProactiveMonitor` 콜백 경로는 애초에 지연이 없어 NULL. 배포 전 이력은 당연히 NULL이니 평균을 낼 땐 그 시점 이후로 필터링할 것(`--since` 패턴, 위 "자동 실행 정확도" 행과 동일한 함정) |
 | **L1(빠른 기억) 응답 지연** | ChromaDB 벡터 검색으로 과거 해결책을 찾아 반환하는 데 걸리는 시간 | `agent_metrics.db`의 `resolution_source='L1_CACHE'` 행의 `latency_sec` |
 | **L2(AI 추론) 응답 지연** | Groq API 호출 + self-reflection까지 포함한 지연 | `agent_metrics.db`의 `resolution_source='L2_LLM'` 행의 `latency_sec` — 2026-08-27 Groq 전환 후 실측 평균 **0.65초**(전환 전 23.7초 대비 36배) |
 | **자동 실행 정확도(카테고리별)** | Shadow mode 승급 심사에 쓰는 FN(미탐)·FP(오탐) 비율 | `experiments/run_fp_fn_analysis.py --since <배포시각>`으로 배포 이후 구간만 집계 (배포 이전 이력이 섞이면 recall이 영구히 낮게 나오는 함정이 있음 — 2026-09-08 세션에서 실측으로 확인된 교훈) |

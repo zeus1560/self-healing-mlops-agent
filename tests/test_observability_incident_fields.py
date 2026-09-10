@@ -4,6 +4,9 @@ tests/test_observability_incident_fields.py
 대시보드 "인시던트 상세" 타임라인(specs/spec-sre-practices.md)이 self-reflection
 결과와 실행 명령어를 보여주려면 metrics 테이블에 reasoning/command가 저장돼야
 한다 — 이 두 컬럼의 스키마 마이그레이션과 log_event() 배관을 검증한다.
+
+detection_latency_sec(2026-09-10 추가, SRE 문서 SLI "탐지 지연" 실측용)도
+같은 스키마 마이그레이션 패턴이라 여기서 함께 검증한다.
 """
 import os
 import tempfile
@@ -27,13 +30,15 @@ class TestIncidentFieldsMigration(unittest.TestCase):
     def _latest_row(self):
         conn = get_conn(self.tf)
         return conn.execute(
-            "SELECT reasoning, command FROM metrics ORDER BY id DESC LIMIT 1"
+            "SELECT reasoning, command, detection_latency_sec "
+            "FROM metrics ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
     def test_fresh_db_has_reasoning_and_command_columns(self):
         cols = {row[1] for row in get_conn(self.tf).execute("PRAGMA table_info(metrics)")}
         self.assertIn("reasoning", cols)
         self.assertIn("command", cols)
+        self.assertIn("detection_latency_sec", cols)
 
     def test_log_event_persists_reasoning_and_command(self):
         self.obs.log_event(
@@ -61,6 +66,19 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         row = self._latest_row()
         self.assertIsNone(row["reasoning"])
         self.assertIsNone(row["command"])
+        self.assertIsNone(row["detection_latency_sec"])
+
+    def test_log_event_persists_detection_latency(self):
+        self.obs.log_event(
+            error_log="CRITICAL: known error",
+            source="L1_CACHE",
+            action_type="RESTART_SERVICE",
+            latency_sec=0.2,
+            success=True,
+            detection_latency_sec=0.842,
+        )
+        row = self._latest_row()
+        self.assertAlmostEqual(row["detection_latency_sec"], 0.842)
 
 
 if __name__ == "__main__":

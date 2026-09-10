@@ -23,6 +23,7 @@ import threading
 import time
 import traceback
 from collections import deque
+from datetime import datetime, timezone
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -60,6 +61,25 @@ def _handle_shutdown(signum, frame) -> None:
 
 _CLUSTER_INTERVAL_SEC  = int(os.getenv("CLUSTER_INTERVAL_SEC",  "86400"))
 _DEBOUNCE_COOLDOWN_SEC = int(os.getenv("DEBOUNCE_COOLDOWN_SEC", "30"))
+
+# 탐지 지연(Detection Latency) 계측용 — 에러 줄 맨 앞의 ISO 타임스탬프를 찾는다.
+# target-app이 남기는 모든 줄(deploy/target-app/main.py)이 이 형식으로 시작한다
+# (datetime.utcnow().isoformat(), naive — UTC로 간주해 처리).
+_LEADING_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)")
+
+
+def _parse_leading_timestamp(line: str) -> datetime | None:
+    """줄 맨 앞의 ISO 타임스탬프를 파싱한다. 없거나 형식이 다르면 None(계측 스킵)."""
+    m = _LEADING_TS_RE.match(line)
+    if not m:
+        return None
+    try:
+        dt = datetime.fromisoformat(m.group(1))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 class LogTailHandler(FileSystemEventHandler):
@@ -129,7 +149,14 @@ class LogTailHandler(FileSystemEventHandler):
                         before=pre_batch_context,
                         after=after_lines,
                     )
-                    self.trigger_agent_pipeline(context)
+                    event_ts = _parse_leading_timestamp(line)
+                    detection_latency_sec = (
+                        (datetime.now(timezone.utc) - event_ts).total_seconds()
+                        if event_ts else None
+                    )
+                    self.trigger_agent_pipeline(
+                        context, detection_latency_sec=detection_latency_sec
+                    )
 
     @staticmethod
     def _build_context_window(
@@ -150,8 +177,16 @@ class LogTailHandler(FileSystemEventHandler):
             parts.append("[LOG CONTEXT]\n" + "\n".join(context_lines))
         return "\n".join(parts)
 
-    def trigger_agent_pipeline(self, error_log: str) -> None:
-        """[실전 파이프라인] CircuitBreaker → RAGEngine → ActionExecutor → Observer"""
+    def trigger_agent_pipeline(
+        self, error_log: str, detection_latency_sec: float | None = None
+    ) -> None:
+        """[실전 파이프라인] CircuitBreaker → RAGEngine → ActionExecutor → Observer
+
+        detection_latency_sec: 에러 줄의 타임스탬프부터 이 파이프라인이 가동되기까지
+        걸린 시간(초). 로그 파일 tailing 경로(on_modified)에서만 의미 있게 채워지고,
+        ProactiveMonitor 콜백처럼 합성 로그를 직접 넘기는 경로는 애초에 파일에 쓰고
+        다시 읽는 지연이 없으므로 None(측정 대상 아님)으로 남는다.
+        """
         if not self.circuit_breaker.can_proceed(error_log):
             logging.warning(
                 f"[Circuit OPEN] 파이프라인 차단됨. 30분 후 재시도: {error_log[:60]}"
@@ -237,6 +272,7 @@ class LogTailHandler(FileSystemEventHandler):
             error_category=decision.error_category,
             reasoning=decision.reasoning,
             command=decision.command,
+            detection_latency_sec=detection_latency_sec,
         )
         logging.info(
             f"[조치 완료] 소스:{source} | 결과:{result_category} ({latency:.2f}s)"
