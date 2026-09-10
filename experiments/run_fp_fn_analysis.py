@@ -20,6 +20,7 @@ target-app의 각 /inject/* 핸들러가 realtime_system.log에 남기는 고유
   있는 GCP VM에서 실행해야 한다(cd ~/agent && python -m experiments.run_fp_fn_analysis).
 """
 import json
+import os
 import re
 import sqlite3
 from collections import Counter, defaultdict
@@ -37,8 +38,17 @@ RESULTS_DIR = Path("experiments/results")
 #  마커가 찍힌 row가 하나라도 있는지만 본다 — 실서비스에서는 chaos_cron.sh가
 #  6시간 간격으로만 주입하고 target-app의 _injection_lock이 동시 주입을 막아주므로
 #  윈도가 겹칠 일이 없지만, 수동으로 /inject/*를 몇 분 간격으로 연달아 호출해
-#  테스트하는 경우엔 윈도가 겹쳐 오탐이 날 수 있다.)
-MATCH_WINDOW = timedelta(minutes=3)
+#  테스트하는 경우엔 윈도가 겹쳐 오탐이 날 수 있다.
+#
+#  2026-09-10 실측 발견: approve_then_execute 카테고리(DB_Connection/DB_Deadlock/
+#  Memory_Leak 등)는 크론이 깨어있는 사람 없이 트리거되면 _APPROVAL_TIMEOUT_SEC(기본
+#  300s, src/executor.py)를 꽉 채우고서야 ApprovalTimeout으로 metrics에 기록된다 —
+#  파이프라인 자체는 즉시(<1s, 수동 주입으로 확인) 반응하지만 "최종 기록"이 5분 뒤에야
+#  남는 것. 이전 3분 창은 이 정상적인 5분 대기를 "완전 미탐지"로 오판정했다(latency_sec
+#  ≈300, result_category=IMPOSSIBLE인 행 3건을 VM 실측으로 직접 확인). 반드시
+#  _APPROVAL_TIMEOUT_SEC보다 여유 있게 길게 잡을 것.
+_APPROVAL_TIMEOUT_SEC = int(os.getenv("APPROVAL_TIMEOUT_SEC", "300"))
+MATCH_WINDOW = timedelta(seconds=_APPROVAL_TIMEOUT_SEC + 90)
 
 # fault_type -> ErrorCategory(정답). ErrorCategory에 대응 항목이 아예 없는
 # fault는 None으로 두고 별도로 보고한다(모델 오류가 아니라 스키마 공백이므로).
