@@ -14,9 +14,10 @@ Out_Of_Memory→`clear_memory`)이 있는데 ProactiveMonitor의 문구만 그 �
 어휘가 달라 L1 히트를 못 하고 있었을 뿐 — add_chaos_injector_signatures.py와 같은
 train-serving skew 패턴(2026-09-07에도 한 번 겪음)이라 같은 방식으로 고친다.
 
-CPU(cpu 트리거)는 ErrorCategory 자체에 매핑이 없는 기존 구조적 공백(향후 별도
-작업)이라 포함하지 않는다. VRAM은 Intel Arc GPU 전용(GCP VM엔 GPU 없음)이라 지금
-배포 대상과 무관해 제외한다.
+CPU(cpu 트리거)는 처음엔 ErrorCategory 자체에 매핑이 없어 제외했으나, 2026-09-10에
+`ErrorCategory.CPU_OVERLOAD` 신규 추가로 공백이 해소돼 포함시킨다(src/schemas.py,
+scripts/add_chaos_injector_signatures.py 참고). VRAM은 Intel Arc GPU 전용(GCP
+VM엔 GPU 없음)이라 지금 배포 대상과 무관해 제외한다.
 
 실행:
     cd ~/agent && sudo .venv/bin/python -m scripts.add_proactive_monitor_signatures
@@ -49,6 +50,9 @@ _CLEAN_LINES: dict[str, list[str]] = {
     "Out_Of_Memory": [
         "CRITICAL Memory usage 87.3% — OOM risk detected proactively (available: 512MB)",
     ],
+    "CPU_Overload": [
+        "CRITICAL CPU usage 95.2% — potential OOM or runaway process detected proactively",
+    ],
 }
 
 # 이미 검증된 안전한 대응(add_chaos_injector_signatures.py의 ACTION_MAP과 동일 —
@@ -56,6 +60,7 @@ _CLEAN_LINES: dict[str, list[str]] = {
 ACTION_MAP: dict[str, tuple[str, str, str]] = {
     "Disk_Full":     ("execute_rule_command", "", "journalctl --vacuum-size 1G"),
     "Out_Of_Memory": ("clear_memory",         "", ""),
+    "CPU_Overload":  ("escalate_to_human",    "", ""),
 }
 
 

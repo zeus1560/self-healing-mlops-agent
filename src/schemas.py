@@ -18,6 +18,12 @@ class ErrorCategory(str, Enum):
     OUT_OF_MEMORY   = "Out_Of_Memory"
     MEMORY_LEAK     = "Memory_Leak"
 
+    # CPU 계열 (2026-09-10 추가 — 카오스 인젝터 "cpu" fault가 실제로 존재하는데
+    # ErrorCategory 매핑 자체가 없던 구조적 공백이었음. dashboard/app.py의
+    # _CATEGORY_DESC엔 "CPU_Overload" 표시 문구가 이미 있었으나 실제로 연결된
+    # 적은 없었음 — 이름을 그대로 재사용해 맞춘다)
+    CPU_OVERLOAD    = "CPU_Overload"
+
     # Database 계열
     DB_CONNECTION   = "DB_Connection"
     DB_TIMEOUT      = "DB_Timeout"
