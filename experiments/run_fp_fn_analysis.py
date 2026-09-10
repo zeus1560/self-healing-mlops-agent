@@ -54,7 +54,7 @@ MATCH_WINDOW = timedelta(seconds=_APPROVAL_TIMEOUT_SEC + 90)
 # fault는 None으로 두고 별도로 보고한다(모델 오류가 아니라 스키마 공백이므로).
 FAULT_TO_CATEGORY = {
     "oom":               "Out_Of_Memory",
-    "cpu":               None,  # ErrorCategory에 CPU 포화 관련 항목이 없음 — 구조적 공백
+    "cpu":               "CPU_Overload",  # 2026-09-10: ErrorCategory.CPU_OVERLOAD 신규 추가로 공백 해소
     "diskfull":          "Disk_Full",
     "process_crash":     "Process_Crash",
     "permission_denied": "Permission_Denied",

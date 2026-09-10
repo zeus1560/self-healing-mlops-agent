@@ -117,6 +117,14 @@ _CLEAN_LINES: dict[str, list[str]] = {
         "CRITICAL chaos-injector: sqlite3.OperationalError — database is locked (concurrent "
         "transaction holding EXCLUSIVE lock): database is locked",
     ],
+    # 2026-09-10 추가: CPU 인젝터(/inject/cpu, stress-ng)는 처음부터 있었지만
+    # ErrorCategory.CPU_OVERLOAD가 없어 L1 학습 데이터 자체가 존재하지 않았음
+    # (run_fp_fn_analysis.py에서 "구조적 공백"으로 계속 걸리던 항목). 문구는
+    # deploy/target-app/main.py::inject_cpu()가 실제로 남기는 형태 그대로.
+    "CPU_Overload": [
+        "CRITICAL chaos-injector: stress-ng --cpu=2 against cpus=1.0 limit for 15.0s — "
+        "returncode=0, sustained CPU saturation detected",
+    ],
 }
 
 # log_watcher._build_context_window()가 실제로 만드는 것과 같은 형태(앞뒤 일반
@@ -240,6 +248,15 @@ _WRAPPED_LINES: dict[str, str] = {
         "transaction holding EXCLUSIVE lock): database is locked\n"
         "INFO api: request handled id=8802"
     ),
+    "CPU_Overload": (
+        "CRITICAL chaos-injector: stress-ng --cpu=2 against cpus=1.0 limit for 15.0s — "
+        "returncode=0, sustained CPU saturation detected\n"
+        "[LOG CONTEXT]\n"
+        "INFO api: request handled id=9901\n"
+        ">>> CRITICAL chaos-injector: stress-ng --cpu=2 against cpus=1.0 limit for 15.0s — "
+        "returncode=0, sustained CPU saturation detected\n"
+        "INFO api: request handled id=9902"
+    ),
 }
 
 # 기존 train_set.json/etl_github_to_chroma.py의 ACTION_MAP과 일치시킴.
@@ -255,6 +272,9 @@ ACTION_MAP: dict[str, tuple[str, str, str]] = {
     "Auth_Error":          ("escalate_to_human",     "vault", ""),
     "Memory_Leak":         ("kill_process",          "", ""),
     "DB_Deadlock":         ("escalate_to_human",     "", ""),
+    # CPU 과부하는 범용 원인(정상 부하 급증 vs 런어웨이 프로세스)을 구분할 근거가
+    # 없어 자동 조치가 안전하지 않음 — Permission_Denied 등과 동일하게 escalate.
+    "CPU_Overload":        ("escalate_to_human",     "", ""),
 }
 
 
