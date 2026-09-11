@@ -1,0 +1,35 @@
+{
+  "metric_name": "llm_backbone_standalone_classification_accuracy",
+  "backbone": "unsloth/Qwen2.5-7B-Instruct-bnb-4bit (QLoRA, r=16, alpha=16, 3 epochs)",
+  "caveat": "l2_accuracy_summary.json과 동일한 성격의 측정 — 운영 L2 파이프라인 정확도가 아니라 전용 분류 프롬프트로 모델 백본 자체의 taxonomy 분류 능력만 독립 측정한 것(논문/발표에서 '운영 L2 정확도'로 인용 금지). Groq와의 공정 비교 기준은 novel_errors_benchmark뿐이다 — heldout_eval(n=614)은 학습 데이터와 같은 분포(train_set.json/validation_set.json 기반 SFT ↔ test_set.json/final_test_set.json 기반 eval, 같은 크롤링 파이프라인 출신)라 '새로운 에러 유형에 대한 일반화'가 아니라 '학습 분포 내 재현력'을 재는 것이라 Groq 비교엔 부적합.",
+  "training_data": {
+    "sft_examples": 508,
+    "source": "data/train_set.json + validation_set.json → scripts/export_qlora_dataset.py",
+    "note": "로드맵 Phase 1에서 이미 우려했던 '1,016건은 과적합 주의' 규모의 일부만 사용(508건) — 실제로 과적합 징후(아래 참고)가 관측됨"
+  },
+  "novel_errors_benchmark": {
+    "description": "Groq 기록(l2_accuracy_summary_groq.json, 2026-08-27)과 동일한 n=50 테스트셋·동일한 CLASSIFY_PROMPT 방식 — Groq와 직접·공정 비교 가능한 유일한 수치.",
+    "n_samples": 50,
+    "cat_accuracy": 0.84,
+    "act_accuracy": 0.64,
+    "avg_latency_ms": 2038.8
+  },
+  "heldout_eval_in_distribution": {
+    "description": "test_set.json+final_test_set.json 기반, 학습 데이터와 같은 크롤링 파이프라인·분포 — Groq 비교용 아님, 학습 자체가 잘 됐는지(수렴) 확인용.",
+    "n_samples": 614,
+    "cat_accuracy": 0.9316,
+    "act_accuracy": 0.9577
+  },
+  "groq_comparison": {
+    "groq_cat_accuracy": 0.92,
+    "groq_act_accuracy": 0.96,
+    "groq_avg_latency_ms": 650,
+    "groq_source": "experiments/results/l2_accuracy_summary_groq.json (2026-08-27) — 이 로컬 체크아웃엔 파일 자체가 없어(VM 전용이었을 가능성) 수치만 project-roadmap-status 메모리/기존 세션 기록으로 인용",
+    "qlora_vs_groq_cat_accuracy_delta_pp": -8.0,
+    "qlora_vs_groq_act_accuracy_delta_pp": -32.0,
+    "qlora_vs_groq_latency_ratio": "~3.1배 느림 (2038.8ms vs ~650ms)"
+  },
+  "conclusion": "QLoRA(Qwen2.5-7B, 508건 SFT)가 novel_errors_benchmark 공정 비교에서 Groq보다 정확도·지연시간 모두 열세 — in-distribution(heldout_eval)에선 Groq 참고치보다도 높게 나오는 것과 대비되어 과적합(학습 분포엔 잘 맞지만 새 에러 유형 일반화 실패) 패턴으로 해석됨. 로드맵 사전 확정 기준('QLoRA가 Groq 대비 +5%p 이상 개선 또는 지연시간/비용 우위 → A/B 프레임워크, 미미/애매하면 → Explainability')에 따라 Phase 2 방향을 Explainability로 확정.",
+  "date": "2026-09-11",
+  "environment": "Google Colab 무료 T4 (GX10/Jetson 접근 불가로 대체 — project-capstone-pivot 메모리 참고)"
+}
