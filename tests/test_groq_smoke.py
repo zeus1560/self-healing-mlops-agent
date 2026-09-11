@@ -128,24 +128,26 @@ class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
         """읽기 전용 명령어는 urlopen을 아예 호출하지 않고 통과해야 한다."""
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
              patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
-            safe = llm_engine._reflect_on_command(
+            safe, rationale = llm_engine._reflect_on_command(
                 "systemctl status postgresql", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
+        self.assertTrue(rationale)  # 결정론적 경로도 근거 문자열을 남긴다(Explainability)
         mock_urlopen.assert_not_called()
 
     def test_reflect_still_calls_llm_for_mutating_command(self):
         """대상(PID) 지정 위험이 남는 명령어는 그대로 LLM 판정 경로를 탄다 (회귀 방지)."""
 
         def fake_urlopen(req, timeout=None):
-            return _FakeResponse({"choices": [{"message": {"content": "YES"}}]})
+            return _FakeResponse({"choices": [{"message": {"content": "YES: soft signal, safe restart"}}]})
 
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
              patch.object(llm_engine.urllib.request, "urlopen", side_effect=fake_urlopen) as mock_urlopen:
-            safe = llm_engine._reflect_on_command(
+            safe, rationale = llm_engine._reflect_on_command(
                 "kill -TERM 4821", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
+        self.assertEqual(rationale, "soft signal, safe restart")
         mock_urlopen.assert_called_once()
 
 
@@ -180,10 +182,11 @@ class TestSelfReflectionSelfDestructiveKillBlock(unittest.TestCase):
     def test_reflect_rejects_pid_1_without_llm_call(self):
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
              patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
-            safe = llm_engine._reflect_on_command(
+            safe, rationale = llm_engine._reflect_on_command(
                 "kill -TERM 1", "ERROR: process unresponsive", "N/A"
             )
         self.assertFalse(safe)
+        self.assertIn("PID 1", rationale)
         mock_urlopen.assert_not_called()
 
 
@@ -223,10 +226,11 @@ class TestSelfReflectionBoundedStateChangeBypass(unittest.TestCase):
     def test_reflect_skips_llm_call_for_bounded_state_change_command(self):
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
              patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
-            safe = llm_engine._reflect_on_command(
+            safe, rationale = llm_engine._reflect_on_command(
                 "systemctl restart postgresql", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
+        self.assertTrue(rationale)
         mock_urlopen.assert_not_called()
 
 
@@ -241,21 +245,79 @@ class TestSelfReflectionNoForcedEscalation(unittest.TestCase):
     """
 
     def test_rejected_command_still_returns_execute_action_not_escalation(self):
-        with patch.object(llm_engine, "_reflect_on_command", return_value=False):
+        with patch.object(
+            llm_engine, "_reflect_on_command",
+            return_value=(False, "restarting an unrelated service"),
+        ):
             response = llm_engine._make_llm_response(
                 "systemctl restart postgresql", "ERROR: timeout", "N/A", "Groq"
             )
         self.assertEqual(response.action_type, ActionType.EXECUTE_LLM_COMMAND)
         self.assertEqual(response.command, "systemctl restart postgresql")
         self.assertIn("자가 반성", response.reasoning)
+        self.assertIn("restarting an unrelated service", response.reasoning)
 
     def test_approved_command_has_plain_reasoning(self):
-        with patch.object(llm_engine, "_reflect_on_command", return_value=True):
+        with patch.object(
+            llm_engine, "_reflect_on_command",
+            return_value=(True, "matches known recovery pattern"),
+        ):
             response = llm_engine._make_llm_response(
                 "systemctl restart postgresql", "ERROR: timeout", "N/A", "Groq"
             )
         self.assertEqual(response.action_type, ActionType.EXECUTE_LLM_COMMAND)
         self.assertNotIn("자가 반성", response.reasoning)
+
+
+class TestSplitVerdictAndRationale(unittest.TestCase):
+    """
+    _reflect_on_command()이 2026-09-12 Explainability 확장으로 판정 근거(rationale)도
+    같이 반환하게 되면서 추가된 파서. 실제로 스트레스 테스트하다가 발견한 버그(마크다운
+    강조 표시가 앞에 붙으면 안전한 YES가 거부로 뒤집힘)의 회귀 테스트 포함.
+    """
+
+    def test_parses_yes_with_reason(self):
+        safe, rationale = llm_engine._split_verdict_and_rationale(
+            "YES: matches known OOM recovery pattern"
+        )
+        self.assertTrue(safe)
+        self.assertEqual(rationale, "matches known OOM recovery pattern")
+
+    def test_parses_no_with_reason(self):
+        safe, rationale = llm_engine._split_verdict_and_rationale(
+            "NO: targets unrelated service"
+        )
+        self.assertFalse(safe)
+        self.assertEqual(rationale, "targets unrelated service")
+
+    def test_bare_yes_no_colon_keeps_label_as_rationale(self):
+        safe, rationale = llm_engine._split_verdict_and_rationale("YES")
+        self.assertTrue(safe)
+        self.assertEqual(rationale, "YES")
+
+    def test_markdown_wrapped_yes_still_parses_as_safe(self):
+        """
+        실측으로 발견한 버그: "**YES**: ..."에서 upper().startswith("YES")가
+        선행 "**" 때문에 실패해 안전한 YES가 거부(False)로 뒤집혔었다.
+        """
+        safe, rationale = llm_engine._split_verdict_and_rationale(
+            "**YES**: reason here"
+        )
+        self.assertTrue(safe)
+        self.assertEqual(rationale, "reason here")
+
+    def test_quoted_and_dash_prefixed_verdicts_still_parse(self):
+        safe, _ = llm_engine._split_verdict_and_rationale('"NO: quoted"')
+        self.assertFalse(safe)
+        safe, _ = llm_engine._split_verdict_and_rationale("- YES: dash prefixed")
+        self.assertTrue(safe)
+
+    def test_lowercase_verdict_parses(self):
+        safe, rationale = llm_engine._split_verdict_and_rationale(
+            "Yes: lowercase-ish label"
+        )
+        self.assertTrue(safe)
+        self.assertEqual(rationale, "lowercase-ish label")
 
 
 if __name__ == "__main__":
