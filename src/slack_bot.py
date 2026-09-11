@@ -25,13 +25,16 @@ class SlackChatOps:
         self.webhook_url = os.getenv("SLACK_WEBHOOK_URL")
 
     def send_approval_request(
-        self, error_log: str, command: str, reason: str
+        self, error_log: str, command: str, reason: str, explanation: str = ""
     ) -> bool:
         """
         관리자에게 명령어 실행 승인 요청 메시지를 발송한다.
 
         reason에 포함된 https?:// URL을 승인/거절 버튼 링크로 추출한다.
         URL이 없으면 텍스트 섹션으로 대체한다.
+
+        explanation: 사람이 읽는 실제 판단 근거(AgentResponse.reasoning + l1_evidence,
+            2026-09-11 Explainability 추가) — 있으면 별도 섹션으로 보여준다.
 
         Returns:
             발송 성공 여부.
@@ -60,8 +63,13 @@ class SlackChatOps:
                     {"type": "mrkdwn", "text": f"*실행 예정 명령어*\n`{command}`"},
                 ],
             },
-            {"type": "divider"},
         ]
+        if explanation.strip():
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*설명*\n```{explanation.strip()[:800]}```"},
+            })
+        blocks.append({"type": "divider"})
 
         if pending_url:
             # pending_url 형식: {base}/pending/{token}

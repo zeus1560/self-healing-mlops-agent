@@ -39,6 +39,11 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # 경로(on_modified)에서만 채워지고, ProactiveMonitor 콜백처럼 지연이 없는 경로는
     # NULL로 남는다(src/log_watcher.py 참고).
     ("detection_latency_sec", "REAL"),
+    # 2026-09-11 추가 (Explainability): L1_CACHE 히트 시 앙상블 투표가 실제로 근거
+    # 삼은 과거 사건들(거리·문서 요약)을 사람이 검증 가능하게 남긴다
+    # (src/llm_engine.py::_format_evidence, AgentResponse.l1_evidence 참고).
+    # L2_LLM/RULE 경로와 기존 행은 NULL.
+    ("l1_evidence", "TEXT"),
 )
 # 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
 _SAFE_COL_RE = re.compile(r'^[a-z_]+$')
@@ -83,7 +88,8 @@ class AgentObserver:
                 error_category   TEXT,
                 reasoning        TEXT,
                 command          TEXT,
-                detection_latency_sec REAL
+                detection_latency_sec REAL,
+                l1_evidence      TEXT
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
@@ -113,6 +119,7 @@ class AgentObserver:
         reasoning: str | None = None,
         command: str | None = None,
         detection_latency_sec: float | None = None,
+        l1_evidence: str | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다.
 
@@ -120,6 +127,8 @@ class AgentObserver:
         실행 조치 단계) 표시용 — L1_CACHE 히트에는 self-reflection이 적용되지
         않으므로 reasoning이 없는 게 정상이다(L2_LLM 경로에서만 채워짐).
         detection_latency_sec는 탐지 지연 SLI 실측용(src/log_watcher.py 참고).
+        l1_evidence는 L1_CACHE 히트의 앙상블 투표 근거(Explainability, src/llm_engine.py
+        ::_format_evidence 참고) — L2_LLM/RULE 경로에선 None.
         """
         safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
@@ -132,14 +141,14 @@ class AgentObserver:
                     (timestamp, error_log, resolution_source, action_type,
                      latency_sec, success, result_category, error_type,
                      error_detail, error_category, reasoning, command,
-                     detection_latency_sec)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     detection_latency_sec, l1_evidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp, safe_log, source, action_type,
                     latency_sec, success, result_category,
                     error_type, error_detail, error_category,
-                    reasoning, command, detection_latency_sec,
+                    reasoning, command, detection_latency_sec, l1_evidence,
                 ),
             )
             conn.commit()

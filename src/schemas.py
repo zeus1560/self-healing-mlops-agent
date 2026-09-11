@@ -87,6 +87,10 @@ class AgentResponse:
                              온라인학습 엔트리의 실행 결과를 다시 그 문서에 되먹이는 데 쓰인다.
         l1_source:          매칭된 ChromaDB 문서의 "source" 메타데이터
                              (예: "online_learning", "chaos_injector_signature"). L1_CACHE 히트 시에만 의미 있음.
+        l1_evidence:        L1_CACHE 히트 시 앙상블 투표에 실제로 참여한 과거 사건들(거리·문서
+                             내용 요약)을 사람이 읽을 수 있게 정리한 설명(Explainability, 2026-09-11
+                             추가). "왜 이 조치를 골랐는가"에 벡터 검색이 실제로 무엇을 근거로
+                             삼았는지 보여준다 — L2_LLM/RULE 경로에는 해당 없어 None.
     """
 
     error_category:    str
@@ -98,6 +102,7 @@ class AgentResponse:
     command:           Optional[str] = None
     l1_doc_id:         Optional[str] = None
     l1_source:         Optional[str] = None
+    l1_evidence:        Optional[str] = None
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""

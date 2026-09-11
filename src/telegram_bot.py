@@ -115,20 +115,28 @@ class TelegramChatOps:
         except Exception:
             logging.debug("[Telegram] 콜백 메시지 편집 중 오류 발생", exc_info=True)
 
-    def send_approval_request(self, error_log: str, command: str, reason: str) -> bool:
+    def send_approval_request(
+        self, error_log: str, command: str, reason: str, explanation: str = ""
+    ) -> bool:
+        """
+        reason: 승인/거절 토큰 추출용 URL 문자열(_extract_token 참고) — 표시용이 아님.
+        explanation: 사람이 읽는 실제 판단 근거(AgentResponse.reasoning + l1_evidence,
+            2026-09-11 Explainability 추가) — "설명" 섹션에 이게 있으면 이걸 보여주고,
+            없으면(과거 호환) reason 텍스트를 대신 보여준다.
+        """
         if not self.enabled:
             logging.warning("[Telegram] TELEGRAM_BOT_TOKEN/CHAT_ID 미설정으로 승인 요청을 건너뜁니다.")
             return False
 
         safe_error_log = html.escape((error_log or "").strip())[:300]
         safe_command = html.escape((command or "").strip())
-        safe_reason = html.escape((reason or "").strip())
+        safe_explanation = html.escape((explanation or reason or "").strip())[:800]
 
         text = (
             "<b>🚨 [Self-Healing Agent] 명령어 실행 승인 요청</b>\n\n"
             f"<b>감지된 에러</b>\n<pre>{safe_error_log}</pre>\n\n"
             f"<b>실행 예정 명령어</b>\n<pre>{safe_command}</pre>\n\n"
-            f"<b>설명</b>\n{safe_reason}"
+            f"<b>설명</b>\n<pre>{safe_explanation}</pre>"
         )
         approve_url = f"approve|{self._extract_token(reason)}"
         reject_url = f"reject|{self._extract_token(reason)}"
