@@ -19,6 +19,33 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 
+class TestConfidenceLabel(unittest.TestCase):
+    """
+    최근접 거리 vs L1 임계값(_RAG_THRESHOLD) 비율로 신뢰도를 분류한다(2026-09-12
+    추가) — "히트/미스" 이진 판정만으론 임계값에 겨우 걸친 애매한 매칭과 거의
+    동일한 과거 사건을 구분 못 했다.
+    """
+
+    def test_near_zero_distance_is_very_high_confidence(self):
+        from src.llm_engine import _confidence_label, _RAG_THRESHOLD
+
+        label = _confidence_label(_RAG_THRESHOLD * 0.05)
+        self.assertIn("매우 높음", label)
+
+    def test_distance_near_threshold_is_low_confidence(self):
+        from src.llm_engine import _confidence_label, _RAG_THRESHOLD
+
+        label = _confidence_label(_RAG_THRESHOLD * 0.95)
+        self.assertIn("낮음", label)
+        self.assertIn("애매한 매칭", label)
+
+    def test_mid_range_distance_is_moderate(self):
+        from src.llm_engine import _confidence_label, _RAG_THRESHOLD
+
+        label = _confidence_label(_RAG_THRESHOLD * 0.65)
+        self.assertEqual(label, "보통")
+
+
 class TestFormatEvidence(unittest.TestCase):
     def test_marks_winning_candidate(self):
         from src.llm_engine import _format_evidence
@@ -34,6 +61,15 @@ class TestFormatEvidence(unittest.TestCase):
         lines = text.splitlines()
         winner_line = next(ln for ln in lines if "closest match text" in ln and "second" not in ln)
         self.assertTrue(winner_line.strip().startswith("✓"))
+
+    def test_header_includes_confidence_label(self):
+        from src.llm_engine import _format_evidence
+
+        candidates = [({"action_type": "alert_only"}, 0.01, "id_1", "near-exact match")]
+        text = _format_evidence(candidates, top_action="alert_only", best_id="id_1")
+        header = text.splitlines()[0]
+        self.assertIn("신뢰도:", header)
+        self.assertIn("최근접 거리 0.0100", header)
 
     def test_sorted_by_distance_ascending(self):
         from src.llm_engine import _format_evidence

@@ -507,7 +507,29 @@ def _is_self_destructive_kill(command: str) -> bool:
     return False
 
 
-def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
+_LEADING_NOISE_RE = _re.compile(r'^[^A-Za-z]*')
+
+
+def _split_verdict_and_rationale(raw: str) -> tuple[bool, str]:
+    """
+    "YES: matches OOM recovery pattern" / "NO: targets unrelated service" 형태의
+    응답을 (안전 여부, 근거)로 분리한다(Explainability, 2026-09-12 추가). 콜론이
+    없으면(모델이 지시를 무시하고 YES/NO만 답한 경우) 라벨 자체를 근거로 남겨
+    최소한의 정보라도 보존한다 — 완전히 빈 문자열보다 낫다.
+
+    판정 앞의 마크다운/인용부호(예: "**YES**: ...")를 벗기지 않으면
+    upper().startswith("YES")가 "**YES"에서 실패해 안전한 YES가 거부(NO)로
+    뒤집히는 실제 파싱 버그가 있었음(실측으로 발견) — 문자로 시작할 때까지 선행
+    비문자를 제거한 뒤 판정한다.
+    """
+    text  = raw.strip()
+    verdict = _LEADING_NOISE_RE.sub("", text).upper()
+    safe    = verdict.startswith("YES")
+    rationale = text.split(":", 1)[1].strip() if ":" in text else text
+    return safe, rationale
+
+
+def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> tuple[bool, str]:
     """
     자가 반성 루프 — LLM이 생성한 명령어의 안전성을 재검증한다.
 
@@ -519,18 +541,25 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
     Ollama로 폴백한다. YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
     검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
+
+    반환값은 (안전 여부, 판정 근거) — 2026-09-12 Explainability 확장으로 튜플이
+    됐다(이전엔 bool만 반환). LLM 호출 없이 결정론적으로 통과/거부하는 3개 경로도
+    각각 왜 그런지 이미 알고 있는 이유를 그대로 근거로 반환한다.
     """
     if _is_self_destructive_kill(command):
-        logging.info(f"[자가 반성] '{command}' — PID 1(자기 자신/init) 대상, LLM 판정 없이 항상 거부")
-        return False
+        rationale = "PID 1(자기 자신/init) 대상 지정 — LLM 판정 없이 항상 거부"
+        logging.info(f"[자가 반성] '{command}' — {rationale}")
+        return False, rationale
 
     if _is_read_only_command(command):
-        logging.info(f"[자가 반성] '{command}' — 조회성 명령어, LLM 판정 없이 통과")
-        return True
+        rationale = "조회성 명령어(상태 변경 없음) — 위험 없음, LLM 판정 생략"
+        logging.info(f"[자가 반성] '{command}' — {rationale}")
+        return True, rationale
 
     if _is_bounded_state_change_command(command):
-        logging.info(f"[자가 반성] '{command}' — 화이트리스트로 이미 좁혀 검증된 명령어, LLM 판정 없이 통과")
-        return True
+        rationale = "화이트리스트로 인자·대상까지 이미 좁게 검증된 안전한 상태변경 명령 — LLM 판정 생략"
+        logging.info(f"[자가 반성] '{command}' — {rationale}")
+        return True, rationale
 
     prompt = (
         "You are a safety reviewer for a Self-Healing MLOps Agent.\n"
@@ -540,30 +569,30 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
         "chaining, arbitrary paths, and destructive tools are already blocked before this point.\n"
         "Your job is NOT to re-judge generic shell danger. Judge only whether this specific\n"
         "action is a reasonable, proportionate response to the described error.\n"
-        "Reply with only YES or NO.\n\n"
+        "Reply with YES or NO, followed by a colon and a very short reason (max 15 words),\n"
+        "e.g. 'YES: matches known OOM recovery pattern' or 'NO: targets unrelated service'.\n\n"
         f"Error: {error_log[:200]}\n"
         f"Proposed command: {command}\n"
         f"System: {system_ctx}\n\n"
-        "Is this command a reasonable response to the error? (YES/NO):"
+        "Is this command a reasonable response to the error? (YES/NO: reason):"
     )
 
     if _is_groq_available():
-        raw = _call_groq_chat(prompt, max_tokens=4, timeout=15)
+        raw = _call_groq_chat(prompt, max_tokens=40, timeout=15)
         if not raw.startswith("ERROR:"):
-            answer = raw.strip().upper()
-            safe   = answer.startswith("YES")
+            safe, rationale = _split_verdict_and_rationale(raw)
             logging.info(
-                f"[자가 반성/Groq] 명령어='{command}' | 판정='{answer}' "
+                f"[자가 반성/Groq] 명령어='{command}' | 판정='{raw.strip()}' "
                 f"→ {'통과' if safe else '거부'}"
             )
-            return safe
+            return safe, rationale
         logging.warning(f"[자가 반성] Groq 검증 실패, Ollama로 폴백: {raw}")
 
     payload = json.dumps({
         "model":   OLLAMA_MODEL,
         "prompt":  prompt,
         "stream":  False,
-        "options": {"temperature": 0, "num_predict": 4},
+        "options": {"temperature": 0, "num_predict": 40},
     }).encode()
 
     try:
@@ -573,16 +602,16 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> bool:
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
-            answer = json.loads(resp.read()).get("response", "").strip().upper()
-            safe   = answer.startswith("YES")
+            raw = json.loads(resp.read()).get("response", "").strip()
+            safe, rationale = _split_verdict_and_rationale(raw)
             logging.info(
-                f"[자가 반성/Ollama] 명령어='{command}' | 판정='{answer}' "
+                f"[자가 반성/Ollama] 명령어='{command}' | 판정='{raw}' "
                 f"→ {'통과' if safe else '거부'}"
             )
-            return safe
+            return safe, rationale
     except Exception as e:
         logging.warning(f"[자가 반성] 검증 요청 실패 — 보수적 통과 처리: {e}")
-        return True
+        return True, f"자가 반성 검증 요청 실패(네트워크 오류 등) — 보수적으로 통과 처리: {e}"
 
 
 # ── ipex_llm (Intel Arc GPU 환경 전용) ───────────────────────────────────────
@@ -714,14 +743,17 @@ def _make_llm_response(command: str, error_log: str, system_context: str, backen
     대신 정상적으로 executor.py의 autonomy 게이트(auto/approve_then_execute)를
     타게 하고, 거부 사유는 reasoning에 남겨 승인 화면에서 사람이 참고하게 한다.
     """
-    if _reflect_on_command(command, error_log, system_context):
-        reasoning = f"{backend} 추론 성공"
+    safe, rationale = _reflect_on_command(command, error_log, system_context)
+    if safe:
+        # 2026-09-12 Explainability 확장: 예전엔 "{backend} 추론 성공"이라는 내용
+        # 없는 문구뿐이었음 — 이제 자가 반성이 실제로 판단한 근거를 담는다.
+        reasoning = f"{backend} 추론 성공 — {rationale}" if rationale else f"{backend} 추론 성공"
     else:
         logging.warning(
             f"[자가 반성] {backend} 명령어에 우려 표명(강제 에스컬레이션 아님, "
             f"정상 게이트로 진행): {command}"
         )
-        reasoning = f"⚠️ 자가 반성이 위험 판정({backend} 제안) — 승인 시 주의: {command}"
+        reasoning = f"⚠️ 자가 반성이 위험 판정({backend} 제안) — {rationale} — 승인 시 주의: {command}"
     return AgentResponse(
         error_category="LLM_Inferred", severity="CRITICAL",
         action_type=ActionType.EXECUTE_LLM_COMMAND,
@@ -765,6 +797,23 @@ def _format_track_record(meta: dict) -> str:
     return f" [온라인학습, 과거 {total}회 실행 중 {success}회 성공]"
 
 
+def _confidence_label(best_dist: float) -> str:
+    """
+    최근접 거리와 L1 임계값(_RAG_THRESHOLD)의 비율로 신뢰도를 분류한다(Explainability,
+    2026-09-12 추가). 지금까지는 "히트/미스" 이진 판정만 있어서, 임계값을 살짝
+    넘겨서 겨우 통과한 애매한 매칭과 사실상 동일한 과거 사건을 구분하지 못했다 —
+    사람이 승인 화면에서 신중히 볼지 말지 참고할 정보가 없었다.
+    """
+    ratio = best_dist / _RAG_THRESHOLD if _RAG_THRESHOLD else 0.0
+    if ratio <= 0.2:
+        return "매우 높음(거의 동일한 과거 사건)"
+    if ratio <= 0.5:
+        return "높음"
+    if ratio <= 0.85:
+        return "보통"
+    return "낮음 — 임계값에 근접한 애매한 매칭, 신중히 검토할 것"
+
+
 def _format_evidence(candidates: list[tuple[dict, float, str, str]],
                       top_action: str, best_id: str) -> str:
     """
@@ -775,12 +824,15 @@ def _format_evidence(candidates: list[tuple[dict, float, str, str]],
     후보는 거리순으로 정렬해 표시 — 투표 자체는 다수결이지만, 사람이 볼 땐 "가장
     가까운 것부터"가 직관적이다. 승리한 문서(best_id)에는 ✓ 표시. 출처(사람이
     큐레이션했는지, 크롤링/증강인지, 온라인학습으로 자동 축적됐는지)와 온라인학습
-    문서의 실행 트랙 레코드도 같이 보여줘 신뢰도 판단에 쓸 수 있게 한다.
+    문서의 실행 트랙 레코드도 같이 보여줘 신뢰도 판단에 쓸 수 있게 한다. 헤더에는
+    최근접 거리 기반 신뢰도 라벨(_confidence_label, 2026-09-12 추가)도 붙인다.
     """
     vote_counts = Counter(m.get("action_type", "escalate_to_human") for m, _, _, _ in candidates)
     n_winning   = vote_counts[top_action]
+    best_dist   = next(dist for _, dist, doc_id, _ in candidates if doc_id == best_id)
     lines = [
-        f"L1 앙상블: 후보 {len(candidates)}개 중 {n_winning}개가 '{top_action}' 선택(다수결)"
+        f"L1 앙상블: 후보 {len(candidates)}개 중 {n_winning}개가 '{top_action}' 선택(다수결) "
+        f"| 신뢰도: {_confidence_label(best_dist)} (최근접 거리 {best_dist:.4f} / 임계값 {_RAG_THRESHOLD:.2f})"
     ]
     for meta, dist, doc_id, doc_text in sorted(candidates, key=lambda c: c[1]):
         mark   = "✓" if doc_id == best_id else " "
