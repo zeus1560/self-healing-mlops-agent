@@ -5,8 +5,9 @@ tests/test_observability_incident_fields.py
 결과와 실행 명령어를 보여주려면 metrics 테이블에 reasoning/command가 저장돼야
 한다 — 이 두 컬럼의 스키마 마이그레이션과 log_event() 배관을 검증한다.
 
-detection_latency_sec(2026-09-10 추가, SRE 문서 SLI "탐지 지연" 실측용)도
-같은 스키마 마이그레이션 패턴이라 여기서 함께 검증한다.
+detection_latency_sec(2026-09-10 추가, SRE 문서 SLI "탐지 지연" 실측용)와
+l1_evidence(2026-09-11 추가, Explainability — L1 앙상블 투표 근거)도 같은 스키마
+마이그레이션 패턴이라 여기서 함께 검증한다.
 """
 import os
 import tempfile
@@ -30,7 +31,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
     def _latest_row(self):
         conn = get_conn(self.tf)
         return conn.execute(
-            "SELECT reasoning, command, detection_latency_sec "
+            "SELECT reasoning, command, detection_latency_sec, l1_evidence "
             "FROM metrics ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
@@ -39,6 +40,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIn("reasoning", cols)
         self.assertIn("command", cols)
         self.assertIn("detection_latency_sec", cols)
+        self.assertIn("l1_evidence", cols)
 
     def test_log_event_persists_reasoning_and_command(self):
         self.obs.log_event(
@@ -67,6 +69,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIsNone(row["reasoning"])
         self.assertIsNone(row["command"])
         self.assertIsNone(row["detection_latency_sec"])
+        self.assertIsNone(row["l1_evidence"])
 
     def test_log_event_persists_detection_latency(self):
         self.obs.log_event(
@@ -79,6 +82,19 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         )
         row = self._latest_row()
         self.assertAlmostEqual(row["detection_latency_sec"], 0.842)
+
+    def test_log_event_persists_l1_evidence(self):
+        evidence = "L1 앙상블: 후보 3개 중 2개가 'clear_memory' 선택(다수결)"
+        self.obs.log_event(
+            error_log="CRITICAL: known error",
+            source="L1_CACHE",
+            action_type="CLEAR_MEMORY",
+            latency_sec=0.2,
+            success=True,
+            l1_evidence=evidence,
+        )
+        row = self._latest_row()
+        self.assertEqual(row["l1_evidence"], evidence)
 
 
 if __name__ == "__main__":

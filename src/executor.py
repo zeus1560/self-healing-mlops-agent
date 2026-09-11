@@ -117,6 +117,18 @@ def _describe_action(decision: AgentResponse) -> str:
     return decision.action_type.value
 
 
+def _compose_explanation(decision: AgentResponse) -> str:
+    """
+    승인 요청 메시지의 "설명" 섹션에 넣을 판단 근거를 만든다(Explainability,
+    2026-09-11 추가). reasoning(L2 self-reflection 판정 등)과 l1_evidence(L1 앙상블
+    투표가 실제로 근거 삼은 과거 사건들, src/llm_engine.py::_format_evidence)를
+    둘 다 있으면 합쳐서, 승인/거절하는 사람이 "왜 이 조치를 제안했는지"를 화면
+    하나에서 검증할 수 있게 한다.
+    """
+    parts = [p for p in (decision.reasoning, decision.l1_evidence) if p]
+    return "\n\n".join(parts)
+
+
 def _validate_process_name(name: str) -> str | None:
     """
     프로세스/서비스 이름의 안전성을 검증한다.
@@ -231,7 +243,10 @@ class ActionExecutor:
             if (level == AutonomyLevel.APPROVE_THEN_EXECUTE
                     and decision.action_type not in (ActionType.EXECUTE_LLM_COMMAND,
                                                       ActionType.EXECUTE_RULE_COMMAND)):
-                outcome = self._await_approval(_describe_action(decision), original_error_log)
+                outcome = self._await_approval(
+                    _describe_action(decision), original_error_log,
+                    explanation=_compose_explanation(decision),
+                )
                 if outcome != "approved":
                     return self._approval_failure_result(outcome)
             # level == AUTO, 또는 APPROVE_THEN_EXECUTE + LLM/Rule 커맨드(아래에서 자체 승인 처리)
@@ -447,7 +462,9 @@ class ActionExecutor:
                 "error_type": "HumanRejected",
                 "error_detail": "관리자가 실행을 거절했습니다."}
 
-    def _await_approval(self, description: str, error_log: str) -> str:
+    def _await_approval(
+        self, description: str, error_log: str, explanation: str = ""
+    ) -> str:
         """
         Human-in-the-Loop 승인을 기다린다. LLM 커맨드·구조화된 액션 양쪽에서 공유한다.
 
@@ -455,6 +472,12 @@ class ActionExecutor:
           AUTO_APPROVE=true  → 즉시 승인 (CI/테스트 환경)
           대화형 터미널      → stdin 승인 프롬프트
           데몬 모드          → Slack 승인 대기 (최대 _APPROVAL_TIMEOUT_SEC)
+
+        explanation: 승인 화면에 보여줄 판단 근거(_compose_explanation 참고,
+            Explainability 2026-09-11 추가) — 2026-09-10까지는 이 정보가 승인
+            메시지에 전혀 안 들어가고 있었음(reason 파라미터가 토큰 URL 전용이라
+            "설명" 섹션에 URL만 보였음, 실제 근거는 명령어 실행 후 로그를 봐야만
+            확인 가능했음) — 이제 사람이 승인/거절하는 그 화면에서 바로 보인다.
 
         Returns: "approved" | "rejected" | "timeout" | "shutdown"
         """
@@ -471,6 +494,8 @@ class ActionExecutor:
         if is_interactive:
             print("\n" + "=" * 50)
             print("[Human-in-the-Loop] 실행 대기 중인 조치:", description)
+            if explanation:
+                print("근거:", explanation)
             approval = input("이 조치를 실행하시겠습니까? (y/n): ").strip().lower()
             print("=" * 50 + "\n")
             if approval != "y":
@@ -493,6 +518,7 @@ class ActionExecutor:
                 error_log=error_log,
                 command=description,
                 reason=f"🔐 명령어 확인 및 승인: {pending_url}",
+                explanation=explanation,
             )
         except Exception:
             logging.error(f"  [ChatOps] 승인 요청 발송 실패:\n{traceback.format_exc()}")
@@ -535,12 +561,13 @@ class ActionExecutor:
 
         level = autonomy_store.get_level(decision.error_category)
         if level != AutonomyLevel.AUTO:
-            # 자가 반성이 이 명령어에 우려를 표했다면(_make_llm_response 참고) 승인
-            # 화면에 그 사유를 같이 보여줘 사람이 더 정보 있는 판단을 하게 한다.
-            description = command
-            if decision.reasoning and "자가 반성" in decision.reasoning:
-                description = f"{command}\n{decision.reasoning}"
-            outcome = self._await_approval(description, error_log)
+            # reasoning(자가 반성 판정 등)은 이제 description(명령어)에 억지로 끼워
+            # 넣지 않고 explanation으로 따로 전달한다 — "설명" 섹션에 제대로 보임
+            # (2026-09-11, 예전엔 reason 파라미터가 승인 링크 URL 전용이라 이 정보가
+            # 승인 화면 어디에도 안 보이고 있었음).
+            outcome = self._await_approval(
+                command, error_log, explanation=_compose_explanation(decision)
+            )
             if outcome != "approved":
                 return self._approval_failure_result(outcome)
 

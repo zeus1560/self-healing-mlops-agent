@@ -65,19 +65,22 @@ class TestEnsembleVoteReturnsWinningId(unittest.TestCase):
     def test_majority_action_id_returned(self):
         from src.llm_engine import _ensemble_vote
         candidates = [
-            ({"action_type": "restart_service"}, 0.3, "id_a"),
-            ({"action_type": "restart_service"}, 0.1, "id_b"),  # 더 가까움 → 이게 선택돼야 함
-            ({"action_type": "kill_process"},    0.05, "id_c"),  # 소수 액션, 거리는 가장 가까움
+            ({"action_type": "restart_service"}, 0.3, "id_a", "doc a text"),
+            ({"action_type": "restart_service"}, 0.1, "id_b", "doc b text"),  # 더 가까움 → 이게 선택돼야 함
+            ({"action_type": "kill_process"},    0.05, "id_c", "doc c text"),  # 소수 액션, 거리는 가장 가까움
         ]
-        best_meta, best_id = _ensemble_vote(candidates)
+        best_meta, best_id, evidence = _ensemble_vote(candidates)
         self.assertEqual(best_meta["action_type"], "restart_service")
         self.assertEqual(best_id, "id_b")
+        self.assertIn("restart_service", evidence)
+        self.assertIn("doc b text", evidence)
 
     def test_single_candidate(self):
         from src.llm_engine import _ensemble_vote
-        candidates = [({"action_type": "alert_only"}, 0.2, "solo_id")]
-        best_meta, best_id = _ensemble_vote(candidates)
+        candidates = [({"action_type": "alert_only"}, 0.2, "solo_id", "solo doc text")]
+        best_meta, best_id, evidence = _ensemble_vote(candidates)
         self.assertEqual(best_id, "solo_id")
+        self.assertIn("solo doc text", evidence)
 
 
 class TestLearnFromFeedbackTagging(unittest.TestCase):

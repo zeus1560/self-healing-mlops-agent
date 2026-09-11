@@ -273,6 +273,7 @@ class LogTailHandler(FileSystemEventHandler):
             reasoning=decision.reasoning,
             command=decision.command,
             detection_latency_sec=detection_latency_sec,
+            l1_evidence=decision.l1_evidence,
         )
         logging.info(
             f"[조치 완료] 소스:{source} | 결과:{result_category} ({latency:.2f}s)"

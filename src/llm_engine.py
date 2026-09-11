@@ -675,13 +675,14 @@ def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> 
 
 # ── 공통 헬퍼 ─────────────────────────────────────────────────────────────────
 def _build_response_from_meta(
-    meta: dict, source: str, doc_id: str | None = None
+    meta: dict, source: str, doc_id: str | None = None, evidence: str | None = None
 ) -> AgentResponse:
     """ChromaDB 메타데이터 dict → AgentResponse. L1 fast track과 배치 쿼리가 공유.
 
     doc_id/meta의 "source" 필드는 L1_CACHE 히트에서 실제로 매칭된 문서를 다시
     식별하기 위함이다(온라인학습 엔트리의 실행 결과 되먹임에 사용, learn_from_feedback/
     record_learned_outcome 참고).
+    evidence는 _ensemble_vote()가 만든 사람이 읽을 수 있는 투표 근거 설명(Explainability).
     """
     action_str = meta.get("action_type", "escalate_to_human")
     try:
@@ -698,6 +699,7 @@ def _build_response_from_meta(
         resolution_source=source,
         l1_doc_id=doc_id,
         l1_source=meta.get("source"),
+        l1_evidence=evidence,
     )
 
 
@@ -729,28 +731,60 @@ def _make_llm_response(command: str, error_log: str, system_context: str, backen
     )
 
 
-def _ensemble_vote(candidates: list[tuple[dict, float, str]]) -> tuple[dict, str]:
+_EVIDENCE_SNIPPET_LEN = 100
+
+
+def _format_evidence(candidates: list[tuple[dict, float, str, str]],
+                      top_action: str, best_id: str) -> str:
+    """
+    앙상블 투표에 실제로 참여한 후보들을 사람이 읽을 수 있게 정리한다(Explainability,
+    2026-09-11 추가). "왜 이 조치를 골랐는가"에 벡터 검색이 실제로 근거 삼은 과거
+    사건들을 그대로 보여줘, 승인 화면/대시보드에서 검증 가능하게 한다.
+
+    후보는 거리순으로 정렬해 표시 — 투표 자체는 다수결이지만, 사람이 볼 땐 "가장
+    가까운 것부터"가 직관적이다. 승리한 문서(best_id)에는 ✓ 표시.
+    """
+    vote_counts = Counter(m.get("action_type", "escalate_to_human") for m, _, _, _ in candidates)
+    n_winning   = vote_counts[top_action]
+    lines = [
+        f"L1 앙상블: 후보 {len(candidates)}개 중 {n_winning}개가 '{top_action}' 선택(다수결)"
+    ]
+    for meta, dist, doc_id, doc_text in sorted(candidates, key=lambda c: c[1]):
+        mark   = "✓" if doc_id == best_id else " "
+        snippet = doc_text.strip().replace("\n", " ")[:_EVIDENCE_SNIPPET_LEN]
+        lines.append(
+            f"  {mark} [거리 {dist:.4f}] {meta.get('action_type', '?')} ← {snippet}"
+        )
+    return "\n".join(lines)
+
+
+def _ensemble_vote(
+    candidates: list[tuple[dict, float, str, str]]
+) -> tuple[dict, str, str]:
     """
     후보 목록에서 action_type 다수결로 최적 메타데이터를 선택한다.
 
     같은 action_type 후보 중 거리(distance)가 가장 작은 것을 반환한다.
     Counter는 모듈 레벨에서 import돼 매 호출마다 재임포트되지 않는다.
 
-    후보는 (메타데이터, 거리, ChromaDB 문서 ID) 튜플이며, 다수결로 뽑힌 단일
-    문서의 ID도 같이 반환한다 — 이 ID가 실제로 응답을 만든 문서이므로, 나중에
-    실행 결과를 그 문서 하나에 정확히 되먹일 수 있다(record_learned_outcome 참고).
+    후보는 (메타데이터, 거리, ChromaDB 문서 ID, 문서 원문) 튜플이며, 다수결로 뽑힌
+    단일 문서의 ID와 사람이 읽을 수 있는 투표 근거 설명(evidence)도 같이 반환한다.
+    ID는 실행 결과를 그 문서 하나에 정확히 되먹이는 데 쓰이고(record_learned_outcome
+    참고), evidence는 Explainability용(_format_evidence 참고).
     """
-    action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _, _ in candidates)
+    action_votes = Counter(m.get("action_type", "escalate_to_human") for m, _, _, _ in candidates)
     top_action   = action_votes.most_common(1)[0][0]
 
     best_meta, best_dist, best_id = None, float("inf"), None
-    for meta, dist, doc_id in candidates:
+    for meta, dist, doc_id, _ in candidates:
         if meta.get("action_type") == top_action and dist < best_dist:
             best_meta, best_dist, best_id = meta, dist, doc_id
 
     if best_meta is None:
-        best_meta, _, best_id = candidates[0]
-    return best_meta, best_id
+        best_meta, _, best_id, _ = candidates[0]
+
+    evidence = _format_evidence(candidates, top_action, best_id)
+    return best_meta, best_id, evidence
 
 
 # ── RAGEngine ─────────────────────────────────────────────────────────────────
@@ -874,17 +908,18 @@ class RAGEngine:
             )
 
         candidates = [
-            (metas[i], dists[i], ids[i]) for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD
+            (metas[i], dists[i], ids[i], docs[i])
+            for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD
         ]
         logging.info(f"  [매칭된 과거 에러] {docs[0][:60]}... (거리: {dists[0]:.4f})")
 
         if candidates:
-            best_meta, best_id = _ensemble_vote(candidates)
+            best_meta, best_id, evidence = _ensemble_vote(candidates)
             logging.info(
                 f"  [앙상블] {len(candidates)}/{len(dists)}개 후보 "
                 f"→ 다수결 action: {best_meta.get('action_type')}"
             )
-            return _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id)
+            return _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
 
         return self._l2_slow_track(log_text, dists[0])
 
@@ -923,7 +958,8 @@ class RAGEngine:
                 continue
 
             candidates = [
-                (metas[j], dists[j], ids[j]) for j in range(len(dists)) if dists[j] <= _RAG_THRESHOLD
+                (metas[j], dists[j], ids[j], docs[j])
+                for j in range(len(dists)) if dists[j] <= _RAG_THRESHOLD
             ]
 
             if not candidates:
@@ -931,12 +967,14 @@ class RAGEngine:
                 responses.append(self._l2_slow_track(log_text, dists[0]))
                 continue
 
-            best_meta, best_id = _ensemble_vote(candidates)
+            best_meta, best_id, evidence = _ensemble_vote(candidates)
             logging.info(
                 f"  [배치 {i + 1}/{len(log_texts)}] 앙상블 {len(candidates)}개 후보 "
                 f"→ {best_meta.get('action_type')}"
             )
-            responses.append(_build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id))
+            responses.append(
+                _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
+            )
 
         return responses
 

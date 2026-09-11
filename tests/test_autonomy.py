@@ -147,11 +147,15 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
         mock_await.assert_called_once()
         self.assertTrue(result["success"])
 
-    def test_llm_command_approval_description_surfaces_self_reflection_warning(self):
+    def test_llm_command_approval_explanation_surfaces_self_reflection_warning(self):
         """
         2026-09-05: 자가 반성이 거부한 명령어는 더 이상 강제 에스컬레이션되지 않고
         정상 승인 게이트를 타는 대신(llm_engine._make_llm_response), 그 사유를
         승인 화면에서 사람이 볼 수 있어야 한다.
+
+        2026-09-11 Explainability 리팩터: 이 사유는 더 이상 description(명령어)에
+        억지로 끼워 넣지 않고 별도 explanation 인자로 전달된다 — description은
+        항상 순수 명령어만 담는다(실행될 명령어와 판단 근거를 섞지 않음).
         """
         autonomy_store.set_level("Process_Crash", AutonomyLevel.APPROVE_THEN_EXECUTE, "tester")
         decision = AgentResponse(
@@ -166,8 +170,9 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             self.ex.execute(decision)
         description = mock_await.call_args[0][0]
-        self.assertIn("systemctl restart postgresql", description)
-        self.assertIn("자가 반성", description)
+        explanation = mock_await.call_args.kwargs["explanation"]
+        self.assertEqual(description, "systemctl restart postgresql")
+        self.assertIn("자가 반성", explanation)
 
     def test_llm_command_approval_description_plain_when_no_self_reflection_flag(self):
         autonomy_store.set_level("Process_Crash", AutonomyLevel.APPROVE_THEN_EXECUTE, "tester")
@@ -177,7 +182,9 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             self.ex.execute(decision)
         description = mock_await.call_args[0][0]
+        explanation = mock_await.call_args.kwargs["explanation"]
         self.assertEqual(description, "free -m")
+        self.assertEqual(explanation, "test reasoning")
 
 
 class TestLogWatcherLearningGuard(unittest.TestCase):

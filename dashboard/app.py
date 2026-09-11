@@ -1638,6 +1638,13 @@ with tab5:
             _action_raw = str(row.get("action_type", ""))
             st.write(f"선택된 조치: **{_ACTION_DESC.get(_action_raw, _action_raw)}**")
 
+            _l1_evidence = row.get("l1_evidence")
+            if src_raw == "L1_CACHE" and _l1_evidence and str(_l1_evidence) not in ("nan", "None", ""):
+                with st.expander("🔍 근거 — 어떤 과거 사건들과 비교했는가 (Explainability)"):
+                    st.code(str(_l1_evidence), language="text")
+            elif src_raw == "L1_CACHE":
+                st.caption("이 필드가 기록되기 이전(2026-09-11 이전)의 인시던트라 값이 없습니다.")
+
         with st.container(border=True):
             st.markdown("**3️⃣ Self-Reflection 결과**")
             _reasoning = row.get("reasoning")
