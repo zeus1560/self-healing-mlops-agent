@@ -733,6 +733,37 @@ def _make_llm_response(command: str, error_log: str, system_context: str, backen
 
 _EVIDENCE_SNIPPET_LEN = 100
 
+# ChromaDB 문서의 "source" 메타데이터 → 사람이 읽을 수 있는 출처 라벨.
+# 신뢰도 판단에 실제로 영향을 준다 — 사람이 직접 큐레이션/검증한 문서(카오스
+# 인젝터 실측 문구 등)와 크롤링/증강으로 자동 생성된 문서, 그리고 온라인학습으로
+# 자동 축적돼 트랙 레코드가 있는 문서는 신뢰해야 하는 정도가 다르다.
+_SOURCE_LABELS: dict[str, str] = {
+    "chaos_injector_signature":    "카오스 인젝터 실측 문구(사람이 직접 큐레이션)",
+    "proactive_monitor_signature": "ProactiveMonitor 실측 문구(사람이 직접 큐레이션)",
+    "github_v2":                   "GitHub 이슈 크롤링",
+    "syslog_augment_v1":           "syslog 증강 데이터",
+    "syslog_augment_v2":           "syslog 증강 데이터",
+    "loghub_v1":                   "LogHub 공개 데이터셋",
+}
+
+
+def _format_track_record(meta: dict) -> str:
+    """
+    온라인학습(learn_from_feedback)으로 생성된 문서의 실행 트랙 레코드를
+    사람이 읽을 수 있게 만든다(Explainability, 2026-09-11 추가) — 큐레이션
+    데이터와 달리 이 문서는 실제 운영에서 반복 실행된 결과(success_count/
+    failure_count, record_learned_outcome이 갱신)가 있어, "이 조치가 과거에
+    실제로 몇 번 통했는가"를 신뢰도 판단에 직접 쓸 수 있다.
+    """
+    if meta.get("source") != "online_learning":
+        return ""
+    success = int(meta.get("success_count") or 0)
+    failure = int(meta.get("failure_count") or 0)
+    total   = success + failure
+    if total == 0:
+        return " [온라인학습, 실행 이력 없음]"
+    return f" [온라인학습, 과거 {total}회 실행 중 {success}회 성공]"
+
 
 def _format_evidence(candidates: list[tuple[dict, float, str, str]],
                       top_action: str, best_id: str) -> str:
@@ -742,7 +773,9 @@ def _format_evidence(candidates: list[tuple[dict, float, str, str]],
     사건들을 그대로 보여줘, 승인 화면/대시보드에서 검증 가능하게 한다.
 
     후보는 거리순으로 정렬해 표시 — 투표 자체는 다수결이지만, 사람이 볼 땐 "가장
-    가까운 것부터"가 직관적이다. 승리한 문서(best_id)에는 ✓ 표시.
+    가까운 것부터"가 직관적이다. 승리한 문서(best_id)에는 ✓ 표시. 출처(사람이
+    큐레이션했는지, 크롤링/증강인지, 온라인학습으로 자동 축적됐는지)와 온라인학습
+    문서의 실행 트랙 레코드도 같이 보여줘 신뢰도 판단에 쓸 수 있게 한다.
     """
     vote_counts = Counter(m.get("action_type", "escalate_to_human") for m, _, _, _ in candidates)
     n_winning   = vote_counts[top_action]
@@ -752,8 +785,11 @@ def _format_evidence(candidates: list[tuple[dict, float, str, str]],
     for meta, dist, doc_id, doc_text in sorted(candidates, key=lambda c: c[1]):
         mark   = "✓" if doc_id == best_id else " "
         snippet = doc_text.strip().replace("\n", " ")[:_EVIDENCE_SNIPPET_LEN]
+        source_label = _SOURCE_LABELS.get(meta.get("source"), "")
+        track_record = _format_track_record(meta)
+        suffix = f" [{source_label}]" if source_label else ""
         lines.append(
-            f"  {mark} [거리 {dist:.4f}] {meta.get('action_type', '?')} ← {snippet}"
+            f"  {mark} [거리 {dist:.4f}] {meta.get('action_type', '?')} ← {snippet}{suffix}{track_record}"
         )
     return "\n".join(lines)
 

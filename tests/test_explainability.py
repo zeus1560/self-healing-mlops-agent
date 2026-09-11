@@ -56,6 +56,70 @@ class TestFormatEvidence(unittest.TestCase):
         self.assertNotIn("x" * (_EVIDENCE_SNIPPET_LEN + 1), text)
 
 
+class TestTrackRecordAndSourceLabel(unittest.TestCase):
+    """
+    신뢰도 판단 보강(2026-09-12 추가) — 온라인학습 문서는 실제 실행 트랙 레코드
+    (success_count/failure_count)가 있고, 큐레이션/크롤링 문서는 출처 라벨만 있다.
+    이미 존재하던 데이터(success_count/failure_count, source)를 근거 텍스트에
+    노출하기만 하는 확장이라 저장 스키마는 안 건드린다.
+    """
+
+    def test_online_learning_shows_track_record(self):
+        from src.llm_engine import _format_track_record
+
+        meta = {"source": "online_learning", "success_count": 11, "failure_count": 1}
+        text = _format_track_record(meta)
+        self.assertIn("12회 실행", text)
+        self.assertIn("11회 성공", text)
+
+    def test_online_learning_with_no_history_yet(self):
+        from src.llm_engine import _format_track_record
+
+        meta = {"source": "online_learning", "success_count": 0, "failure_count": 0}
+        self.assertEqual(_format_track_record(meta), " [온라인학습, 실행 이력 없음]")
+
+    def test_curated_source_has_no_track_record(self):
+        from src.llm_engine import _format_track_record
+
+        meta = {"source": "chaos_injector_signature", "success_count": 99}
+        self.assertEqual(_format_track_record(meta), "")
+
+    def test_missing_source_has_no_track_record(self):
+        from src.llm_engine import _format_track_record
+
+        self.assertEqual(_format_track_record({}), "")
+
+    def test_evidence_includes_source_label_for_curated_doc(self):
+        from src.llm_engine import _format_evidence
+
+        candidates = [
+            ({"action_type": "clear_memory", "source": "chaos_injector_signature"},
+             0.05, "id_1", "OOM killed process"),
+        ]
+        text = _format_evidence(candidates, top_action="clear_memory", best_id="id_1")
+        self.assertIn("사람이 직접 큐레이션", text)
+
+    def test_evidence_includes_track_record_for_online_learning_doc(self):
+        from src.llm_engine import _format_evidence
+
+        candidates = [
+            ({"action_type": "restart_service", "source": "online_learning",
+              "success_count": 3, "failure_count": 0},
+             0.05, "id_1", "learned solution text"),
+        ]
+        text = _format_evidence(candidates, top_action="restart_service", best_id="id_1")
+        self.assertIn("3회 실행 중 3회 성공", text)
+
+    def test_evidence_omits_suffix_for_untagged_doc(self):
+        """train_set.json 초기 시딩 문서처럼 source 태그가 전혀 없는 경우 — 빈 접미사."""
+        from src.llm_engine import _format_evidence
+
+        candidates = [({"action_type": "alert_only"}, 0.05, "id_1", "seed doc")]
+        text = _format_evidence(candidates, top_action="alert_only", best_id="id_1")
+        line = next(ln for ln in text.splitlines() if "seed doc" in ln)
+        self.assertTrue(line.strip().endswith("seed doc"))
+
+
 class TestEnsembleVoteEvidenceIntegration(unittest.TestCase):
     def test_returns_three_tuple(self):
         from src.llm_engine import _ensemble_vote
