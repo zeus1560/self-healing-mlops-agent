@@ -20,7 +20,7 @@ from src.utils.sqlite_pool import get_conn
 from src.utils.pii_masker import mask as _mask_pii
 
 # 스키마 마이그레이션 컬럼 정의.
-# 컬럼 이름은 소문자 영문자·밑줄만 허용한다(_SAFE_COL_RE 로 검증).
+# 컬럼 이름은 소문자로 시작, 이후 소문자·숫자·밑줄만 허용한다(_SAFE_COL_RE 로 검증).
 # 이 목록에만 f-string SQL이 사용되므로, 새 컬럼 추가 시 이곳에만 등록하면 된다.
 _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("result_category", "TEXT DEFAULT 'SUCCESS'"),
@@ -45,8 +45,9 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # L2_LLM/RULE 경로와 기존 행은 NULL.
     ("l1_evidence", "TEXT"),
 )
-# 컬럼 이름 안전성 검증 패턴 — 소문자 영문자와 밑줄만 허용
-_SAFE_COL_RE = re.compile(r'^[a-z_]+$')
+# 컬럼 이름 안전성 검증 패턴 — 소문자 영문자로 시작, 이후 소문자/숫자/밑줄만 허용
+# (예: l1_evidence). 숫자로 시작하는 이름은 SQL 식별자로 유효하지 않으므로 계속 거부한다.
+_SAFE_COL_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 
 
 class AgentObserver:

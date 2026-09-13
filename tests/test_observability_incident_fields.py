@@ -83,6 +83,33 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         row = self._latest_row()
         self.assertAlmostEqual(row["detection_latency_sec"], 0.842)
 
+    def test_migration_adds_columns_with_digits_in_name(self):
+        """회귀 테스트 — 2026-09-11 Explainability 배포 후 실서비스에서 실제로 터진 버그.
+
+        _SAFE_COL_RE가 숫자를 거부하는 바람에 `l1_evidence`(숫자 '1' 포함)가
+        "비안전 컬럼"으로 오판되어 기존 DB에 영원히 추가되지 않고, 그 결과
+        모든 log_event() 호출이 `no column named l1_evidence`로 계속 실패하며
+        VM의 메트릭 수집이 조용히 3일간 중단됐다. l1_evidence가 없는(Explainability
+        이전) 구버전 스키마를 흉내 낸 DB에 AgentObserver를 다시 붙여 마이그레이션이
+        실제로 컬럼을 추가하는지 확인한다.
+        """
+        old_schema_path = tempfile.mktemp(suffix=".db")
+        conn = get_conn(old_schema_path)
+        conn.execute("""
+            CREATE TABLE metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT, error_log TEXT, resolution_source TEXT,
+                action_type TEXT, latency_sec REAL, success BOOLEAN
+            )
+        """)
+        conn.commit()
+        try:
+            AgentObserver(db_path=old_schema_path)
+            cols = {row[1] for row in get_conn(old_schema_path).execute("PRAGMA table_info(metrics)")}
+            self.assertIn("l1_evidence", cols)
+        finally:
+            os.unlink(old_schema_path)
+
     def test_log_event_persists_l1_evidence(self):
         evidence = "L1 앙상블: 후보 3개 중 2개가 'clear_memory' 선택(다수결)"
         self.obs.log_event(
