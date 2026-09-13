@@ -1,0 +1,119 @@
+{
+  "generated_at": "2026-09-13T16:20:24.084148+00:00",
+  "since": "2026-09-08T09:00:00+00:00",
+  "chaos_injector_log_events": 21,
+  "matched_and_labeled": 20,
+  "missed_entirely": 9,
+  "missed_events": [
+    {
+      "timestamp": "2026-09-11T12:00:02+00:00",
+      "fault": "config_error"
+    },
+    {
+      "timestamp": "2026-09-11T18:00:03+00:00",
+      "fault": "oom"
+    },
+    {
+      "timestamp": "2026-09-12T00:00:16+00:00",
+      "fault": "cpu"
+    },
+    {
+      "timestamp": "2026-09-12T06:00:01+00:00",
+      "fault": "auth_error"
+    },
+    {
+      "timestamp": "2026-09-12T12:00:01+00:00",
+      "fault": "process_crash"
+    },
+    {
+      "timestamp": "2026-09-12T18:00:01+00:00",
+      "fault": "path_not_found"
+    },
+    {
+      "timestamp": "2026-09-13T00:00:01+00:00",
+      "fault": "path_not_found"
+    },
+    {
+      "timestamp": "2026-09-13T06:00:02+00:00",
+      "fault": "diskfull"
+    },
+    {
+      "timestamp": "2026-09-13T12:00:05+00:00",
+      "fault": "network_timeout"
+    }
+  ],
+  "unrecognized_marker": 0,
+  "injector_self_failed": 0,
+  "no_category_mapping_n": 0,
+  "no_category_mapping_faults": [],
+  "per_category": {
+    "DB_Deadlock": {
+      "n": 3,
+      "recall": 0.0,
+      "predicted_as": {
+        "LLM_Inferred": 3
+      }
+    },
+    "Out_Of_Memory": {
+      "n": 1,
+      "recall": 1.0,
+      "predicted_as": {
+        "Out_Of_Memory": 1
+      }
+    },
+    "DB_Connection": {
+      "n": 2,
+      "recall": 1.0,
+      "predicted_as": {
+        "DB_Connection": 2
+      }
+    },
+    "CPU_Overload": {
+      "n": 3,
+      "recall": 0.3333,
+      "predicted_as": {
+        "LLM_Inferred": 2,
+        "CPU_Overload": 1
+      }
+    },
+    "Auth_Error": {
+      "n": 2,
+      "recall": 1.0,
+      "predicted_as": {
+        "Auth_Error": 2
+      }
+    },
+    "Configuration_Error": {
+      "n": 5,
+      "recall": 1.0,
+      "predicted_as": {
+        "Configuration_Error": 5
+      }
+    },
+    "Memory_Leak": {
+      "n": 1,
+      "recall": 1.0,
+      "predicted_as": {
+        "Memory_Leak": 1
+      }
+    },
+    "Process_Crash": {
+      "n": 2,
+      "recall": 1.0,
+      "predicted_as": {
+        "Process_Crash": 2
+      }
+    },
+    "Network_Timeout": {
+      "n": 1,
+      "recall": 1.0,
+      "predicted_as": {
+        "Network_Timeout": 1
+      }
+    }
+  },
+  "root_cause_tags": {
+    "학습 데이터 희소 카테고리(DB_Deadlock) 오분류 의심": 3,
+    "CPU_Overload → LLM_Inferred 오분류": 2
+  }
+}
