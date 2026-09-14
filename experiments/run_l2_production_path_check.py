@@ -53,7 +53,11 @@ from src.schemas import ActionType
 RESULTS_DIR = Path("experiments/results")
 
 # Groq 무료 티어 레이트리밋(30 RPM) 회피 — run_l2_accuracy.py와 동일 규칙.
-GROQ_CALL_INTERVAL_SEC = 2.2
+# 2026-09-15: 멀티에이전트 3단계(진단→제안→검토) 추가로 항목당 Groq 호출이
+# 1~2회에서 2~3회(진단+생성+자가반성)로 늘어 기존 2.2초로는 ITPM 레이트리밋에
+# 지속적으로 걸림(실측 확인 — 재시도 소진으로 생성 성공률까지 같이 떨어짐,
+# 진짜 아키텍처 성능 저하와 구분이 안 됨) — 호출량 증가분만큼 여유 있게 늘림.
+GROQ_CALL_INTERVAL_SEC = 6.0
 
 
 def _self_reflection_passed(reasoning: str) -> bool:
@@ -85,7 +89,11 @@ def main():
             time.sleep(GROQ_CALL_INTERVAL_SEC)
 
         t0 = time.perf_counter()
-        response = RAGEngine._l2_slow_track(None, log, best_distance=999.0)
+        # best_meta={}: 2026-09-15 l1_nearest_category 추가로 _l2_slow_track()에
+        # best_meta 인자가 새로 생겼다 — 이 스크립트는 L1 미스를 인위적으로
+        # 강제하는 것이라 실제 최근접 후보가 없으므로 빈 dict(카테고리 추측 없음)로
+        # 넘긴다. best_meta.get()이 안전하게 None을 반환해 에러 나지 않는다.
+        response = RAGEngine._l2_slow_track(None, log, {}, best_distance=999.0)
         latency_ms = (time.perf_counter() - t0) * 1000
 
         generated = response.action_type == ActionType.EXECUTE_LLM_COMMAND
