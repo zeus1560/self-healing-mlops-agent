@@ -732,7 +732,10 @@ def _build_response_from_meta(
     )
 
 
-def _make_llm_response(command: str, error_log: str, system_context: str, backend: str) -> AgentResponse:
+def _make_llm_response(
+    command: str, error_log: str, system_context: str, backend: str,
+    nearest_category: str | None = None, nearest_distance: float | None = None,
+) -> AgentResponse:
     """
     자가 반성 결과를 반영해 EXECUTE_LLM_COMMAND AgentResponse를 만든다.
 
@@ -760,6 +763,8 @@ def _make_llm_response(command: str, error_log: str, system_context: str, backen
         reasoning=reasoning,
         resolution_source="L2_LLM",
         command=command,
+        l1_nearest_category=nearest_category,
+        l1_nearest_distance=nearest_distance,
     )
 
 
@@ -910,10 +915,19 @@ class RAGEngine:
             n = len(log_texts)
             return {"documents": [[]] * n, "metadatas": [[]] * n, "distances": [[]] * n, "ids": [[]] * n}
 
-    def _l2_slow_track(self, error_log: str, best_distance: float) -> AgentResponse:
-        """L1 미스 시 Groq → Ollama → ipex_llm → Rule-based → Escalation 5단계 폴백 체인."""
+    def _l2_slow_track(self, error_log: str, best_meta: dict, best_distance: float) -> AgentResponse:
+        """L1 미스 시 Groq → Ollama → ipex_llm → Rule-based → Escalation 5단계 폴백 체인.
+
+        best_meta/best_distance는 임계값(RAG_THRESHOLD)을 못 넘어 액션 채택은 포기한
+        가장 가까운 L1 후보다 — 액션 결정에는 안 쓰지만, 그 카테고리 추측을
+        AgentResponse.l1_nearest_category로 실어 보내 FP/FN 분석이 L2/RULE 경로도
+        참고할 수 있게 한다(2026-09-15, run_fp_fn_analysis.py의 "L2 경로는 recall
+        계산 자체가 불가능" 공백을 메우기 위함 — schemas.py의 필드 설명 참고).
+        """
+        nearest_category = best_meta.get("error_category")
         logging.warning(
-            f"[RAGEngine] 유사도 낮음 (거리: {best_distance:.4f}). Fallback 체인 시작..."
+            f"[RAGEngine] 유사도 낮음 (거리: {best_distance:.4f}, 최근접 카테고리 추정: "
+            f"{nearest_category}). Fallback 체인 시작..."
         )
         logging.info("🔍 [Observation] 시스템 상태 사전 진단을 시작합니다...")
         system_context = gather_system_context(error_log)
@@ -926,7 +940,10 @@ class RAGEngine:
             groq_result = _run_groq(error_log, system_context)
             if not groq_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Groq] 명령어: {groq_result}")
-                return _make_llm_response(groq_result, error_log, system_context, "Groq")
+                return _make_llm_response(
+                    groq_result, error_log, system_context, "Groq",
+                    nearest_category=nearest_category, nearest_distance=best_distance,
+                )
             logging.warning(f"[RAGEngine] Groq 실패: {groq_result}")
         else:
             logging.info("[RAGEngine] GROQ_API_KEY 미설정. Ollama로 폴백...")
@@ -938,7 +955,10 @@ class RAGEngine:
             llm_result = _run_ollama(error_log, system_context)
             if not llm_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Ollama] 명령어: {llm_result}")
-                return _make_llm_response(llm_result, error_log, system_context, "Ollama")
+                return _make_llm_response(
+                    llm_result, error_log, system_context, "Ollama",
+                    nearest_category=nearest_category, nearest_distance=best_distance,
+                )
             logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
         else:
             logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
@@ -947,7 +967,10 @@ class RAGEngine:
         ipex_result = run_ipex_engine(error_log, system_context)
         if ipex_result not in ("TIMEOUT", "ERROR") and not ipex_result.startswith("ERROR:"):
             logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
-            return _make_llm_response(ipex_result, error_log, system_context, "ipex_llm")
+            return _make_llm_response(
+                ipex_result, error_log, system_context, "ipex_llm",
+                nearest_category=nearest_category, nearest_distance=best_distance,
+            )
         logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
 
         # Step 4: Rule-based heuristic
@@ -960,6 +983,8 @@ class RAGEngine:
                 reasoning="규칙 기반 키워드 매칭",
                 resolution_source="RULE",
                 command=rule_cmd,
+                l1_nearest_category=nearest_category,
+                l1_nearest_distance=best_distance,
             )
 
         # Step 5: 완전 실패 → 인간 에스컬레이션
@@ -971,6 +996,8 @@ class RAGEngine:
                 f"(Groq: {groq_result}, Ollama: {llm_result}, ipex: {ipex_result})"
             ),
             resolution_source="L2_LLM",
+            l1_nearest_category=nearest_category,
+            l1_nearest_distance=best_distance,
         )
 
     def analyze_error(self, log_text: str) -> AgentResponse:
@@ -1009,7 +1036,7 @@ class RAGEngine:
             )
             return _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
 
-        return self._l2_slow_track(log_text, dists[0])
+        return self._l2_slow_track(log_text, metas[0], dists[0])
 
     def analyze_errors_batch(self, log_texts: list[str]) -> list[AgentResponse]:
         """
@@ -1052,7 +1079,7 @@ class RAGEngine:
 
             if not candidates:
                 logging.info(f"  [배치 {i + 1}/{len(log_texts)}] L1 미스 → slow track")
-                responses.append(self._l2_slow_track(log_text, dists[0]))
+                responses.append(self._l2_slow_track(log_text, metas[0], dists[0]))
                 continue
 
             best_meta, best_id, evidence = _ensemble_vote(candidates)

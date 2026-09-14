@@ -44,6 +44,13 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # (src/llm_engine.py::_format_evidence, AgentResponse.l1_evidence 참고).
     # L2_LLM/RULE 경로와 기존 행은 NULL.
     ("l1_evidence", "TEXT"),
+    # 2026-09-15 추가: L2_LLM/RULE 경로로 빠진 사건은 error_category가
+    # "LLM_Inferred"/"Rule_Inferred"/"Unknown"으로 찍혀 FP/FN 분석의 recall 계산이
+    # 아예 불가능했다(run_fp_fn_analysis.py). 임계값 미달로 액션 채택은 안 했지만
+    # 그래도 가장 가까웠던 L1 후보의 카테고리/거리를 참고용으로 같이 남긴다 —
+    # AgentResponse.l1_nearest_category 설명 참고. autonomy 게이팅에는 안 쓰인다.
+    ("l1_nearest_category", "TEXT"),
+    ("l1_nearest_distance", "REAL"),
 )
 # 컬럼 이름 안전성 검증 패턴 — 소문자 영문자로 시작, 이후 소문자/숫자/밑줄만 허용
 # (예: l1_evidence). 숫자로 시작하는 이름은 SQL 식별자로 유효하지 않으므로 계속 거부한다.
@@ -90,7 +97,9 @@ class AgentObserver:
                 reasoning        TEXT,
                 command          TEXT,
                 detection_latency_sec REAL,
-                l1_evidence      TEXT
+                l1_evidence      TEXT,
+                l1_nearest_category TEXT,
+                l1_nearest_distance REAL
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
@@ -121,6 +130,8 @@ class AgentObserver:
         command: str | None = None,
         detection_latency_sec: float | None = None,
         l1_evidence: str | None = None,
+        l1_nearest_category: str | None = None,
+        l1_nearest_distance: float | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다.
 
@@ -130,6 +141,9 @@ class AgentObserver:
         detection_latency_sec는 탐지 지연 SLI 실측용(src/log_watcher.py 참고).
         l1_evidence는 L1_CACHE 히트의 앙상블 투표 근거(Explainability, src/llm_engine.py
         ::_format_evidence 참고) — L2_LLM/RULE 경로에선 None.
+        l1_nearest_category/l1_nearest_distance는 L2_LLM/RULE 경로에서 임계값 미달로
+        채택은 안 했지만 가장 가까웠던 L1 후보의 카테고리 추측(2026-09-15, FP/FN 분석
+        참고용 — AgentResponse.l1_nearest_category 설명 참고). L1_CACHE 히트에선 None.
         """
         safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
@@ -142,14 +156,16 @@ class AgentObserver:
                     (timestamp, error_log, resolution_source, action_type,
                      latency_sec, success, result_category, error_type,
                      error_detail, error_category, reasoning, command,
-                     detection_latency_sec, l1_evidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     detection_latency_sec, l1_evidence,
+                     l1_nearest_category, l1_nearest_distance)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp, safe_log, source, action_type,
                     latency_sec, success, result_category,
                     error_type, error_detail, error_category,
                     reasoning, command, detection_latency_sec, l1_evidence,
+                    l1_nearest_category, l1_nearest_distance,
                 ),
             )
             conn.commit()
