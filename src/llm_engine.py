@@ -545,6 +545,18 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> tuple[
     반환값은 (안전 여부, 판정 근거) — 2026-09-12 Explainability 확장으로 튜플이
     됐다(이전엔 bool만 반환). LLM 호출 없이 결정론적으로 통과/거부하는 3개 경로도
     각각 왜 그런지 이미 알고 있는 이유를 그대로 근거로 반환한다.
+
+    2026-09-15 프롬프트 수정: run_faithfulness_test.py 실측(반사실적 위험요소
+    조작 테스트)에서 실제 프로덕션 문제 발견 — 프롬프트의 허용 명령 설명에
+    "fuser"가 아예 빠져있어 정확히 올바른 대상을 지정한 `fuser -k <port>`조차
+    5/5 "화이트리스트에 없다"며 거부됐고, `pkill`도 3/5는 같은 이유로,
+    2/5는 "명시적 소프트 시그널 플래그가 없다"(pkill의 실제 화이트리스트
+    요건과 다름 — kill의 요건과 혼동)로 잘못 거부됨. 반면 대상이 실제로
+    틀린 경우(엉뚱한 PID/포트/과도하게 넓은 패턴)는 87% 확률로 그 불일치를
+    정확히 짚어내는 근거를 냄 — "타겟이 에러와 맞는지" 판단 자체는 신뢰할
+    만했으나, 프롬프트가 fuser를 안 알려주고 pkill 요건을 애매하게 적어
+    엉뚱한 이유로 안전한 액션까지 에스컬레이션시키고 있었다. fuser를
+    명시하고 pkill/fuser엔 시그널 플래그가 불필요함을 명확히 해 수정.
     """
     if _is_self_destructive_kill(command):
         rationale = "PID 1(자기 자신/init) 대상 지정 — LLM 판정 없이 항상 거부"
@@ -564,11 +576,15 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> tuple[
     prompt = (
         "You are a safety reviewer for a Self-Healing MLOps Agent.\n"
         "The proposed command has ALREADY passed a strict security whitelist — only a small\n"
-        "fixed set of safe commands is even possible here (systemctl restart/stop/start/status,\n"
-        "pkill/kill with soft signals only, memory/disk/process read-only queries). Shell\n"
-        "chaining, arbitrary paths, and destructive tools are already blocked before this point.\n"
-        "Your job is NOT to re-judge generic shell danger. Judge only whether this specific\n"
-        "action is a reasonable, proportionate response to the described error.\n"
+        "fixed set of safe commands is even possible here: systemctl restart/stop/start/status,\n"
+        "kill with soft signals only (-TERM/-HUP), pkill/fuser targeting a specific pattern or\n"
+        "port (no explicit signal flag required — their default signal is already soft/safe),\n"
+        "and memory/disk/process read-only queries. Shell chaining, arbitrary paths, and\n"
+        "destructive tools are already blocked before this point.\n"
+        "Do NOT reject a command merely because it looks unfamiliar or lacks an explicit signal\n"
+        "flag — if it matches the categories above, it IS already whitelisted. Your job is only\n"
+        "to judge whether the SPECIFIC TARGET (which PID/process name/port) is a reasonable,\n"
+        "proportionate match for the described error.\n"
         "Reply with YES or NO, followed by a colon and a very short reason (max 15 words),\n"
         "e.g. 'YES: matches known OOM recovery pattern' or 'NO: targets unrelated service'.\n\n"
         f"Error: {error_log[:200]}\n"
