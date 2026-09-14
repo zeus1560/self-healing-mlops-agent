@@ -1644,6 +1644,30 @@ with tab5:
                     st.code(str(_l1_evidence), language="text")
             elif src_raw == "L1_CACHE":
                 st.caption("이 필드가 기록되기 이전(2026-09-11 이전)의 인시던트라 값이 없습니다.")
+            elif src_raw in ("L2_LLM", "RULE"):
+                # 2026-09-15 추가: L1이 임계값 미달로 액션 채택은 포기했지만 그래도
+                # 가장 가까웠던 후보 카테고리(참고용, 게이팅에는 안 쓰임)와, Groq
+                # 경로라면 멀티에이전트 1단계 진단 소견도 같이 보여준다.
+                _nearest_cat  = row.get("l1_nearest_category")
+                _nearest_dist = row.get("l1_nearest_distance")
+                _l2_diagnosis = row.get("l2_diagnosis")
+                _has_nearest  = _nearest_cat and str(_nearest_cat) not in ("nan", "None", "")
+                _has_diagnosis = _l2_diagnosis and str(_l2_diagnosis) not in ("nan", "None", "")
+                if _has_nearest or _has_diagnosis:
+                    with st.expander("🔍 참고 정보 — L1 최근접 추측 / 진단 에이전트 소견 (Explainability)"):
+                        if _has_nearest:
+                            _dist_str = f"{float(_nearest_dist):.4f}" if pd.notna(_nearest_dist) else "?"
+                            st.caption(
+                                f"L1이 검토했지만 임계값 미달로 채택은 안 한 가장 가까운 과거 "
+                                f"카테고리 추측(거리 {_dist_str}) — 참고용일 뿐 이 판단에 실제로 "
+                                f"쓰이지는 않았습니다."
+                            )
+                            st.write(f"최근접 카테고리 추측: **{_nearest_cat}**")
+                        if _has_diagnosis:
+                            st.caption("멀티에이전트 1단계 진단 에이전트가 명령 생성 전에 낸 소견:")
+                            st.code(str(_l2_diagnosis), language="text")
+                else:
+                    st.caption("이 필드가 기록되기 이전(2026-09-15 이전)의 인시던트라 값이 없습니다.")
 
         with st.container(border=True):
             st.markdown("**3️⃣ Self-Reflection 결과**")
