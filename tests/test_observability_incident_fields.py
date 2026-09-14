@@ -31,7 +31,8 @@ class TestIncidentFieldsMigration(unittest.TestCase):
     def _latest_row(self):
         conn = get_conn(self.tf)
         return conn.execute(
-            "SELECT reasoning, command, detection_latency_sec, l1_evidence "
+            "SELECT reasoning, command, detection_latency_sec, l1_evidence, "
+            "l1_nearest_category, l1_nearest_distance "
             "FROM metrics ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
@@ -41,6 +42,8 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIn("command", cols)
         self.assertIn("detection_latency_sec", cols)
         self.assertIn("l1_evidence", cols)
+        self.assertIn("l1_nearest_category", cols)
+        self.assertIn("l1_nearest_distance", cols)
 
     def test_log_event_persists_reasoning_and_command(self):
         self.obs.log_event(
@@ -70,6 +73,8 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIsNone(row["command"])
         self.assertIsNone(row["detection_latency_sec"])
         self.assertIsNone(row["l1_evidence"])
+        self.assertIsNone(row["l1_nearest_category"])
+        self.assertIsNone(row["l1_nearest_distance"])
 
     def test_log_event_persists_detection_latency(self):
         self.obs.log_event(
@@ -122,6 +127,21 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         )
         row = self._latest_row()
         self.assertEqual(row["l1_evidence"], evidence)
+
+    def test_log_event_persists_l1_nearest_category_and_distance(self):
+        """2026-09-15 추가: L2/RULE 경로에서 임계값 미달 최근접 카테고리 추측 배관 확인."""
+        self.obs.log_event(
+            error_log="CRITICAL: novel error",
+            source="L2_LLM",
+            action_type="EXECUTE_LLM_COMMAND",
+            latency_sec=0.5,
+            success=True,
+            l1_nearest_category="DB_Deadlock",
+            l1_nearest_distance=0.83,
+        )
+        row = self._latest_row()
+        self.assertEqual(row["l1_nearest_category"], "DB_Deadlock")
+        self.assertAlmostEqual(row["l1_nearest_distance"], 0.83)
 
 
 if __name__ == "__main__":

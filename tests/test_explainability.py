@@ -218,6 +218,78 @@ class TestAnalyzeErrorPopulatesEvidence(unittest.TestCase):
         self.assertIsNone(resp.l1_evidence)
 
 
+class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
+    """
+    2026-09-15 추가: L1이 임계값 미달로 액션 채택은 포기해도, 가장 가까웠던 후보의
+    error_category/거리는 AgentResponse.l1_nearest_category/l1_nearest_distance로
+    실려서 L2_LLM/RULE/에스컬레이션 경로 전부에 남아야 한다(run_fp_fn_analysis.py가
+    L2 경로 사건도 참고 지표로 볼 수 있게 하기 위함 — autonomy 게이팅에는 안 쓰임,
+    error_category 필드 자체는 여전히 "LLM_Inferred" 등 기존 값 그대로 유지).
+    """
+
+    def _make_engine_with_query_result(self, query_return: dict):
+        patcher_client = patch("src.llm_engine._get_chroma_client")
+        patcher_warmup = patch("src.llm_engine._ollama_warmup")
+        mock_client = patcher_client.start()
+        self.addCleanup(patcher_client.stop)
+        patcher_warmup.start()
+        self.addCleanup(patcher_warmup.stop)
+
+        mock_col = MagicMock()
+        mock_col.query.return_value = query_return
+        mock_client.return_value.get_collection.return_value = mock_col
+
+        from src.llm_engine import RAGEngine
+        return RAGEngine()
+
+    def _miss_query_result(self):
+        return {
+            "documents": [["completely unrelated document"]],
+            "metadatas": [[{"action_type": "alert_only", "error_category": "DB_Deadlock"}]],
+            "distances": [[5.0]],
+            "ids": [["irrelevant_id"]],
+        }
+
+    def test_groq_success_carries_nearest_category(self):
+        engine = self._make_engine_with_query_result(self._miss_query_result())
+        with patch("src.llm_engine._is_groq_available", return_value=True), \
+             patch("src.llm_engine._run_groq", return_value="systemctl restart demo"), \
+             patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch("src.llm_engine._reflect_on_command", return_value=(True, "안전함")):
+            resp = engine.analyze_error("some novel error text")
+
+        self.assertEqual(resp.resolution_source, "L2_LLM")
+        self.assertEqual(resp.error_category, "LLM_Inferred")  # 게이팅용 값은 그대로 유지
+        self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
+        self.assertEqual(resp.l1_nearest_distance, 5.0)
+
+    def test_escalation_path_still_carries_nearest_category(self):
+        engine = self._make_engine_with_query_result(self._miss_query_result())
+        with patch("src.llm_engine._is_groq_available", return_value=False), \
+             patch("src.llm_engine._is_ollama_available", return_value=False), \
+             patch("src.llm_engine.run_ipex_engine", return_value="ERROR"), \
+             patch("src.llm_engine._rule_based_fallback", return_value=None), \
+             patch("src.llm_engine.gather_system_context", return_value="ctx"):
+            resp = engine.analyze_error("some novel error text")
+
+        self.assertEqual(resp.action_type.name, "ESCALATE_TO_HUMAN")
+        self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
+        self.assertEqual(resp.l1_nearest_distance, 5.0)
+
+    def test_rule_based_path_carries_nearest_category(self):
+        engine = self._make_engine_with_query_result(self._miss_query_result())
+        with patch("src.llm_engine._is_groq_available", return_value=False), \
+             patch("src.llm_engine._is_ollama_available", return_value=False), \
+             patch("src.llm_engine.run_ipex_engine", return_value="ERROR"), \
+             patch("src.llm_engine._rule_based_fallback", return_value="systemctl restart nginx"), \
+             patch("src.llm_engine.gather_system_context", return_value="ctx"):
+            resp = engine.analyze_error("some novel error text")
+
+        self.assertEqual(resp.resolution_source, "RULE")
+        self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
+        self.assertEqual(resp.l1_nearest_distance, 5.0)
+
+
 class TestComposeExplanation(unittest.TestCase):
     def test_combines_reasoning_and_l1_evidence(self):
         from src.executor import _compose_explanation

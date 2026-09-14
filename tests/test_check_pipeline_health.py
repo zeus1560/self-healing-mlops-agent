@@ -31,7 +31,8 @@ def _make_metrics_db(path: Path, rows: list[tuple[datetime, str, str]]) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT, error_log TEXT, resolution_source TEXT,
             action_type TEXT, latency_sec REAL, success BOOLEAN,
-            result_category TEXT, error_category TEXT
+            result_category TEXT, error_category TEXT,
+            l1_nearest_category TEXT
         )
     """)
     for ts, error_log, error_category in rows:

@@ -91,6 +91,18 @@ class AgentResponse:
                              내용 요약)을 사람이 읽을 수 있게 정리한 설명(Explainability, 2026-09-11
                              추가). "왜 이 조치를 골랐는가"에 벡터 검색이 실제로 무엇을 근거로
                              삼았는지 보여준다 — L2_LLM/RULE 경로에는 해당 없어 None.
+        l1_nearest_category: L1이 임계값(RAG_THRESHOLD) 미달로 액션 채택은 포기했지만, 그래도
+                             가장 가까웠던 과거 문서 하나의 error_category(2026-09-15 추가).
+                             L2_LLM/RULE 경로로 빠진 사건은 error_category가
+                             "LLM_Inferred"/"Rule_Inferred"/"Unknown" 같은 의미 없는 값으로
+                             찍혀 FP/FN 분석의 recall 지표가 아예 적용 불가했던 문제
+                             (run_fp_fn_analysis.py, 2026-09-04/13 세션에서 반복 관찰)를
+                             참고용으로 메꾸기 위함이다. **주의**: 이건 임계값 미달 추측일
+                             뿐이므로 autonomy 게이트(executor.py의 autonomy_store.get_level)나
+                             액션 실행 로직 어디에도 관여하지 않는다 — 순수 분석/Explainability용.
+        l1_nearest_distance: 위 l1_nearest_category에 대응하는 벡터 거리(작을수록 유사).
+                             L1_CACHE 히트(candidates 존재)에서는 항상 None — 이미 threshold를
+                             통과해 l1_evidence로 근거가 남으므로 중복 정보다.
     """
 
     error_category:    str
@@ -103,6 +115,8 @@ class AgentResponse:
     l1_doc_id:         Optional[str] = None
     l1_source:         Optional[str] = None
     l1_evidence:        Optional[str] = None
+    l1_nearest_category: Optional[str]   = None
+    l1_nearest_distance: Optional[float] = None
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""

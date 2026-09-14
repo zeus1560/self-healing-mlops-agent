@@ -123,7 +123,7 @@ def _load_chaos_metrics_rows(db_path: Path) -> list[dict]:
     try:
         rows = conn.execute(
             "SELECT timestamp, error_log, resolution_source, action_type, "
-            "success, result_category, error_category "
+            "success, result_category, error_category, l1_nearest_category "
             "FROM metrics WHERE error_log LIKE '%chaos-injector:%' "
             "ORDER BY timestamp"
         ).fetchall()
@@ -146,6 +146,7 @@ def _load_chaos_metrics_rows(db_path: Path) -> list[dict]:
             "success":          bool(r["success"]),
             "result_category":  r["result_category"],
             "error_category":   r["error_category"],
+            "l1_nearest_category": r["l1_nearest_category"],
         })
     return out
 
@@ -235,6 +236,31 @@ def analyze(since: datetime | None = None) -> dict:
             else:
                 root_cause_tags[f"{true_cat} → {pred} 오분류"] += cnt
 
+    # 5) L2_LLM/RULE 경로 사건 한정 — "L1이 임계값 미달로 액션 채택은 포기했지만 그래도
+    #    가장 가까웠던 카테고리 추측"이 실제로 맞았는지(2026-09-15 추가). 이건 위
+    #    confusion matrix/recall과 완전히 별개 지표다 — L2/RULE 경로는 애초에
+    #    error_category가 "LLM_Inferred"/"Rule_Inferred"/"Unknown" 같은 의미 없는
+    #    값이라 recall 계산 자체가 불가능했다(9/4·9/13 세션에서 반복 관찰). 여기서도
+    #    섞어서 "통합 recall"인 것처럼 보고하지 않는다 — 9/4 결론("L1 recall과 L2
+    #    개입 시 안전성/적절성은 분리해서 봐야 한다")을 그대로 유지한다.
+    l2_bestguess_total = 0
+    l2_bestguess_correct = 0
+    l2_bestguess_missing = 0  # l1_nearest_category 컬럼 마이그레이션 이전(2026-09-15 이전) 행
+    for item in labeled:
+        if item["resolution_source"] not in ("L2_LLM", "RULE"):
+            continue
+        if item["true_category"] is None:
+            continue
+        if item["l1_nearest_category"] is None:
+            l2_bestguess_missing += 1
+            continue
+        l2_bestguess_total += 1
+        if item["l1_nearest_category"] == item["true_category"]:
+            l2_bestguess_correct += 1
+    l2_bestguess_accuracy = (
+        round(l2_bestguess_correct / l2_bestguess_total, 4) if l2_bestguess_total else None
+    )
+
     summary = {
         "generated_at":            datetime.now(timezone.utc).isoformat(),
         "since":                   since.isoformat() if since else None,
@@ -250,6 +276,12 @@ def analyze(since: datetime | None = None) -> dict:
         "no_category_mapping_faults": sorted({i["fault"] for i in no_category_mapping}),
         "per_category":            per_category_report,
         "root_cause_tags":         dict(root_cause_tags),
+        "l2_path_l1_bestguess": {
+            "n":                       l2_bestguess_total,
+            "correct":                 l2_bestguess_correct,
+            "accuracy":                l2_bestguess_accuracy,
+            "missing_pre_migration_rows": l2_bestguess_missing,
+        },
     }
     return summary
 
@@ -288,6 +320,19 @@ def print_report(summary: dict) -> None:
         print("-" * 65)
         for tag, cnt in summary["root_cause_tags"].items():
             print(f"  {cnt:>3}건  {tag}")
+
+    bg = summary.get("l2_path_l1_bestguess")
+    if bg and bg["n"]:
+        print("\n" + "-" * 65)
+        print("  참고 지표 — L2/RULE 경로에서 L1 최근접(임계값 미달) 추측 적중률")
+        print("  (위 recall과는 별개 지표 — L2/RULE의 error_category 자체엔 안 씀)")
+        print("-" * 65)
+        print(f"  {bg['correct']}/{bg['n']}건 적중 ({bg['accuracy'] * 100:.1f}%)")
+        if bg["missing_pre_migration_rows"]:
+            print(
+                f"  (참고: {bg['missing_pre_migration_rows']}건은 2026-09-15 이전 행이라 "
+                f"l1_nearest_category가 없어 제외됨)"
+            )
     print("=" * 65)
 
 
