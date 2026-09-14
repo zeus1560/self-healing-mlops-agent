@@ -32,7 +32,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         conn = get_conn(self.tf)
         return conn.execute(
             "SELECT reasoning, command, detection_latency_sec, l1_evidence, "
-            "l1_nearest_category, l1_nearest_distance "
+            "l1_nearest_category, l1_nearest_distance, l2_diagnosis "
             "FROM metrics ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
@@ -44,6 +44,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIn("l1_evidence", cols)
         self.assertIn("l1_nearest_category", cols)
         self.assertIn("l1_nearest_distance", cols)
+        self.assertIn("l2_diagnosis", cols)
 
     def test_log_event_persists_reasoning_and_command(self):
         self.obs.log_event(
@@ -75,6 +76,7 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         self.assertIsNone(row["l1_evidence"])
         self.assertIsNone(row["l1_nearest_category"])
         self.assertIsNone(row["l1_nearest_distance"])
+        self.assertIsNone(row["l2_diagnosis"])
 
     def test_log_event_persists_detection_latency(self):
         self.obs.log_event(
@@ -142,6 +144,20 @@ class TestIncidentFieldsMigration(unittest.TestCase):
         row = self._latest_row()
         self.assertEqual(row["l1_nearest_category"], "DB_Deadlock")
         self.assertAlmostEqual(row["l1_nearest_distance"], 0.83)
+
+    def test_log_event_persists_l2_diagnosis(self):
+        """2026-09-15 추가: 멀티에이전트 1단계(진단 에이전트) 소견 배관 확인."""
+        diagnosis = "추정 원인: worker leak | 권장 조치 유형: kill_process | 대상: pid 5821"
+        self.obs.log_event(
+            error_log="CRITICAL: novel error",
+            source="L2_LLM",
+            action_type="EXECUTE_LLM_COMMAND",
+            latency_sec=0.5,
+            success=True,
+            l2_diagnosis=diagnosis,
+        )
+        row = self._latest_row()
+        self.assertEqual(row["l2_diagnosis"], diagnosis)
 
 
 if __name__ == "__main__":

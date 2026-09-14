@@ -423,6 +423,70 @@ def _run_groq(error_log: str, system_context: str, timeout: int = 30) -> str:
     return command
 
 
+_DIAGNOSIS_RE = _re.compile(
+    r"ROOT_CAUSE:\s*(?P<root_cause>.*?)\s*\|\s*ACTION_TYPE:\s*(?P<action_type>\S+)\s*\|\s*"
+    r"TARGET:\s*(?P<target>.*)",
+    _re.IGNORECASE,
+)
+
+
+def _parse_diagnosis(raw: str) -> dict | None:
+    """진단 에이전트 응답("ROOT_CAUSE: ... | ACTION_TYPE: ... | TARGET: ...")을 파싱한다.
+
+    형식이 안 맞으면(모델이 지시를 무시한 경우) None을 반환해 호출부가 진단 없이
+    기존 방식(단일 프롬프트 생성)으로 안전하게 폴백하게 한다.
+    """
+    m = _DIAGNOSIS_RE.search(raw.strip())
+    if not m:
+        return None
+    return {
+        "root_cause":  m.group("root_cause").strip(),
+        "action_type": m.group("action_type").strip().lower(),
+        "target":      m.group("target").strip(),
+    }
+
+
+def _diagnose_error(error_log: str, system_context: str) -> dict | None:
+    """
+    멀티에이전트 3단계(진단→제안→검토) 중 1단계 — 명령을 생성하기 전에 원인·
+    권장 조치 유형·대상을 먼저 구조화해 뽑아낸다(2026-09-15 추가).
+
+    기존엔 _run_groq() 하나가 "원인 파악"과 "명령 생성"을 한 프롬프트에서 동시에
+    했다 — 2026-09-15 faithfulness 실측에서 프롬프트가 여러 판단(허용 명령 여부 +
+    타겟 적절성)을 뒤섞을 때 엉뚱한 결론(예: 화이트리스트에 있는 fuser를 "없다"고
+    오판)이 나오는 걸 확인했는데, 같은 위험이 명령 생성 단계에도 있을 수 있다는
+    문제의식에서 판단을 분리했다.
+
+    실패(네트워크 오류, 파싱 실패, GROQ_API_KEY 미설정)하면 None을 반환한다 —
+    이 함수는 어디까지나 기존 생성 프롬프트를 보강하는 참고 정보이므로, 실패해도
+    호출부(_l2_slow_track)가 진단 없이 기존 방식 그대로 진행하게 하며 새로운
+    실패 모드를 추가하지 않는다. Ollama/ipex_llm 폴백 경로는 이 진단 단계를
+    거치지 않는다(실사용 빈도가 낮은 하위 폴백까지 복잡도를 늘릴 필요는 없다고
+    판단, Groq가 사실상 유일하게 상시 가동되는 L2 백엔드).
+    """
+    if not _is_groq_available():
+        return None
+    prompt = (
+        "You are a diagnostic triage agent for a Self-Healing MLOps Agent.\n"
+        "Given the error and system context below, identify: the likely root cause,\n"
+        "the general category of fix needed, and (if applicable) the specific target\n"
+        "(PID, service/process name, or port) that a fix should act on.\n"
+        "Reply in EXACTLY this one-line, pipe-separated format:\n"
+        "ROOT_CAUSE: <short phrase> | ACTION_TYPE: <restart_service|kill_process|"
+        "clear_memory|other> | TARGET: <pid/name/port or 'none'>\n\n"
+        f"Error: {error_log[:200]}\n"
+        f"System: {system_context}\n"
+    )
+    raw = _call_groq_chat(prompt, max_tokens=60, timeout=15)
+    if raw.startswith("ERROR:"):
+        logging.warning(f"[진단 에이전트] Groq 호출 실패, 진단 생략: {raw}")
+        return None
+    diagnosis = _parse_diagnosis(raw)
+    if diagnosis is None:
+        logging.warning(f"[진단 에이전트] 응답 형식 불일치, 진단 생략: {raw!r:.150}")
+    return diagnosis
+
+
 _READ_ONLY_COMMANDS = frozenset({"df", "free", "ps", "ss", "netstat", "uptime", "echo"})
 
 
@@ -751,6 +815,7 @@ def _build_response_from_meta(
 def _make_llm_response(
     command: str, error_log: str, system_context: str, backend: str,
     nearest_category: str | None = None, nearest_distance: float | None = None,
+    diagnosis: str | None = None,
 ) -> AgentResponse:
     """
     자가 반성 결과를 반영해 EXECUTE_LLM_COMMAND AgentResponse를 만든다.
@@ -781,6 +846,7 @@ def _make_llm_response(
         command=command,
         l1_nearest_category=nearest_category,
         l1_nearest_distance=nearest_distance,
+        l2_diagnosis=diagnosis,
     )
 
 
@@ -939,6 +1005,13 @@ class RAGEngine:
         AgentResponse.l1_nearest_category로 실어 보내 FP/FN 분석이 L2/RULE 경로도
         참고할 수 있게 한다(2026-09-15, run_fp_fn_analysis.py의 "L2 경로는 recall
         계산 자체가 불가능" 공백을 메우기 위함 — schemas.py의 필드 설명 참고).
+
+        Groq 경로는 2026-09-15부터 진단→제안→검토 3단계 멀티에이전트 구조다:
+        1단계 진단(_diagnose_error)이 원인/권장 조치 유형/대상을 먼저 구조화해
+        뽑고, 2단계 제안(_run_groq)이 그 진단으로 보강된 컨텍스트로 실제 명령을
+        생성하며, 3단계 검토(_make_llm_response 내부의 _reflect_on_command,
+        기존 self-reflection 그대로)가 최종 안전성을 판정한다. Ollama/ipex_llm
+        폴백은 실사용 빈도가 낮아 기존 단일 프롬프트 방식 그대로 유지한다.
         """
         nearest_category = best_meta.get("error_category")
         logging.warning(
@@ -950,15 +1023,31 @@ class RAGEngine:
         logging.info(f"📊 [진단 완료] 수집된 컨텍스트 길이: {len(system_context)}자")
 
         # Step 1: Groq (1순위 — GROQ_API_KEY 설정 시)
+        # 멀티에이전트 3단계(진단→제안→검토, 2026-09-15) — 명령 생성 전에 별도
+        # LLM 호출로 원인/권장 조치/대상을 먼저 뽑아 시스템 컨텍스트에 보강한다.
+        # 진단이 실패하거나 형식이 안 맞아도 diagnosis는 None이 되어 기존 방식
+        # (진단 없이 바로 생성)으로 안전하게 폴백한다 — _diagnose_error 참고.
         groq_result = None
         if _is_groq_available():
+            diagnosis = _diagnose_error(error_log, system_context)
+            enriched_context = system_context
+            diagnosis_summary = None
+            if diagnosis:
+                diagnosis_summary = (
+                    f"추정 원인: {diagnosis['root_cause']} | 권장 조치 유형: "
+                    f"{diagnosis['action_type']} | 대상: {diagnosis['target']}"
+                )
+                enriched_context = f"{system_context}\n[진단 에이전트 소견] {diagnosis_summary}"
+                logging.info(f"[진단 에이전트] {diagnosis_summary}")
+
             logging.info(f"[RAGEngine] Groq({GROQ_MODEL}) 추론 시작...")
-            groq_result = _run_groq(error_log, system_context)
+            groq_result = _run_groq(error_log, enriched_context)
             if not groq_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Groq] 명령어: {groq_result}")
                 return _make_llm_response(
-                    groq_result, error_log, system_context, "Groq",
+                    groq_result, error_log, enriched_context, "Groq",
                     nearest_category=nearest_category, nearest_distance=best_distance,
+                    diagnosis=diagnosis_summary,
                 )
             logging.warning(f"[RAGEngine] Groq 실패: {groq_result}")
         else:
