@@ -1,0 +1,22 @@
+{
+  "backend": "groq",
+  "model": "qwen/qwen3.6-27b",
+  "n_samples": 50,
+  "cat_accuracy": 0.92,
+  "act_accuracy": 0.96,
+  "avg_latency_ms": 652.6,
+  "l1_latency_ms": 189.0,
+  "slowdown_x": 3.5,
+  "per_category": {
+    "Out_Of_Memory": 1.0,
+    "Memory_Leak": 1.0,
+    "Network_Timeout": 1.0,
+    "DB_Connection": 0.8,
+    "Configuration_Error": 1.0,
+    "Permission_Denied": 1.0,
+    "Disk_Full": 1.0,
+    "Process_Crash": 0.8,
+    "Port_Conflict": 1.0,
+    "Auth_Error": 0.6
+  }
+}
