@@ -276,6 +276,7 @@ class LogTailHandler(FileSystemEventHandler):
             l1_evidence=decision.l1_evidence,
             l1_nearest_category=decision.l1_nearest_category,
             l1_nearest_distance=decision.l1_nearest_distance,
+            l2_diagnosis=decision.l2_diagnosis,
         )
         logging.info(
             f"[조치 완료] 소스:{source} | 결과:{result_category} ({latency:.2f}s)"

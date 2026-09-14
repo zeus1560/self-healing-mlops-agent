@@ -103,6 +103,12 @@ class AgentResponse:
         l1_nearest_distance: 위 l1_nearest_category에 대응하는 벡터 거리(작을수록 유사).
                              L1_CACHE 히트(candidates 존재)에서는 항상 None — 이미 threshold를
                              통과해 l1_evidence로 근거가 남으므로 중복 정보다.
+        l2_diagnosis:        Groq L2 경로의 멀티에이전트 3단계(진단→제안→검토, 2026-09-15
+                             추가) 중 1단계 진단 에이전트(_diagnose_error)가 낸 원인/권장
+                             조치 유형/대상 소견. 진단이 실패(네트워크 오류·형식 불일치·
+                             GROQ_API_KEY 미설정)하면 기존 방식대로 진단 없이 명령을
+                             생성하고 이 필드는 None으로 남는다 — Ollama/ipex_llm/RULE
+                             경로도 이 단계를 안 거치므로 항상 None.
     """
 
     error_category:    str
@@ -117,6 +123,7 @@ class AgentResponse:
     l1_evidence:        Optional[str] = None
     l1_nearest_category: Optional[str]   = None
     l1_nearest_distance: Optional[float] = None
+    l2_diagnosis:        Optional[str]   = None
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""
