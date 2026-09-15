@@ -54,10 +54,14 @@ load_dotenv()
 # ── Config ────────────────────────────────────────────────────────────────────
 GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "")
 # llama-3.3-70b-versatile는 Groq에서 단종됨 (2026-08 기준).
-# qwen/qwen3.6-27b + reasoning_effort=none 조합이 사고형(thinking) 오버헤드 없이
+# qwen/qwen3.x-27b + reasoning_effort=none 조합이 사고형(thinking) 오버헤드 없이
 # 안정적으로 원샷 명령어를 반환하는 것으로 검증됨 — gpt-oss 계열은 harmony 포맷상
 # reasoning 채널을 강제로 소비해 max_tokens 내에서 content가 비는 문제가 있었음.
-GROQ_MODEL          = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+# 2026-09-15 발견: qwen/qwen3.6-27b도 이 사이 Groq에서 단종되어(위 llama와 동일
+# 패턴 반복) VM의 L2 경로 전체가 조용히 404로 실패하고 있었다 — Groq 모델은
+# 언제든 예고 없이 단종될 수 있다는 뜻이므로, 앞으로 이 상수를 참조할 땐 실제
+# 가용 모델인지(https://api.groq.com/openai/v1/models) 먼저 확인할 것.
+GROQ_MODEL          = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 GROQ_API_URL        = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
 _GROQ_MAX_RETRIES   = int(os.getenv("GROQ_MAX_RETRIES", "2"))
 _GROQ_RETRY_BASE    = float(os.getenv("GROQ_RETRY_BASE_SEC", "2.0"))
