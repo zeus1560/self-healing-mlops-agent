@@ -26,6 +26,7 @@ fault를 주입했지만 agent_metrics.db에는 3일간 단 한 건도 기록되
 """
 import argparse
 import logging
+import traceback
 from datetime import datetime, timedelta, timezone
 
 from experiments.run_fp_fn_analysis import analyze
@@ -60,6 +61,10 @@ def _notify(message: str) -> None:
         from src.telegram_bot import get_chatops_client
         tg = get_chatops_client()
     except Exception:
+        # 2026-09-15 code-review 발견: 이 예외를 그냥 삼키면 claude.md의 "모든 예외는
+        # traceback.format_exc()로 기록해야 한다" 원칙 위반 — Telegram 미설정(정상)과
+        # 진짜 임포트 실패를 구분할 방법이 없어진다. Slack 폴백은 그대로 시도하되 기록은 남긴다.
+        logging.error(f"[HealthCheck] Telegram 클라이언트 로드 실패:\n{traceback.format_exc()}")
         tg = None
 
     if tg:
@@ -77,7 +82,21 @@ def _notify(message: str) -> None:
 
 
 def main(lookback_hours: float = 24.0, notify: bool = True) -> dict:
-    result = check(lookback_hours)
+    # 2026-09-15 code-review 발견: check()가 raise하면(예: DB 스키마/권한 문제) 이
+    # 스크립트 자체가 크론에서 조용히 죽어버려서, "파이프라인이 조용히 고장나는 걸
+    # 잡는 안전망"이 스스로 같은 방식으로 고장나는 역설이 생긴다. 안전망 자체의
+    # 실패도 경보 대상으로 취급한다 — 원래 알려야 했던 지표는 모르지만, "헬스체크가
+    # 돌지 않았다"는 사실 자체는 사람에게 반드시 전달되어야 한다.
+    try:
+        result = check(lookback_hours)
+    except Exception:
+        tb = traceback.format_exc()
+        message = f"파이프라인 헬스체크 스크립트 자체가 실행 중 예외로 실패했습니다:\n{tb[-500:]}"
+        print(f"[HEALTHCHECK FAILURE] {message}")
+        if notify:
+            _notify(message)
+        raise
+
     if result["alert"]:
         message = (
             f"최근 {lookback_hours:.0f}시간 동안 카오스 주입 {result['chaos_injector_log_events']}건 중 "

@@ -111,6 +111,17 @@ class TestPipelineHealthCheck(unittest.TestCase):
             health.main(lookback_hours=24, notify=False)
         mock_notify.assert_not_called()
 
+    def test_main_alerts_and_reraises_when_check_itself_fails(self):
+        """2026-09-15 code-review 발견 회귀 테스트 — analyze()가 raise하면(예: 스키마
+        문제) 안전망 스크립트 자체가 아무 경보 없이 조용히 죽어선 안 된다. 알림을
+        보내고, 크론 실패로도 잡히게 재-raise까지 둘 다 해야 한다."""
+        with patch.object(health, "check", side_effect=RuntimeError("db is locked")), \
+             patch.object(health, "_notify") as mock_notify:
+            with self.assertRaises(RuntimeError):
+                health.main(lookback_hours=24, notify=True)
+        mock_notify.assert_called_once()
+        self.assertIn("db is locked", mock_notify.call_args[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

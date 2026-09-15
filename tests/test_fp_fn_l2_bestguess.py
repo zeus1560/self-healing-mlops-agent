@@ -119,5 +119,57 @@ class TestL2PathBestGuessMetric(unittest.TestCase):
         self.assertIsNone(bg["accuracy"])
 
 
+class TestAnalyzeSurvivesMissingNearestCategoryColumn(unittest.TestCase):
+    """2026-09-15 code-review 발견 회귀 테스트.
+
+    _load_chaos_metrics_rows()가 l1_nearest_category를 SELECT에 무조건 포함시켜서,
+    이 컬럼 마이그레이션이 아직 안 된(2026-09-15 이전) agent_metrics.db를 읽으면
+    sqlite3.OperationalError로 analyze() 전체가 죽었다 — 이 함수를 호출하는
+    scripts/check_pipeline_health.py(파이프라인 무응답을 잡는 안전망)까지 같이
+    죽어버리는 문제였다. l1_nearest_category 컬럼 자체가 없는 옛 스키마 DB에서도
+    analyze()가 죽지 않고 그 필드만 None으로 처리하며 정상 완료돼야 한다.
+    """
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.chaos_log = self.tmpdir / "chaos_injector.log"
+        self.metrics_db = self.tmpdir / "agent_metrics.db"
+        patcher1 = patch.object(fp_fn, "CHAOS_LOG", self.chaos_log)
+        patcher2 = patch.object(fp_fn, "METRICS_DB", self.metrics_db)
+        patcher1.start()
+        patcher2.start()
+        self.addCleanup(patcher1.stop)
+        self.addCleanup(patcher2.stop)
+
+        # 의도적으로 l1_nearest_category 컬럼이 없는 구버전 스키마.
+        conn = sqlite3.connect(self.metrics_db)
+        conn.execute("""
+            CREATE TABLE metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT, error_log TEXT, resolution_source TEXT,
+                action_type TEXT, latency_sec REAL, success BOOLEAN,
+                result_category TEXT, error_category TEXT
+            )
+        """)
+        now = datetime.now(timezone.utc)
+        conn.execute(
+            "INSERT INTO metrics (timestamp, error_log, resolution_source, action_type, "
+            "success, result_category, error_category) VALUES (?, ?, 'L2_LLM', 'EXECUTE_LLM_COMMAND', "
+            "1, 'SUCCESS', 'LLM_Inferred')",
+            ((now - timedelta(hours=1)).isoformat(), _DB_DEADLOCK_EVIDENCE),
+        )
+        conn.commit()
+        conn.close()
+
+        self.chaos_log.write_text(
+            f"{(now - timedelta(hours=1)).isoformat().replace('+00:00', 'Z')} OK fault=db_deadlock http=200\n",
+            encoding="utf-8",
+        )
+
+    def test_analyze_does_not_crash_on_pre_migration_schema(self):
+        summary = fp_fn.analyze()  # 예외 없이 완료돼야 함(이전엔 여기서 크래시)
+        self.assertEqual(summary["l2_path_l1_bestguess"]["missing_pre_migration_rows"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

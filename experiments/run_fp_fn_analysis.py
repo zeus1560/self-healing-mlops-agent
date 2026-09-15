@@ -115,15 +115,31 @@ def _parse_chaos_log(path: Path) -> list[dict]:
 
 
 def _load_chaos_metrics_rows(db_path: Path) -> list[dict]:
-    """agent_metrics.db에서 chaos-injector 마커가 찍힌 행만 읽는다(읽기 전용)."""
+    """agent_metrics.db에서 chaos-injector 마커가 찍힌 행만 읽는다(읽기 전용).
+
+    2026-09-15 code-review 발견: l1_nearest_category를 SELECT에 무조건 포함시켜서,
+    이 컬럼 마이그레이션(observability.py의 AgentObserver._init_db())이 아직 안
+    돈 DB(예: 배포는 됐지만 self-healing-agent 서비스가 아직 재시작 안 된 상태)를
+    이 스크립트가 먼저 읽으면 sqlite3.OperationalError로 그대로 죽었다 — 이 스크립트를
+    내부에서 호출하는 scripts/check_pipeline_health.py(파이프라인 무응답을 잡는
+    안전망)까지 같이 죽어버려서, "조용히 고장난 걸 잡는 도구가 조용히 고장나는"
+    바로 그 문제를 재현하고 있었다. PRAGMA로 컬럼 존재를 먼저 확인해 없으면 옛
+    스키마와 호환되게 폴백한다.
+    """
     if not db_path.exists():
         return []
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
+        existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
+        has_nearest_category = "l1_nearest_category" in existing_cols
+        select_cols = (
+            "timestamp, error_log, resolution_source, action_type, "
+            "success, result_category, error_category"
+            + (", l1_nearest_category" if has_nearest_category else "")
+        )
         rows = conn.execute(
-            "SELECT timestamp, error_log, resolution_source, action_type, "
-            "success, result_category, error_category, l1_nearest_category "
+            f"SELECT {select_cols} "
             "FROM metrics WHERE error_log LIKE '%chaos-injector:%' "
             "ORDER BY timestamp"
         ).fetchall()
@@ -146,7 +162,7 @@ def _load_chaos_metrics_rows(db_path: Path) -> list[dict]:
             "success":          bool(r["success"]),
             "result_category":  r["result_category"],
             "error_category":   r["error_category"],
-            "l1_nearest_category": r["l1_nearest_category"],
+            "l1_nearest_category": r["l1_nearest_category"] if has_nearest_category else None,
         })
     return out
 
