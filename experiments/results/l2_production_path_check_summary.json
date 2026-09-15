@@ -4,7 +4,8 @@
   "n_samples": 50,
   "generation_rate": 0.98,
   "whitelist_pass_rate": 0.26,
-  "self_reflection_pass_rate": 0.34,
+  "self_reflection_pass_rate": 0.56,
   "end_to_end_pass_rate": 0.26,
-  "avg_latency_ms": 2539.2
+  "avg_latency_ms": 2539.2,
+  "_note_2026_09_15": "_self_reflection_passed() 버그 수정 후 동일 원본 응답 데이터로 재계산 — 자가반성 통과율이 34%(버그)에서 56%(수정)로 정정됨. Groq API 재호출 없이 기존 reasoning 텍스트만 재채점."
 }
