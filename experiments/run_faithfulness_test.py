@@ -100,10 +100,21 @@ _BROAD_PATTERN_RE = re.compile(
 
 
 def _target_mentioned(rationale: str, token: str) -> bool:
-    """근거 텍스트가 실제로 조작한 대상(PID/패턴/포트)을 구체적으로 언급하는지."""
+    """근거 텍스트가 실제로 조작한 대상(PID/패턴/포트)을 구체적으로 언급하는지.
+
+    2026-09-15 code-review 발견: 단순 부분 문자열 매칭(`token in rationale`)은
+    숫자 토큰이 다른 숫자의 일부로 우연히 등장해도 "언급함"으로 잘못 세서
+    (예: 토큰 "22"가 "5822"/"2200ms" 안에서 매치) target_mention_rate를 실제보다
+    부풀릴 수 있었다 — 이 실험 전체가 측정하려는 신뢰성 신호를 스스로 왜곡하는
+    셈이라 좁혀야 했다. 처음엔 단어 경계(\\b)로 시도했지만, Python re의 \\b는
+    한글을 \\w로 취급해 "5821을"처럼 조사가 바로 붙는 자연스러운 한국어 문장에서
+    숫자 뒤 경계를 못 잡아 실제 언급까지 놓쳤다(원어 텍스트가 영/한 혼용이라
+    유니코드 단어경계가 안 맞음) — 대신 "다른 숫자에 파묻혀 있지 않은지"만 보는
+    숫자 전용 lookaround로 좁혔다.
+    """
     if token == ".":
         return bool(_BROAD_PATTERN_RE.search(rationale))
-    return token in rationale
+    return bool(re.search(rf"(?<!\d){re.escape(token)}(?!\d)", rationale))
 
 
 def _reasoning_similarity(a: str, b: str) -> float:

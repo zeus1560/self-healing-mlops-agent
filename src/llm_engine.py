@@ -423,10 +423,14 @@ def _run_groq(error_log: str, system_context: str, timeout: int = 30) -> str:
     return command
 
 
+# DOTALL: 프롬프트가 "한 줄로" 답하라고 요청하지만 LLM이 항상 지키진 않는다
+# (max_tokens=60 아래서 잘리며 줄바꿈이 낄 수 있음) — 2026-09-15 code-review
+# 발견. DOTALL 없이는 root_cause/target에 개행이 섞이자마자 "."이 그 줄바꿈을
+# 못 건너뛰어 매치 자체가 실패해, 파싱 가능한 내용도 조용히 버려지고 있었다.
 _DIAGNOSIS_RE = _re.compile(
     r"ROOT_CAUSE:\s*(?P<root_cause>.*?)\s*\|\s*ACTION_TYPE:\s*(?P<action_type>\S+)\s*\|\s*"
     r"TARGET:\s*(?P<target>.*)",
-    _re.IGNORECASE,
+    _re.IGNORECASE | _re.DOTALL,
 )
 
 
@@ -847,6 +851,7 @@ def _make_llm_response(
         l1_nearest_category=nearest_category,
         l1_nearest_distance=nearest_distance,
         l2_diagnosis=diagnosis,
+        self_reflection_safe=safe,
     )
 
 

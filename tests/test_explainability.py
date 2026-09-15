@@ -262,6 +262,20 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         self.assertEqual(resp.error_category, "LLM_Inferred")  # 게이팅용 값은 그대로 유지
         self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
         self.assertEqual(resp.l1_nearest_distance, 5.0)
+        self.assertTrue(resp.self_reflection_safe)  # 2026-09-15 code-review 추가 필드
+
+    def test_self_reflection_rejection_sets_safe_field_to_false(self):
+        """2026-09-15 code-review 추가: self_reflection_safe가 reasoning 문구가 아니라
+        _reflect_on_command()의 원본 (안전 여부) 그대로여야 한다."""
+        engine = self._make_engine_with_query_result(self._miss_query_result())
+        with patch("src.llm_engine._is_groq_available", return_value=True), \
+             patch("src.llm_engine._run_groq", return_value="kill -9 314"), \
+             patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch("src.llm_engine._reflect_on_command", return_value=(False, "위험한 명령")):
+            resp = engine.analyze_error("some novel error text")
+
+        self.assertFalse(resp.self_reflection_safe)
+        self.assertTrue(resp.reasoning.startswith("⚠️"))
 
     def test_escalation_path_still_carries_nearest_category(self):
         engine = self._make_engine_with_query_result(self._miss_query_result())
@@ -275,6 +289,7 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         self.assertEqual(resp.action_type.name, "ESCALATE_TO_HUMAN")
         self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
         self.assertEqual(resp.l1_nearest_distance, 5.0)
+        self.assertIsNone(resp.self_reflection_safe)  # 검토 자체가 없는 경로
 
     def test_rule_based_path_carries_nearest_category(self):
         engine = self._make_engine_with_query_result(self._miss_query_result())
@@ -288,6 +303,7 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         self.assertEqual(resp.resolution_source, "RULE")
         self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
         self.assertEqual(resp.l1_nearest_distance, 5.0)
+        self.assertIsNone(resp.self_reflection_safe)  # 검토 자체가 없는 경로
 
 
 class TestComposeExplanation(unittest.TestCase):

@@ -42,6 +42,22 @@ class TestParseDiagnosis(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["target"], "none")
 
+    def test_parses_response_that_wraps_across_lines(self):
+        """2026-09-15 code-review 발견: 프롬프트가 "한 줄로" 답하라고 요청해도
+        LLM이 항상 지키지 않는다(특히 max_tokens=60로 잘릴 때) — DOTALL 없이는
+        root_cause/target에 개행이 섞이면 매치 자체가 조용히 실패했다."""
+        from src.llm_engine import _parse_diagnosis
+
+        raw = (
+            "ROOT_CAUSE: leaky worker\nconsuming excessive memory over time | "
+            "ACTION_TYPE: kill_process | TARGET: pid 5821\n(worker process)"
+        )
+        result = _parse_diagnosis(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("leaky worker", result["root_cause"])
+        self.assertEqual(result["action_type"], "kill_process")
+        self.assertIn("pid 5821", result["target"])
+
     def test_returns_none_for_malformed_response(self):
         from src.llm_engine import _parse_diagnosis
 
