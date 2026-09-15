@@ -40,7 +40,7 @@ OLLAMA_URL   = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:0.5b"
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
 
 RESULTS_DIR  = Path("experiments/results")
