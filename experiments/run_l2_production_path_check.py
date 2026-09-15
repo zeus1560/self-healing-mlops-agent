@@ -60,19 +60,23 @@ RESULTS_DIR = Path("experiments/results")
 GROQ_CALL_INTERVAL_SEC = 6.0
 
 
-def _self_reflection_passed(reasoning: str) -> bool:
-    """_make_llm_response()가 자가 반성 거부 시 reasoning에 남기는 표식으로 판정.
+def _self_reflection_passed(response) -> bool:
+    """self-reflection이 실제로 계산한 (안전 여부)를 그대로 읽는다.
 
-    2026-09-15 발견·수정: 기존엔 "자가 반성" 문자열 포함 여부로 판정했는데, 이
-    부분 문자열이 거부 사례("⚠️ 자가 반성이 위험 판정...")뿐 아니라 네트워크
-    오류로 보수적 통과 처리된 사례("Groq 추론 성공 — 자가 반성 검증 요청
-    실패(네트워크 오류 등) — 보수적으로 통과 처리: ...", src/llm_engine.py:694)
-    에도 등장해 후자를 "거부"로 잘못 집계하고 있었다(실측 50건 중 11건이 이
-    패턴 — 자가반성 통과율이 실제보다 낮게 나온 원인). dashboard/app.py가 이미
-    쓰고 있는 더 안정적인 신호(거부 사례만 "⚠️"로 시작함, _make_llm_response
-    참고)로 교체.
+    2026-09-15 1차 발견·수정: "자가 반성" 문자열 포함 여부로 판정했는데, 이 부분
+    문자열이 거부 사례("⚠️ 자가 반성이 위험 판정...")뿐 아니라 네트워크 오류로
+    보수적 통과 처리된 사례("Groq 추론 성공 — 자가 반성 검증 요청 실패(네트워크
+    오류 등) — 보수적으로 통과 처리: ...", src/llm_engine.py:694)에도 등장해
+    후자를 "거부"로 잘못 집계했다(실측 50건 중 11건).
+
+    2026-09-15 2차 발견·수정(code-review): "⚠️" 접두어 판정으로 1차 수정했지만,
+    이것도 여전히 reasoning이라는 사람이 읽는 표시용 문자열을 다시 파싱해 판정을
+    역추론하는 방식이라 문구가 또 바뀌면 또 조용히 깨질 수 있었다.
+    AgentResponse.self_reflection_safe(2026-09-15 추가)가 _reflect_on_command()의
+    원본 (안전 여부) 불리언을 그대로 보존하므로, 이제 그걸 직접 읽는다 — L1_CACHE/
+    RULE/에스컬레이션 경로처럼 검토 자체가 없었던 응답은 None이라 False 취급.
     """
-    return not reasoning.startswith("⚠️")
+    return bool(response.self_reflection_safe)
 
 
 def main():
@@ -111,7 +115,7 @@ def main():
         if generated and response.command:
             _, err = executor._validate_command(response.command)
             whitelist_ok = err is None
-        reflection_ok = generated and _self_reflection_passed(response.reasoning)
+        reflection_ok = generated and _self_reflection_passed(response)
         end_to_end_ok = generated and whitelist_ok and reflection_ok
 
         mark = "✓" if end_to_end_ok else "✗"

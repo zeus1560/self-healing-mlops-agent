@@ -34,6 +34,18 @@ class TestTargetMentioned(unittest.TestCase):
     def test_broad_pattern_token_without_breadth_language(self):
         self.assertFalse(_target_mentioned("합리적인 대응으로 보임", "."))
 
+    def test_numeric_token_as_substring_of_unrelated_number_is_not_a_match(self):
+        """2026-09-15 code-review 발견: 단순 부분 문자열 매칭은 토큰 "22"가 "5822"/
+        "2200ms" 같은 다른 숫자의 일부로 우연히 등장해도 "언급함"으로 잘못 세서
+        target_mention_rate를 부풀릴 수 있었다 — 이 실험이 측정하려는 신뢰성 신호
+        자체를 왜곡하는 결함. (숫자 뒤에 %/공백 등 비-단어 문자가 오면 "22"는
+        여전히 독립된 토큰이므로 매치되는 게 맞다 — 그건 false positive가 아니다.)"""
+        self.assertFalse(_target_mentioned("targets PID 5822 instead of the reported one", "22"))
+        self.assertFalse(_target_mentioned("completed in 2200ms", "22"))
+
+    def test_numeric_token_as_whole_word_still_matches(self):
+        self.assertTrue(_target_mentioned("targets port 22 instead of the conflicting port 8080", "22"))
+
 
 class TestReasoningSimilarity(unittest.TestCase):
     def test_identical_text_is_fully_similar(self):

@@ -55,6 +55,13 @@ _SCHEMA_MIGRATIONS: tuple[tuple[str, str], ...] = (
     # (src/llm_engine.py::_diagnose_error) 소견. Groq 경로에서만 채워지고,
     # 진단 실패/Ollama·ipex_llm·RULE 경로는 NULL(AgentResponse.l2_diagnosis 참고).
     ("l2_diagnosis", "TEXT"),
+    # 2026-09-15 추가(code-review): self-reflection이 실제로 계산한 (안전 여부)
+    # 불리언을 그대로 보존한다. 지금까지는 reasoning 문자열(예: "⚠️ 자가 반성이
+    # 위험 판정...")로만 남아서 외부 분석 스크립트가 "⚠️" 접두어 등을 다시 파싱해
+    # 판정을 역추론해야 했고, 그 파싱이 표현 변경으로 두 번 조용히 깨진 적이
+    # 있었다(run_l2_production_path_check.py) — AgentResponse.self_reflection_safe
+    # 설명 참고. L1_CACHE/RULE/에스컬레이션 경로에선 NULL.
+    ("self_reflection_safe", "BOOLEAN"),
 )
 # 컬럼 이름 안전성 검증 패턴 — 소문자 영문자로 시작, 이후 소문자/숫자/밑줄만 허용
 # (예: l1_evidence). 숫자로 시작하는 이름은 SQL 식별자로 유효하지 않으므로 계속 거부한다.
@@ -104,7 +111,8 @@ class AgentObserver:
                 l1_evidence      TEXT,
                 l1_nearest_category TEXT,
                 l1_nearest_distance REAL,
-                l2_diagnosis     TEXT
+                l2_diagnosis     TEXT,
+                self_reflection_safe BOOLEAN
             )
         """)
         existing = {row[1] for row in conn.execute("PRAGMA table_info(metrics)")}
@@ -138,6 +146,7 @@ class AgentObserver:
         l1_nearest_category: str | None = None,
         l1_nearest_distance: float | None = None,
         l2_diagnosis: str | None = None,
+        self_reflection_safe: bool | None = None,
     ) -> None:
         """에이전트의 단일 조치 결과를 DB에 기록하고, 필요 시 Slack 알람을 발송한다.
 
@@ -152,6 +161,8 @@ class AgentObserver:
         참고용 — AgentResponse.l1_nearest_category 설명 참고). L1_CACHE 히트에선 None.
         l2_diagnosis는 멀티에이전트 3단계(진단→제안→검토, 2026-09-15) 중 1단계
         진단 에이전트 소견 — Groq 경로에서만 채워지고 그 외는 None.
+        self_reflection_safe는 3단계 검토가 실제로 계산한 (안전 여부) 불리언
+        그대로(2026-09-15, reasoning 문자열 재파싱 없이 바로 조회 가능하게 함).
         """
         safe_log  = _mask_pii(error_log)
         # datetime.now(timezone.utc): timezone-naive datetime과의 비교 오류 방지
@@ -165,8 +176,9 @@ class AgentObserver:
                      latency_sec, success, result_category, error_type,
                      error_detail, error_category, reasoning, command,
                      detection_latency_sec, l1_evidence,
-                     l1_nearest_category, l1_nearest_distance, l2_diagnosis)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     l1_nearest_category, l1_nearest_distance, l2_diagnosis,
+                     self_reflection_safe)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp, safe_log, source, action_type,
@@ -174,6 +186,7 @@ class AgentObserver:
                     error_type, error_detail, error_category,
                     reasoning, command, detection_latency_sec, l1_evidence,
                     l1_nearest_category, l1_nearest_distance, l2_diagnosis,
+                    self_reflection_safe,
                 ),
             )
             conn.commit()

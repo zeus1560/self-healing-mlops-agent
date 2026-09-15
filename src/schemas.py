@@ -109,6 +109,17 @@ class AgentResponse:
                              GROQ_API_KEY 미설정)하면 기존 방식대로 진단 없이 명령을
                              생성하고 이 필드는 None으로 남는다 — Ollama/ipex_llm/RULE
                              경로도 이 단계를 안 거치므로 항상 None.
+        self_reflection_safe: 3단계 검토(self-reflection, _reflect_on_command)가 실제로
+                             계산한 (안전 여부) 불리언 그대로(2026-09-15 code-review로
+                             추가). 지금까지는 이 값이 reasoning 문자열(예: "⚠️ 자가
+                             반성이 위험 판정...")로만 남아서, 외부 분석 스크립트들이
+                             매번 "⚠️" 접두어나 특정 부분 문자열을 다시 파싱해 판정을
+                             역추론해야 했다 — reasoning 문구가 조금만 바뀌어도(표현
+                             수정, 이모지 제거, 다국어화 등) 그 파싱이 조용히 깨지는
+                             사고가 이미 두 번 있었다(run_l2_production_path_check.py).
+                             이 필드는 그 값을 계산 시점에 그대로 보존해 다시 파싱할
+                             필요를 없앤다. L1_CACHE/RULE/에스컬레이션 경로(검토 자체가
+                             없음)에서는 None.
     """
 
     error_category:    str
@@ -124,6 +135,7 @@ class AgentResponse:
     l1_nearest_category: Optional[str]   = None
     l1_nearest_distance: Optional[float] = None
     l2_diagnosis:        Optional[str]   = None
+    self_reflection_safe: Optional[bool] = None
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""

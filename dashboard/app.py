@@ -1684,10 +1684,21 @@ with tab5:
                 )
             elif _reasoning is None:
                 st.caption("이 필드가 기록되기 이전(2026-09-10 이전)의 인시던트라 값이 없습니다.")
-            elif _reasoning.startswith("⚠️"):
-                st.warning(_reasoning)
             else:
-                st.success(_reasoning)
+                # 2026-09-15 code-review 발견: reasoning 문구의 "⚠️" 접두어만으로
+                # 판정을 역추론하면 문구가 바뀔 때마다 조용히 깨질 수 있다(실제로
+                # run_l2_production_path_check.py에서 두 번 발생). self_reflection_safe
+                # (2026-09-15 추가, self-reflection이 실제로 계산한 원본 불리언)가
+                # 있으면 그걸 우선 쓰고, 그 이전 데이터에서만 문구 추론으로 폴백한다.
+                _safe_raw = row.get("self_reflection_safe")
+                if _safe_raw is not None and pd.notna(_safe_raw):
+                    _is_safe = bool(_safe_raw)
+                else:
+                    _is_safe = not _reasoning.startswith("⚠️")
+                if _is_safe:
+                    st.success(_reasoning)
+                else:
+                    st.warning(_reasoning)
 
         with st.container(border=True):
             st.markdown("**4️⃣ 실행 조치 (Execution)**")
