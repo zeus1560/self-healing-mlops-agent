@@ -1012,6 +1012,12 @@ class RAGEngine:
         생성하며, 3단계 검토(_make_llm_response 내부의 _reflect_on_command,
         기존 self-reflection 그대로)가 최종 안전성을 판정한다. Ollama/ipex_llm
         폴백은 실사용 빈도가 낮아 기존 단일 프롬프트 방식 그대로 유지한다.
+
+        **3단계 검토의 독립성**: 2단계는 진단으로 보강된 enriched_context를 쓰지만,
+        3단계 검토(self-reflection)는 일부러 원본 system_context만 받는다(코드
+        review로 발견·수정, 2026-09-15) — 진단이 틀렸을 때 검토가 그 틀린 결론을
+        그대로 다시 읽고 뭉개지 않도록, 제안과 검토가 서로 다른 정보만 공유하게
+        분리했다.
         """
         nearest_category = best_meta.get("error_category")
         logging.warning(
@@ -1044,8 +1050,14 @@ class RAGEngine:
             groq_result = _run_groq(error_log, enriched_context)
             if not groq_result.startswith("ERROR:"):
                 logging.info(f"  👉 [Groq] 명령어: {groq_result}")
+                # 2026-09-15 code-review 발견: 3단계 검토(self-reflection)에도
+                # enriched_context를 넘기면 진단 에이전트 자신의 결론(잘못됐을 수도
+                # 있는 원인/대상 추정)을 검토 단계가 그대로 다시 읽게 되어, "독립적
+                # 재검증"이라는 설계 의도가 깨진다(진단이 틀렸으면 검토도 같이
+                # 틀릴 위험 — faithfulness 실험이 잡으려던 것과 같은 부류의 문제).
+                # 검토는 반드시 원본 system_context만 보게 한다.
                 return _make_llm_response(
-                    groq_result, error_log, enriched_context, "Groq",
+                    groq_result, error_log, system_context, "Groq",
                     nearest_category=nearest_category, nearest_distance=best_distance,
                     diagnosis=diagnosis_summary,
                 )

@@ -120,6 +120,26 @@ class TestL2SlowTrackDiagnosisThreading(unittest.TestCase):
         self.assertIn("진단 에이전트 소견", enriched_context_arg)
         self.assertIn("worker leak", enriched_context_arg)
 
+    def test_reflection_stage_never_sees_diagnosis_enriched_context(self):
+        """2026-09-15 code-review 발견·수정: 검토(self-reflection)는 진단 에이전트의
+        결론이 섞이지 않은 원본 system_context만 받아야 한다 — 그래야 진단이
+        틀렸을 때 검토가 그 틀린 결론을 그대로 재확인하며 뭉개지 않는다."""
+        engine = self._make_engine()
+        best_meta = {"error_category": "Memory_Leak"}
+
+        with patch("src.llm_engine._is_groq_available", return_value=True), \
+             patch("src.llm_engine.gather_system_context", return_value="원본 컨텍스트"), \
+             patch("src.llm_engine._diagnose_error", return_value={
+                 "root_cause": "worker leak", "action_type": "kill_process", "target": "pid 5821",
+             }), \
+             patch("src.llm_engine._run_groq", return_value="kill -TERM 5821"), \
+             patch("src.llm_engine._reflect_on_command", return_value=(True, "안전함")) as mock_reflect:
+            engine._l2_slow_track("some novel error", best_meta, 3.5)
+
+        reflection_context_arg = mock_reflect.call_args[0][2]
+        self.assertEqual(reflection_context_arg, "원본 컨텍스트")
+        self.assertNotIn("진단 에이전트 소견", reflection_context_arg)
+
     def test_failed_diagnosis_falls_back_to_original_flow(self):
         """진단 실패 시 l2_diagnosis=None이고, 기존 system_context 그대로 생성에 쓰여야 한다."""
         engine = self._make_engine()
