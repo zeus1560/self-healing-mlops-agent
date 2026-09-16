@@ -22,6 +22,11 @@ Intel Arc / Iris Xe GPU 환경에서 동작하는 **비용 0원의 자율 장애
                           1순위 Groq API (qwen/qwen3.8-27b), 평균 0.65초
                           멀티에이전트 3단계(진단→제안→검토):
                             ① 진단(_diagnose_error) — 원인/조치유형/대상 구조화 추출
+                               ├─ 확신 있는 구조화 조치(대상이 PID/포트가 아닌
+                               │  restart_service/kill_process/clear_memory)
+                               │  → ②③ 건너뛰고 L1과 동일한 구조화 액션으로 직행
+                               │  (diagnosis-driven routing, 2026-09-17)
+                               └─ 그 외(대상이 PID 등) → 아래 ②③ 그대로 진행
                             ② 제안(_run_groq)       — ①로 보강된 컨텍스트로 명령어 생성
                             ③ 검토(self-reflection) — 원본 컨텍스트만 보고 독립 재검증
                           │
@@ -45,6 +50,16 @@ Intel Arc / Iris Xe GPU 환경에서 동작하는 **비용 0원의 자율 장애
     │
     └─▶ FeedbackLoop: 성공 조치 → ChromaDB L1 캐시 재학습
 ```
+
+**diagnosis-driven routing** (`_route_from_diagnosis`, 2026-09-17): 이전엔
+진단(①) 결과가 명령 생성(②) 프롬프트를 보강하는 텍스트 힌트로만 쓰이고
+실제 액션 결정엔 전혀 반영되지 않았다. 이제 진단이 대상까지 확신 있게 뽑은
+`restart_service`/`kill_process`/`clear_memory`는 제안·검토를 건너뛰고 L1과
+동일한 구조화 액션으로 바로 실행된다. 단, 이 시스템의 kill 대상은 대부분
+에러 로그의 PID라서(예: `leaky_worker.py (pid=5821)`) — executor.py의 구조화
+실행(`pkill -x`/`systemctl restart`)은 정확한 이름 일치만 지원하고 PID는
+지원하지 않으므로, 대상에 숫자가 하나라도 있으면 항상 기존 자유형식
+경로(②③, `kill -TERM <pid>` 생성 + self-reflection 검토)로 그대로 폴백한다.
 
 ---
 
