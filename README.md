@@ -17,18 +17,22 @@ Intel Arc / Iris Xe GPU 환경에서 동작하는 **비용 0원의 자율 장애
 [RAGEngine: L1 Fast Track]
     ChromaDB 벡터 유사도 검색 (< 150ms)
     ├─ Hit (distance < 0.8) ──────────────────▶ ActionExecutor
-    └─ Miss (distance ≥ 0.8) → [L2 Slow Track]
+    └─ Miss (distance ≥ 0.8) → [L2 Slow Track, 5단계 폴백 체인]
                                     │
-                          ┌─────────┴──────────┐
-                     Ollama API           ipex_llm (Arc GPU)
-                     (CPU/GPU 무관)       (multiprocessing spawn)
-                          │                    │
-                          └─────────┬──────────┘
-                               자가 반성 루프 (Safety Reviewer)
-                                    │
-                              Rule-based Fallback
-                                    │
-                              ESCALATE_TO_HUMAN
+                          1순위 Groq API (qwen/qwen3.8-27b), 평균 0.65초
+                          멀티에이전트 3단계(진단→제안→검토):
+                            ① 진단(_diagnose_error) — 원인/조치유형/대상 구조화 추출
+                            ② 제안(_run_groq)       — ①로 보강된 컨텍스트로 명령어 생성
+                            ③ 검토(self-reflection) — 원본 컨텍스트만 보고 독립 재검증
+                          │
+                    실패/미설정 시 ↓
+                          2순위 Ollama API (CPU/GPU 무관)
+                          실패 시 ↓
+                          3순위 ipex_llm (Arc GPU, multiprocessing spawn)
+                          실패 시 ↓
+                          4순위 Rule-based Fallback (키워드 매칭)
+                          실패 시 ↓
+                          5순위 ESCALATE_TO_HUMAN
     │
     ▼
 [ActionExecutor] ── 보안 필터 (shlex + metachar + whitelist/blacklist)
@@ -188,6 +192,14 @@ L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오
 | **Top-K Sweep** (K=1,2,3,5) | **K=1** 최적 (오버헤드 없음) |
 | **Debouncer Sweep** | 모든 윈도우에서 **95%+** 중복 방어 |
 | **Learning Curve** (50→1,016건) | 데이터 증가에 따른 단조 성능 향상 확인 |
+| **L2 정확도** (Groq, 50건) | 카테고리 분류 정확도 **92%**, 액션 정확도 **96%** — 카테고리별 Auth_Error(60%)가 최저 |
+| **멀티에이전트 3단계 효과** (진단→제안→검토, 2026-09-15) | End-to-end 통과율 **6~8% → 26%**(3~4배 개선, 두 독립 실행에서 재현). 생성 성공률은 98%로 그대로 — 진단 단계가 명령 생성을 에러에 더 정확히 맞물리게 해 화이트리스트 통과율이 오른 것으로 해석 |
+| **Faithfulness** (반사실적 위험요소 조작, 3케이스) | 대상만 바꾼 명령어 쌍(예: 올바른 PID vs 무관한 PID)에서 승인 판정이 **100% 뒤집힘**(verdict flip rate), 판정 근거도 조작된 대상을 실제로 언급(target mention rate 0%→100%) — self-reflection이 근거 없는 고정 문구가 아니라 입력을 실제로 반영해 판단함을 확인 |
+
+> **운영 리스크 기록**: Groq 무료 티어 모델은 예고 없이 단종될 수 있음이 두 차례
+> 실측으로 확인됨(`llama-3.3-70b-versatile` 2026-08, `qwen/qwen3.6-27b` 2026-09-15 —
+> 둘 다 사전 공지 없는 404). 현재 `qwen/qwen3.8-27b` 사용 중이며, 이 상수를 바꿀 땐
+> [Groq 모델 목록](https://api.groq.com/openai/v1/models)을 먼저 확인할 것.
 
 ---
 
@@ -330,9 +342,10 @@ sudo systemctl start self-healing-agent   # install.sh로 유닛을 미리 설�
 
 | 방식 | 요구사항 | 비고 |
 |------|----------|------|
-| **Ollama** | Ollama 설치 + `qwen2.5:0.5b` pull | CPU/GPU 무관, 권장 |
-| **ipex_llm** | Intel Arc / Iris Xe GPU | spawn 멀티프로세싱으로 VRAM 격리 |
-| **Rule-based** | 없음 | LLM 실패 시 키워드 기반 자동 폴백 |
+| **Groq** | `GROQ_API_KEY` 환경변수 | **1순위**, 진단→제안→검토 멀티에이전트 3단계, 평균 응답 0.65초(2026-08-27 전환 전 대비 36배 빠름) |
+| **Ollama** | Ollama 설치 + `qwen2.5:0.5b` pull | CPU/GPU 무관, Groq 미설정/실패 시 2순위 폴백 |
+| **ipex_llm** | Intel Arc / Iris Xe GPU | spawn 멀티프로세싱으로 VRAM 격리, 3순위 폴백 |
+| **Rule-based** | 없음 | LLM 전부 실패 시 키워드 기반 자동 폴백 |
 
 ---
 
