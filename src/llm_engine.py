@@ -495,6 +495,81 @@ def _diagnose_error(error_log: str, system_context: str) -> dict | None:
     return diagnosis
 
 
+# 진단 에이전트의 action_type → L1과 동일한 구조화 ActionType 매핑. "other"
+# (또는 이 매핑에 없는 값)는 자유형식 명령 생성 경로로 그대로 폴백한다.
+_STRUCTURED_ACTION_TYPES: dict[str, ActionType] = {
+    "restart_service": ActionType.RESTART_SERVICE,
+    "kill_process":     ActionType.KILL_PROCESS,
+    "clear_memory":     ActionType.CLEAR_MEMORY,
+}
+
+
+def _route_from_diagnosis(
+    diagnosis: dict, diagnosis_summary: str,
+    nearest_category: str | None, best_distance: float,
+) -> AgentResponse | None:
+    """
+    진단 에이전트가 구조화된 조치를 확신 있게 제안하면, 자유형식 명령 생성
+    (_run_groq)과 self-reflection 검토를 건너뛰고 L1과 동일한 구조화 액션
+    경로로 바로 연결한다(2026-09-17 — 이전엔 diagnosis가 action_type/target을
+    뽑아도 _run_groq 프롬프트를 보강하는 텍스트 힌트로만 쓰이고
+    AgentResponse.action_type 결정엔 전혀 반영되지 않았다).
+
+    라우팅 불가 시(아래 조건들) None을 반환해 호출부가 기존 자유형식
+    경로(제안+self-reflection 검토)로 그대로 진행하게 한다 — 새로운 실패
+    모드를 추가하지 않는다는 _diagnose_error와 같은 원칙.
+
+    **PID로 보이는 대상은 구조화 라우팅하지 않는다**: executor.py의
+    `_kill_process()`/`_restart_service()`는 `pkill -x <이름>`/`systemctl
+    restart <이름>`처럼 정확한 프로세스/서비스 *이름* 일치만 지원하고 PID나
+    포트 번호는 지원하지 않는데, 이 시스템의 실제 kill 대상은 대부분 에러
+    로그에 찍힌 PID다(예: "leaky_worker.py (pid=5821)", 진단 에이전트는
+    이를 "pid 5821"처럼 자유형식으로 낸다 — 순수 숫자만이 아니다). target에
+    숫자가 하나라도 있으면 PID/포트로 보고 구조화 라우팅을 포기, 기존
+    자유형식 경로(`kill -TERM <pid>` 생성 + self-reflection 검토)로
+    폴백한다. 이 조건이 없으면 두 갈래로 조용히 틀렸다: "5821"(순수 숫자)은
+    `_validate_process_name`의 문자 정규식을 통과해버려 존재하지도 않을
+    "5821"이라는 이름의 프로세스를 찾다가 조용히 실패하고, "pid 5821"(공백
+    포함)은 그 정규식 자체에 걸려 SecurityBlock으로 실패한다 — 둘 다 기존
+    자유형식 경로라면 정상 처리됐을 요청을 헛되이 태워버리는 회귀다.
+
+    **self-reflection을 건너뛰는 게 새 위험은 아니다**: L1이 이미 이 세
+    ActionType을 self-reflection 없이 실행해왔고, 여기서도 동일한
+    `_validate_process_name()` 검증 + autonomy 게이트(approve_then_execute
+    승인 또는 auto 즉시실행)를 그대로 탄다. self-reflection이 지키는 "타겟이
+    실제 에러와 맞는가"는 대상이 PID/패턴처럼 애매한 자유형식 경로에서 더
+    필요한 검증이라, 그 경로는 그대로 유지한다.
+    """
+    action_type = diagnosis["action_type"]
+    if action_type not in _STRUCTURED_ACTION_TYPES:
+        return None  # "other" 등 — 기존 자유형식 경로로 폴백
+
+    target = diagnosis["target"].strip()
+    has_target = bool(target) and target.lower() != "none"
+    looks_like_pid_or_port = bool(_re.search(r"\d", target))
+
+    if action_type in ("restart_service", "kill_process") and (
+        not has_target or looks_like_pid_or_port
+    ):
+        return None
+
+    action_enum = _STRUCTURED_ACTION_TYPES[action_type]
+    logging.info(
+        f"[진단 에이전트] 구조화 라우팅 → {action_enum.value}"
+        + (f" (대상: {target})" if has_target else "")
+    )
+    return AgentResponse(
+        error_category="LLM_Inferred", severity="HIGH",
+        action_type=action_enum,
+        target_process=target if has_target else None,
+        reasoning=f"진단 에이전트 구조화 라우팅 — {diagnosis['root_cause']}",
+        resolution_source="L2_LLM",
+        l1_nearest_category=nearest_category,
+        l1_nearest_distance=best_distance,
+        l2_diagnosis=diagnosis_summary,
+    )
+
+
 _READ_ONLY_COMMANDS = frozenset({"df", "free", "ps", "ss", "netstat", "uptime", "echo"})
 
 
@@ -1027,6 +1102,14 @@ class RAGEngine:
         review로 발견·수정, 2026-09-15) — 진단이 틀렸을 때 검토가 그 틀린 결론을
         그대로 다시 읽고 뭉개지 않도록, 제안과 검토가 서로 다른 정보만 공유하게
         분리했다.
+
+        **진단 주도 라우팅(2026-09-17)**: 1단계 진단이 restart_service/kill_process
+        (PID 아닌 대상만)/clear_memory를 확신 있게 뽑으면, 2·3단계(제안+검토)를
+        건너뛰고 L1과 동일한 구조화 ActionType 경로로 바로 실행한다
+        (`_route_from_diagnosis` 참고) — 지금까지는 진단 결과가 프롬프트 힌트로만
+        쓰이고 실제 액션 결정엔 전혀 반영되지 않았다. 라우팅 불가 조건(대상이
+        PID, action_type이 "other", 진단 자체 실패 등)에서는 기존 2·3단계 경로로
+        그대로 폴백한다.
         """
         nearest_category = best_meta.get("error_category")
         logging.warning(
@@ -1054,6 +1137,12 @@ class RAGEngine:
                 )
                 enriched_context = f"{system_context}\n[진단 에이전트 소견] {diagnosis_summary}"
                 logging.info(f"[진단 에이전트] {diagnosis_summary}")
+
+                structured = _route_from_diagnosis(
+                    diagnosis, diagnosis_summary, nearest_category, best_distance,
+                )
+                if structured is not None:
+                    return structured
 
             logging.info(f"[RAGEngine] Groq({GROQ_MODEL}) 추론 시작...")
             groq_result = _run_groq(error_log, enriched_context)
