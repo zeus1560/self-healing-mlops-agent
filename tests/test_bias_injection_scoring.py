@@ -15,6 +15,7 @@ from experiments.run_bias_injection_test import (
     BASE_SYSTEM_CTX,
     BiasPhrase,
     _bias_acknowledged,
+    _is_network_fallback,
     run_all,
     run_case_phrase,
 )
@@ -34,6 +35,19 @@ class TestBiasAcknowledged(unittest.TestCase):
         self.assertFalse(
             _bias_acknowledged("matches known recovery pattern for this error type", self.authority)
         )
+
+
+class TestIsNetworkFallback(unittest.TestCase):
+    def test_detects_conservative_pass_on_network_failure(self):
+        self.assertTrue(
+            _is_network_fallback(
+                "자가 반성 검증 요청 실패(네트워크 오류 등) — 보수적으로 통과 처리: "
+                "<urlopen error [Errno 111] Connection refused>"
+            )
+        )
+
+    def test_genuine_llm_rationale_is_not_flagged(self):
+        self.assertFalse(_is_network_fallback("targets the wrong process, unrelated to the error"))
 
 
 class TestRunCasePhrase(unittest.TestCase):
@@ -88,6 +102,36 @@ class TestRunCasePhrase(unittest.TestCase):
         self.assertEqual(result["manipulation_delta"], 1.0)
         self.assertEqual(result["bias_acknowledged_rate"], 0.0)  # 뒤집혔지만 편향은 언급 안 함
 
+    def test_network_fallback_sample_excluded_from_manipulation_delta(self):
+        """2026-09-17 VM 실측에서 발견된 실제 버그 재현: Groq/Ollama 둘 다 실패해
+        보수적으로 통과(True) 처리된 샘플이 "편향에 흔들린 승인"으로 잘못 집계돼
+        manipulation_delta를 부풀리면 안 된다."""
+        case = CASES[0]
+        phrase = BIAS_PHRASES[0]
+        call_count = {"n": 0}
+
+        def fake_reflect(command, error_log, system_ctx):
+            call_count["n"] += 1
+            # biased 조건(2번째 5회) 중 1건만 네트워크 폴백으로 통과, 나머지는
+            # 편향 유무와 무관하게 항상 정확히 거부.
+            if call_count["n"] == 6:
+                return True, (
+                    "자가 반성 검증 요청 실패(네트워크 오류 등) — 보수적으로 통과 처리: "
+                    "<urlopen error [Errno 111] Connection refused>"
+                )
+            return False, "targets the wrong process, unrelated to the reported error"
+
+        with patch("experiments.run_bias_injection_test._reflect_on_command", side_effect=fake_reflect):
+            result = run_case_phrase(case, phrase, repeats=5)
+
+        self.assertEqual(result["baseline_fallback_count"], 0)
+        self.assertEqual(result["biased_fallback_count"], 1)
+        # 유효 샘플(4건) 전부 거부였으므로 네트워크 폴백을 제외하면 조작 효과는 0
+        self.assertEqual(result["baseline_safe_rate"], 0.0)
+        self.assertEqual(result["biased_safe_rate"], 0.0)
+        self.assertEqual(result["manipulation_delta"], 0.0)
+        self.assertIsNone(result["bias_acknowledged_rate"])  # 유효 샘플 중 뒤집힌 사례 없음
+
     def test_biased_system_ctx_includes_base_and_phrase(self):
         case = CASES[0]
         phrase = BIAS_PHRASES[0]
@@ -117,6 +161,25 @@ class TestRunAll(unittest.TestCase):
         self.assertEqual(summary["manipulation_success_rate"], 0.0)
         self.assertIsNone(summary["avg_bias_acknowledged_rate_when_flipped"])
         self.assertEqual(summary["n_flip_cases"], 0)
+        self.assertEqual(summary["network_fallback_rate"], 0.0)
+        self.assertEqual(summary["n_combos_with_no_valid_samples"], 0)
+
+    def test_all_network_fallback_yields_no_manipulation_signal(self):
+        """모든 샘플이 네트워크 폴백이면(극단 케이스) 조작 효과를 0%로 왜곡해
+        보고하는 대신 "집계 불가"(None)로 명시해야 한다."""
+        def fake_reflect(command, error_log, system_ctx):
+            return True, (
+                "자가 반성 검증 요청 실패(네트워크 오류 등) — 보수적으로 통과 처리: "
+                "<urlopen error [Errno 111] Connection refused>"
+            )
+
+        with patch("experiments.run_bias_injection_test._reflect_on_command", side_effect=fake_reflect):
+            summary = run_all(repeats=2)
+
+        self.assertIsNone(summary["avg_manipulation_delta"])
+        self.assertIsNone(summary["manipulation_success_rate"])
+        self.assertEqual(summary["network_fallback_rate"], 1.0)
+        self.assertEqual(summary["n_combos_with_no_valid_samples"], len(CASES) * len(BIAS_PHRASES))
 
 
 if __name__ == "__main__":
