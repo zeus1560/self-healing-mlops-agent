@@ -162,12 +162,20 @@ _ERROR_RULES: list[tuple[tuple[str, ...], str]] = [
 ]
 
 
-def _rule_based_fallback(error_log: str) -> str | None:
-    """에러 로그 키워드로 규칙 기반 명령어를 반환한다. 미매칭 시 None."""
+def _rule_based_fallback(error_log: str) -> tuple[str, str] | None:
+    """
+    에러 로그 키워드로 규칙 기반 명령어를 찾는다. 미매칭 시 None.
+
+    반환: (command, matched_keywords_desc) — 매칭된 키워드 자체를 같이 반환해
+    호출부가 reasoning에 "어떤 키워드로 왜 이 명령을 골랐는지"를 구체적으로
+    담을 수 있게 한다(예전엔 "규칙 기반 키워드 매칭"이라는 고정 문구만 나가서
+    실제 매칭 근거가 안 보이는 블랙박스였다 — 2026-09-17 코드 신뢰도 점검에서 발견).
+    """
     lower = error_log.lower()
     for keywords, command in _ERROR_RULES:
-        if any(kw in lower for kw in keywords):
-            return command
+        matched = [kw for kw in keywords if kw in lower]
+        if matched:
+            return command, ", ".join(f"'{kw}'" for kw in matched)
     return None
 
 
@@ -1196,13 +1204,14 @@ class RAGEngine:
         logging.warning(f"[RAGEngine] ipex_llm 실패: {ipex_result}")
 
         # Step 4: Rule-based heuristic
-        rule_cmd = _rule_based_fallback(error_log)
-        if rule_cmd:
-            logging.info(f"  👉 [Rule Match] 명령어: {rule_cmd}")
+        rule_match = _rule_based_fallback(error_log)
+        if rule_match:
+            rule_cmd, matched_desc = rule_match
+            logging.info(f"  👉 [Rule Match] 명령어: {rule_cmd} (매칭: {matched_desc})")
             return AgentResponse(
                 error_category="Rule_Inferred", severity="HIGH",
                 action_type=ActionType.EXECUTE_RULE_COMMAND,
-                reasoning="규칙 기반 키워드 매칭",
+                reasoning=f"규칙 기반 매칭 — 키워드 감지: {matched_desc}",
                 resolution_source="RULE",
                 command=rule_cmd,
                 l1_nearest_category=nearest_category,
