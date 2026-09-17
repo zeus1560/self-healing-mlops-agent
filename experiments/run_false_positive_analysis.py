@@ -129,6 +129,7 @@ def run_tier_b(triggered_rows: list[dict], sample_per_dataset: int | None) -> li
 
     engine = RAGEngine()
     results: list[dict] = []
+    raw_neighbors: list[list[tuple]] = []  # threshold_sweep()용 — 샘플별 (meta,dist,id,doc) 5개 원본
     for idx, row in enumerate(sample, 1):
         # 주의: engine.analyze_error()를 그대로 쓰면 L1 미스 시 _l2_slow_track()으로
         # 빠져 Groq/Ollama/ipex_llm까지 전부 호출한다(각 샘플마다 API 레이트리밋 대기
@@ -148,10 +149,12 @@ def run_tier_b(triggered_rows: list[dict], sample_per_dataset: int | None) -> li
                 "l1_nearest_distance": "", "confident_action": False,
                 "note": f"_query_l1 예외: {exc}",
             })
+            raw_neighbors.append([])
             continue
 
-        candidates = [(metas[i], dists[i], ids[i], docs[i])
-                      for i in range(len(dists)) if dists[i] <= _RAG_THRESHOLD]
+        neighbors = [(metas[i], dists[i], ids[i], docs[i]) for i in range(len(dists))]
+        raw_neighbors.append(neighbors)
+        candidates = [c for c in neighbors if c[1] <= _RAG_THRESHOLD]
 
         if not candidates:
             results.append({
@@ -178,7 +181,39 @@ def run_tier_b(triggered_rows: list[dict], sample_per_dataset: int | None) -> li
         if idx % 100 == 0:
             print(f"    ... {idx}/{len(sample)} 처리")
 
-    return results
+    return results, raw_neighbors
+
+
+def threshold_sweep(raw_neighbors: list[list[tuple]], thresholds: list[float]) -> list[dict]:
+    """이미 가져온 L1 이웃 데이터(재쿼리 없음)로 RAG_THRESHOLD를 바꿔가며
+    L1 hit율/confident FP율이 어떻게 바뀌는지 표로 정리한다."""
+    from src.llm_engine import _ensemble_vote, _build_response_from_meta
+
+    rows: list[dict] = []
+    n = len([nb for nb in raw_neighbors if nb])
+    for th in thresholds:
+        n_hit = 0
+        n_confident = 0
+        for neighbors in raw_neighbors:
+            if not neighbors:
+                continue
+            candidates = [c for c in neighbors if c[1] <= th]
+            if not candidates:
+                continue
+            n_hit += 1
+            best_meta, best_id, evidence = _ensemble_vote(candidates)
+            decision = _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
+            if decision.action_type.name not in ("ESCALATE_TO_HUMAN", "ALERT_ONLY"):
+                n_confident += 1
+        rows.append({
+            "threshold": th,
+            "sampled": n,
+            "l1_hit": n_hit,
+            "l1_hit_rate_pct": round(n_hit / n * 100, 2) if n else 0.0,
+            "confident_false_action": n_confident,
+            "confident_false_action_rate_pct": round(n_confident / n * 100, 2) if n else 0.0,
+        })
+    return rows
 
 
 def main() -> None:
@@ -220,7 +255,7 @@ def main() -> None:
         print("Tier B — L1(RAG) 분류 게이트 오탐률")
         print("=" * 70)
         cap = None if args.sample_per_dataset == 0 else args.sample_per_dataset
-        tier_b_results = run_tier_b(triggered_rows, cap)
+        tier_b_results, raw_neighbors = run_tier_b(triggered_rows, cap)
 
         n = len(tier_b_results)
         n_l1_hit = sum(1 for r in tier_b_results if r["resolution_source"] == "L1_CACHE")
@@ -250,6 +285,24 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(tier_b_results)
         print(f"Tier B 상세 CSV: {tier_b_csv}")
+
+        # 함수 지역 import였던 _RAG_THRESHOLD가 main()에선 안 보여 NameError가
+        # 났었다(2026-09-17 첫 실행 중 발견) — main()에서 다시 로컬 import.
+        from src.llm_engine import _RAG_THRESHOLD as _current_threshold
+
+        print()
+        print("=" * 70)
+        print("Threshold Sweep — RAG_THRESHOLD를 바꾸면 오탐률이 어떻게 변하는가")
+        print("=" * 70)
+        sweep_rows = threshold_sweep(raw_neighbors, [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.2])
+        print(f"{'threshold':>10} | {'L1 hit':>8} | {'hit%':>7} | {'confident FP':>13} | {'FP%':>6}")
+        print("-" * 60)
+        for r in sweep_rows:
+            marker = "  <- 현재값" if r["threshold"] == _current_threshold else (
+                "  <- README 최적값" if r["threshold"] == 1.2 else "")
+            print(f"{r['threshold']:>10} | {r['l1_hit']:>8} | {r['l1_hit_rate_pct']:>6}% | "
+                  f"{r['confident_false_action']:>13} | {r['confident_false_action_rate_pct']:>5}%{marker}")
+        tier_b_summary["threshold_sweep"] = sweep_rows
     else:
         print("\n(Tier B 생략됨 — chromadb가 설치된 환경에서 --tier-b로 재실행하면 "
               "'오탐이 실제 조치로 이어지는 비율'까지 측정됩니다.)")
