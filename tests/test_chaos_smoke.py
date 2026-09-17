@@ -21,6 +21,7 @@ ConnectionError로 실패한다(HTTPError로 잡히지 않아 500이 남). 실�
 """
 import os
 import sys
+import tempfile
 import unittest
 
 from fastapi.testclient import TestClient
@@ -28,6 +29,38 @@ from fastapi.testclient import TestClient
 # docker-compose가 실제로 쓰는 임포트 경로와 동일하게 shim을 통해 가져온다
 # (uvicorn deploy.target_app:app)
 import deploy.target_app as target_app_module
+
+
+def _permission_bits_enforced() -> bool:
+    """
+    이 환경에서 chmod 000이 실제로 접근을 막는지 직접 확인한다.
+
+    예전엔 sys.platform.startswith("linux")로만 스킵 여부를 판단했는데,
+    WSL에서 윈도우 드라이브를 마운트한 경로(/mnt/d 등, drvfs)는 플랫폼
+    이름이 "linux"라고 나오지만 POSIX 권한 비트를 실제로 강제하지 않아서
+    chmod 000을 해도 파일이 그냥 읽혀버린다 — 이 테스트가 검증하려는
+    전제(chmod 000 → 실제 EACCES) 자체가 깨진다(2026-09-17 실측으로 발견,
+    이 함수 도입 전엔 이 환경에서 매번 가짜로 실패했음). root로 실행 중이라
+    권한 검사가 우회되는 경우도 동일하게 걸러진다. 플랫폼 이름을 추측하는
+    대신 실제 동작을 직접 확인한다.
+    """
+    probe = tempfile.NamedTemporaryFile(dir="data", delete=False, suffix=".permcheck")
+    path = probe.name
+    probe.close()
+    try:
+        os.chmod(path, 0o000)
+        try:
+            with open(path, "r"):
+                pass
+            return False  # 읽혔다 — 이 환경에서는 권한이 실제로 강제되지 않음
+        except PermissionError:
+            return True
+    finally:
+        os.chmod(path, 0o644)
+        os.unlink(path)
+
+
+_PERMISSION_BITS_ENFORCED = _permission_bits_enforced()
 
 
 class TestTargetAppRoutes(unittest.TestCase):
@@ -97,7 +130,10 @@ class TestNonDestructiveInjectors(unittest.TestCase):
         with open(self.evidence_log, "r", encoding="utf-8") as f:
             return f.readlines()[-n_lines:]
 
-    @unittest.skipUnless(sys.platform.startswith("linux"), "exec 권한 비트 의미론은 Linux 컨테이너 배포 환경 전용")
+    @unittest.skipUnless(
+        _PERMISSION_BITS_ENFORCED,
+        "이 환경에서는 chmod가 실제로 접근을 막지 않음 (WSL drvfs 마운트, root 실행 등)",
+    )
     def test_permission_denied_raises_real_permission_error(self):
         resp = self.client.post("/inject/permission_denied")
         self.assertEqual(resp.status_code, 200)
