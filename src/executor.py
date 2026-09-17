@@ -505,7 +505,11 @@ class ActionExecutor:
 
         # 데몬 모드 — Slack 승인 대기
         approval_store.init_table()
-        token       = approval_store.create_request(description, error_log, "")
+        # explanation(_compose_explanation 결과)을 Telegram/Slack 메시지엔 그대로
+        # 넣으면서 DB엔 빈 문자열("")로 저장하던 버그 — 승인 당시엔 사람이 근거를
+        # 봤지만 나중에 pending_approvals를 다시 조회하면 "왜"가 사라져 있었다
+        # (2026-09-17 실측으로 발견: 운영 DB의 reason 컬럼이 전부 빈 값이었음).
+        token       = approval_store.create_request(description, error_log, explanation)
         base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
         pending_url = f"{base_url}/pending/{token}"
         logging.warning(
