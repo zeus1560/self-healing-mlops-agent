@@ -3,8 +3,17 @@ Human-in-the-Loop 승인 서버.
 
 흐름:
   1. Slack → GET /pending/{token}  : 명령어 확인 페이지 (승인/거절 버튼 포함)
-  2. 관리자 버튼 클릭 → GET /approve/{token} 또는 /reject/{token}
+  2. 관리자 버튼 클릭 → POST /approve/{token} 또는 /reject/{token}
+     (2026-09-17까지는 GET이었다 — 상태를 바꾸는 요청이 GET이면 메신저의 링크
+     미리보기 크롤러나 백신 링크 스캐너가 그 URL을 자동으로 fetch하는 것만으로도
+     사람이 실제로 클릭하지 않은 승인/거절이 기록될 수 있었다. 버튼을 눌러야
+     제출되는 <form method="post">로 바꿔 이 문제를 막는다.)
   3. executor.py 데몬 모드 폴링 → approval_store.get_status(token)
+
+승인자 식별:
+  이 서버엔 로그인/인증 체계가 없어 실명을 알 방법이 없다 — 최소한의 신원
+  신호로 요청 클라이언트 IP를 "web:{ip}"로 기록한다(텔레그램 경로는
+  telegram_bot.py에서 실제 사용자 ID/이름을 기록 — 그쪽이 훨씬 신뢰도 높음).
 
 보안:
   - 토큰은 secrets.token_urlsafe(32) (256비트 엔트로피)
@@ -18,7 +27,7 @@ Human-in-the-Loop 승인 서버.
 """
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from src import approval_store
@@ -37,6 +46,8 @@ def _pending_html(token: str, command: str, error_log: str) -> str:
     reject_url  = f"{base_url}/reject/{token}"
     safe_cmd = command.replace("<", "&lt;").replace(">", "&gt;")
     safe_log = (error_log or "")[:300].replace("<", "&lt;").replace(">", "&gt;")
+    # <a href> 링크였던 것을 <form method="post">로 변경 — 링크 미리보기 크롤러/
+    # 백신 스캐너가 GET으로 자동 fetch해도 상태가 안 바뀌게 하기 위함.
     return f"""
 <html><body style="{_STYLE}">
   <h2 style="color:#2980b9">🔐 명령어 실행 승인 요청</h2>
@@ -46,10 +57,14 @@ def _pending_html(token: str, command: str, error_log: str) -> str:
   <h4>트리거된 에러 로그</h4>
   <pre style="background:#fff3cd;padding:12px;border-radius:4px;font-size:0.85em">{safe_log}</pre>
   <div style="margin-top:32px;display:flex;gap:16px">
-    <a href="{approve_url}" style="flex:1;text-align:center;padding:14px;background:#2ecc71;
-       color:#fff;text-decoration:none;border-radius:6px;font-size:1.1em">✅ 승인</a>
-    <a href="{reject_url}" style="flex:1;text-align:center;padding:14px;background:#e74c3c;
-       color:#fff;text-decoration:none;border-radius:6px;font-size:1.1em">🚫 거절</a>
+    <form method="post" action="{approve_url}" style="flex:1">
+      <button type="submit" style="width:100%;padding:14px;background:#2ecc71;color:#fff;
+        border:none;border-radius:6px;font-size:1.1em;cursor:pointer">✅ 승인</button>
+    </form>
+    <form method="post" action="{reject_url}" style="flex:1">
+      <button type="submit" style="width:100%;padding:14px;background:#e74c3c;color:#fff;
+        border:none;border-radius:6px;font-size:1.1em;cursor:pointer">🚫 거절</button>
+    </form>
   </div>
 </body></html>
 """
@@ -115,21 +130,26 @@ def pending(token: str):
     return HTMLResponse(_pending_html(token, req["command"], req.get("error_log", "")))
 
 
-@app.get("/approve/{token}", response_class=HTMLResponse)
-def approve(token: str):
+def _client_identity(request: Request) -> str:
+    """요청 클라이언트의 최소 신원 신호 — 로그인 체계가 없어 IP 이상은 알 수 없다."""
+    return f"web:{request.client.host}" if request.client else "web:unknown"
+
+
+@app.post("/approve/{token}", response_class=HTMLResponse)
+def approve(token: str, request: Request):
     err = _check_status(token)
     if err:
         return err
-    approval_store.set_decision(token, "approved")
+    approval_store.set_decision(token, "approved", _client_identity(request))
     return HTMLResponse(_OK_HTML)
 
 
-@app.get("/reject/{token}", response_class=HTMLResponse)
-def reject(token: str):
+@app.post("/reject/{token}", response_class=HTMLResponse)
+def reject(token: str, request: Request):
     err = _check_status(token)
     if err:
         return err
-    approval_store.set_decision(token, "rejected")
+    approval_store.set_decision(token, "rejected", _client_identity(request))
     return HTMLResponse(_REJECT_HTML)
 
 
