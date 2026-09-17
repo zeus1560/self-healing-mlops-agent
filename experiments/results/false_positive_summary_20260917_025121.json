@@ -1,0 +1,71 @@
+{
+  "timestamp": "20260917_025121",
+  "tier_a": {
+    "per_dataset": [
+      {
+        "dataset": "Apache_Apache_2k",
+        "total_lines": 2000,
+        "triggered_lines": 595,
+        "trigger_rate_pct": 29.75
+      },
+      {
+        "dataset": "BGL_BGL_2k",
+        "total_lines": 2000,
+        "triggered_lines": 627,
+        "trigger_rate_pct": 31.35
+      },
+      {
+        "dataset": "HDFS_HDFS_2k",
+        "total_lines": 2000,
+        "triggered_lines": 80,
+        "trigger_rate_pct": 4.0
+      },
+      {
+        "dataset": "Hadoop_Hadoop_2k",
+        "total_lines": 2000,
+        "triggered_lines": 291,
+        "trigger_rate_pct": 14.55
+      },
+      {
+        "dataset": "Linux_Linux_2k",
+        "total_lines": 2000,
+        "triggered_lines": 1,
+        "trigger_rate_pct": 0.05
+      },
+      {
+        "dataset": "OpenSSH_OpenSSH_2k",
+        "total_lines": 2000,
+        "triggered_lines": 47,
+        "trigger_rate_pct": 2.35
+      },
+      {
+        "dataset": "OpenStack_OpenStack_2k",
+        "total_lines": 2000,
+        "triggered_lines": 21,
+        "trigger_rate_pct": 1.05
+      },
+      {
+        "dataset": "Spark_Spark_2k",
+        "total_lines": 2000,
+        "triggered_lines": 0,
+        "trigger_rate_pct": 0.0
+      },
+      {
+        "dataset": "Thunderbird_Thunderbird_2k",
+        "total_lines": 2000,
+        "triggered_lines": 2,
+        "trigger_rate_pct": 0.1
+      },
+      {
+        "dataset": "Zookeeper_Zookeeper_2k",
+        "total_lines": 2000,
+        "triggered_lines": 438,
+        "trigger_rate_pct": 21.9
+      }
+    ],
+    "total_lines": 20000,
+    "total_triggered": 2102,
+    "overall_trigger_rate_pct": 10.51
+  },
+  "tier_b": {}
+}
