@@ -313,7 +313,8 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         with patch("src.llm_engine._is_groq_available", return_value=False), \
              patch("src.llm_engine._is_ollama_available", return_value=False), \
              patch("src.llm_engine.run_ipex_engine", return_value="ERROR"), \
-             patch("src.llm_engine._rule_based_fallback", return_value="systemctl restart nginx"), \
+             patch("src.llm_engine._rule_based_fallback",
+                   return_value=("systemctl restart nginx", "'nginx'")), \
              patch("src.llm_engine.gather_system_context", return_value="ctx"):
             resp = engine.analyze_error("some novel error text")
 
@@ -321,6 +322,29 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         self.assertEqual(resp.l1_nearest_category, "DB_Deadlock")
         self.assertEqual(resp.l1_nearest_distance, 5.0)
         self.assertIsNone(resp.self_reflection_safe)  # 검토 자체가 없는 경로
+
+    def test_rule_based_reasoning_shows_actual_matched_keyword(self):
+        # 2026-09-17 코드 신뢰도 점검에서 발견: 예전엔 규칙 기반 경로의 reasoning이
+        # 무조건 "규칙 기반 키워드 매칭"이라는 고정 문구뿐이라 실제로 뭐가
+        # 매칭됐는지 안 보이는 블랙박스였다. 이제 실제 매칭된 키워드가 나와야 한다.
+        from src.llm_engine import _rule_based_fallback
+
+        result = _rule_based_fallback("CRITICAL: Out of memory - cannot allocate memory")
+        self.assertIsNotNone(result)
+        command, matched_desc = result
+        self.assertEqual(command, "pkill -f python")
+        self.assertIn("out of memory", matched_desc)
+
+        engine = self._make_engine_with_query_result(self._miss_query_result())
+        with patch("src.llm_engine._is_groq_available", return_value=False), \
+             patch("src.llm_engine._is_ollama_available", return_value=False), \
+             patch("src.llm_engine.run_ipex_engine", return_value="ERROR"), \
+             patch("src.llm_engine.gather_system_context", return_value="ctx"):
+            resp = engine.analyze_error("CRITICAL: Out of memory - cannot allocate memory")
+
+        self.assertEqual(resp.resolution_source, "RULE")
+        self.assertIn("out of memory", resp.reasoning)
+        self.assertNotEqual(resp.reasoning, "규칙 기반 키워드 매칭")
 
 
 class TestComposeExplanation(unittest.TestCase):

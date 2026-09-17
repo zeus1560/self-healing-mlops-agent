@@ -194,7 +194,8 @@ class TestL2SlowTrackDiagnosisThreading(unittest.TestCase):
         with patch("src.llm_engine._is_groq_available", return_value=False), \
              patch("src.llm_engine._is_ollama_available", return_value=False), \
              patch("src.llm_engine.run_ipex_engine", return_value="ERROR"), \
-             patch("src.llm_engine._rule_based_fallback", return_value="systemctl restart nginx"), \
+             patch("src.llm_engine._rule_based_fallback",
+                   return_value=("systemctl restart nginx", "'nginx'")), \
              patch("src.llm_engine.gather_system_context", return_value="ctx"):
             resp = engine._l2_slow_track("some novel error", best_meta, 3.5)
 
