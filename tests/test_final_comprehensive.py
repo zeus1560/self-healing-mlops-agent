@@ -415,25 +415,28 @@ class TestApprovalServer(unittest.TestCase):
             pass
 
     def test_approve_endpoint(self):
+        # 2026-09-17: 상태 변경 엔드포인트는 GET→POST로 바뀌었다(GET이면 링크
+        # 미리보기 크롤러가 자동으로 승인시켜버릴 수 있던 문제, tests/
+        # test_approval_server.py에 이 변경의 전용 회귀 테스트가 있음).
         token = self.store.create_request("systemctl status nginx", "ERROR", "test")
-        resp  = self.client.get(f"/approve/{token}")
+        resp  = self.client.post(f"/approve/{token}")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self.store.get_status(token), "approved")
 
     def test_reject_endpoint(self):
         token = self.store.create_request("uptime", "ERROR", "test")
-        resp  = self.client.get(f"/reject/{token}")
+        resp  = self.client.post(f"/reject/{token}")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self.store.get_status(token), "rejected")
 
     def test_already_decided_returns_409(self):
         token = self.store.create_request("free", "ERROR", "test")
-        self.client.get(f"/approve/{token}")
-        resp = self.client.get(f"/approve/{token}")
+        self.client.post(f"/approve/{token}")
+        resp = self.client.post(f"/approve/{token}")
         self.assertEqual(resp.status_code, 409)
 
     def test_unknown_token_returns_404(self):
-        resp = self.client.get("/approve/invalid_token_xyz")
+        resp = self.client.post("/approve/invalid_token_xyz")
         self.assertEqual(resp.status_code, 404)
 
     def test_health_endpoint(self):

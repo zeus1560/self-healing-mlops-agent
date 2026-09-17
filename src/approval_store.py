@@ -50,6 +50,13 @@ def init_table() -> None:
                 )
             except sqlite3.OperationalError:
                 pass  # 이미 존재하는 컬럼 — 정상
+            # decided_by — "누가" 승인/거절했는지(2026-09-17 실측 감사에서 발견된
+            # 공백 — 지금까지 언제/무엇을/왜는 남아도 누가는 전혀 안 남고 있었음).
+            # 기존 행은 마이그레이션 시점에 이 정보를 알 길이 없으므로 NULL로 둔다.
+            try:
+                conn.execute("ALTER TABLE pending_approvals ADD COLUMN decided_by TEXT")
+            except sqlite3.OperationalError:
+                pass  # 이미 존재하는 컬럼 — 정상
             conn.commit()
         finally:
             conn.close()
@@ -110,7 +117,7 @@ def get_request(token: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT command, error_log, status, created_at, expires_at "
+            "SELECT command, error_log, status, created_at, expires_at, decided_by "
             "FROM pending_approvals WHERE token = ?",
             (token,),
         ).fetchone()
@@ -120,9 +127,11 @@ def get_request(token: str) -> dict | None:
     return dict(row) if row is not None else None
 
 
-def set_decision(token: str, decision: str) -> bool:
+def set_decision(token: str, decision: str, decided_by: str | None = None) -> bool:
     """
     decision: 'approved' 또는 'rejected'.
+    decided_by: 승인/거절한 주체 식별자(예: "telegram:12345(alice)", "web:203.0.113.5") —
+        생략 시 None으로 남는다(하위호환 — 기존 2-인자 호출부를 깨지 않는다).
     상태가 'pending'일 때만 업데이트하며 성공 여부를 반환한다.
     """
     now = datetime.now(timezone.utc).isoformat()
@@ -130,9 +139,9 @@ def set_decision(token: str, decision: str) -> bool:
         conn = _conn()
         try:
             cur = conn.execute(
-                "UPDATE pending_approvals SET status = ?, decided_at = ? "
+                "UPDATE pending_approvals SET status = ?, decided_at = ?, decided_by = ? "
                 "WHERE token = ? AND status = 'pending'",
-                (decision, now, token),
+                (decision, now, decided_by, token),
             )
             conn.commit()
         finally:

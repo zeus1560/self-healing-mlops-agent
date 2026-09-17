@@ -100,11 +100,19 @@ class TelegramChatOps:
             return
 
         action, token = payload
+        # 클릭한 사람의 식별자 — 지금까지는 승인/거절 여부와 시각만 남고
+        # "누가"는 전혀 기록되지 않았다(2026-09-17 실측 감사에서 발견).
+        # query.from_user는 텔레그램이 콜백마다 항상 제공하는 클릭한 사람 정보.
+        clicker = query.from_user
+        decided_by = (
+            f"telegram:{clicker.id}({clicker.username or clicker.first_name})"
+            if clicker else "telegram:unknown"
+        )
         if action == "approve":
-            decided = approval_store.set_decision(token, "approved")
+            decided = approval_store.set_decision(token, "approved", decided_by)
             text = "✅ 승인되었습니다. 명령을 실행합니다." if decided else "⚠️ 이 요청은 이미 처리되었거나 만료되었습니다."
         elif action == "reject":
-            decided = approval_store.set_decision(token, "rejected")
+            decided = approval_store.set_decision(token, "rejected", decided_by)
             text = "🚫 거절되었습니다. 명령 실행이 취소되었습니다." if decided else "⚠️ 이 요청은 이미 처리되었거나 만료되었습니다."
         else:
             text = "잘못된 승인 액션입니다."
