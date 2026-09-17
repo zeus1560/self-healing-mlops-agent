@@ -199,6 +199,23 @@ class TestAnalyzeErrorPopulatesEvidence(unittest.TestCase):
         self.assertIn("clear_memory", resp.l1_evidence)
         self.assertIn("OOM killed process", resp.l1_evidence)
 
+    def test_l1_hit_without_curated_reasoning_leaves_reasoning_empty(self):
+        # 카오스 인젝터 시그니처 등 curated L1 문서는 "reasoning" 메타 자체가
+        # 없는 게 정상이다 — 예전엔 이 경우 "No reasoning found in DB"라는
+        # placeholder 문자열이 채워져, 대시보드(dashboard/app.py, reasoning이
+        # nan/None/""일 때만 "근거 없음"으로 처리)와 승인 메시지가 이걸 진짜
+        # self-reflection 판정처럼 잘못 표시했다(2026-09-17 실측 데모 중 발견).
+        # 이제 빈 문자열이어야 하고, 근거는 l1_evidence로만 노출된다.
+        engine = self._make_engine_with_query_result({
+            "documents": [["CRITICAL chaos-injector: OOM killed process"]],
+            "metadatas": [[{"action_type": "clear_memory", "error_category": "Out_Of_Memory"}]],
+            "distances": [[0.05]],
+            "ids": [["chaos_sig_v1_abc"]],
+        })
+        resp = engine.analyze_error("CRITICAL chaos-injector: OOM killed process")
+        self.assertEqual(resp.reasoning, "")
+        self.assertIsNotNone(resp.l1_evidence)
+
     def test_l1_miss_leaves_l1_evidence_none(self):
         # 거리가 임계값을 훨씬 초과 — L1 미스로 L2 슬로우 트랙(에스컬레이션 등)으로 감.
         engine = self._make_engine_with_query_result({

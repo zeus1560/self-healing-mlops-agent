@@ -887,7 +887,14 @@ def _build_response_from_meta(
         action_type=action_enum,
         command=meta.get("command") or None,
         target_process=meta.get("target_process") or None,
-        reasoning=meta.get("reasoning", "No reasoning found in DB"),
+        # 기본값을 "No reasoning found in DB" 같은 문구로 두면 대시보드/승인
+        # 메시지가 이걸 진짜 self-reflection 판정으로 오인해 표시한다
+        # (dashboard/app.py는 reasoning이 nan/None/""일 때만 "근거 없음"으로
+        # 처리하는데, 이 placeholder 문자열은 그 체크에 안 걸렸다 — 2026-09-17
+        # 실측 데모 중 발견). L1_CACHE 문서 중 curated 데이터(카오스 인젝터
+        # 시그니처 등)는 애초에 "reasoning" 메타를 안 남기는 게 정상이므로
+        # 빈 문자열로 둬서 l1_evidence만 근거로 노출되게 한다.
+        reasoning=meta.get("reasoning") or "",
         resolution_source=source,
         l1_doc_id=doc_id,
         l1_source=meta.get("source"),
