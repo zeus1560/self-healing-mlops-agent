@@ -119,17 +119,25 @@ src/
   train_set.json 우선, 없으면 etl_backup.json 폴백
 ```
 
-### 훈련 데이터 파이프라인 (ChromaDB 총 **1,016건**, 합성 데이터 0건)
+### 훈련 데이터 파이프라인 (ChromaDB 총 **1,318건**, 실측 2026-09-18)
+
+> 과거 "1,016건" 표는 syslog 증강 데이터(658건, 전체의 65%)가 실제로는
+> 운영 ChromaDB에 적재된 적이 없던 상태에서 작성된 값이었다 — 코드는
+> 배포돼 있었지만 스크립트 실행이 운영에 누락됨(2026-09-17 발견·복구,
+> [`README.md` 실험 결과 요약](#실험-결과-요약-experiments) 참고). 아래는
+> 복구 후 VM에서 직접 쿼리한 실제 수치.
 
 | 소스 (`source` 태그) | ChromaDB 적재 | 수집 방법 |
 |------|------|---------|
-| `train_set` (`etl_vector_sync`) | 308건 | train_set.json → ChromaDB 동기화 (MD5 dedup) |
-| `syslog_augment_v2` (`scripts/load_syslog_train_v2.py`) | 455건 | syslog 기반 증강 데이터 v2 |
-| `syslog_augment_v1` (`scripts/load_syslog_train.py`) | 203건 | syslog 기반 증강 데이터 v1 |
-| N/A (source 없음) | 50건 | 기타 (출처 태그 미설정) |
+| `syslog_augment_v2` (`scripts/load_syslog_train_v2.py`) | 637건 | syslog 형식 증강 데이터 v2 (9개 카테고리) |
+| `syslog_augment_v1` (`scripts/load_syslog_train.py`) | 300건 | syslog 형식 증강 데이터 v1 (10개 카테고리) |
+| N/A (source 없음, `train_set`/`etl_vector_sync`) | 308건 | train_set.json → ChromaDB 동기화 (MD5 dedup) |
+| `github_v2` (`scripts/etl_github_to_chroma.py`) | 44건 | GitHub 공식 이슈 2차 수집 |
+| `chaos_injector_signature` | 26건 | 카오스 인젝터 실측 문구 큐레이션 |
+| `proactive_monitor_signature` | 3건 | ProactiveMonitor 실측 문구 큐레이션 |
 
 **ETL 전략**: Extract(GitHub 공식 이슈) → 에러 스니펫 regex 추출 → 전처리(노이즈 제거·길이 제한·액션 검증) → Load(ChromaDB 직접 upsert)  
-합성 데이터 없음 — 모든 항목이 실제 오픈소스 프로젝트 이슈에서 수집된 원본 에러 메시지
+`train_set`/`github_v2`/큐레이션 시그니처(총 381건)는 실제 오픈소스 이슈·실측 문구에서 수집된 원본이고, `syslog_augment_v1`/`v2`(937건)는 실제 Linux/Cloud 서비스 로그 형식을 본떠 직접 작성한 데이터다 — 완전한 합성(fabricated) 데이터는 아니지만 스크래핑 원본도 아니므로 이 둘을 구분해서 인용할 것.
 
 **데이터 전처리 파이프라인**:
 - 노이즈 필터링: URL·티켓 링크·30자 미만·에러 키워드 없는 텍스트 제거 (-286건)
