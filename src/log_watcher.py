@@ -118,11 +118,26 @@ class LogTailHandler(FileSystemEventHandler):
         if os.path.abspath(event.src_path) != self.filepath:
             return
         try:
-            with open(self.filepath, "r", encoding="utf-8") as f:
+            current_size = os.path.getsize(self.filepath)
+        except OSError:
+            logging.error(f"[LogWatcher] 로그 파일 크기 확인 실패:\n{traceback.format_exc()}")
+            return
+        if current_size < self.file_ptr:
+            # 로그 로테이션/트렁케이트 — 기존 offset이 이제 파일 끝을 넘어선다.
+            # 그대로 seek하면 새로 쓰인 줄을 계속 놓치고도 에러가 안 나서
+            # 조용히 감지 불능 상태가 된다(2026-09-17 실측으로 발견). 처음부터
+            # 다시 읽어 이 파일 인스턴스 안의 내용을 놓치지 않게 한다.
+            logging.warning(
+                f"[LogWatcher] 로그 파일 축소 감지({self.file_ptr} -> {current_size}B) — "
+                "로테이션/트렁케이트로 판단해 처음부터 다시 읽습니다."
+            )
+            self.file_ptr = 0
+        try:
+            with open(self.filepath, "r", encoding="utf-8", errors="replace") as f:
                 f.seek(self.file_ptr)
                 new_lines    = f.readlines()
                 self.file_ptr = f.tell()
-        except OSError:
+        except (OSError, UnicodeError):
             logging.error(f"[LogWatcher] 로그 파일 읽기 실패:\n{traceback.format_exc()}")
             return
 
