@@ -1498,7 +1498,7 @@ with tab4:
             q2.metric(
                 "F1 Score",
                 f"{_bt3['f1']:.3f}",
-                help="검색 정확도 종합 점수. 1.0이 최고이며, 0.982는 거의 완벽한 수준입니다.",
+                help="검색 정확도 종합 점수. 1.0이 최고입니다.",
             )
             q3.metric(
                 "Precision",
@@ -1508,7 +1508,7 @@ with tab4:
             _l1_hr3 = _bt3.get("l1_hit_rate", None)
             q4.metric(
                 "L1 히트율 (이 설정)",
-                f"{float(_l1_hr3) * 100:.1f}%" if _l1_hr3 is not None else "97.7%",
+                f"{float(_l1_hr3) * 100:.1f}%" if _l1_hr3 is not None else "N/A",
                 help="이 threshold 설정에서 전체 쿼리 중 L1 캐시로 즉시 처리된 비율입니다.",
             )
         else:

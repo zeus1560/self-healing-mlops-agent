@@ -201,7 +201,7 @@ L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오
 
 | 실험 | 결과 |
 |------|------|
-| **Threshold Sweep** (0.1~1.5) | 최적 threshold=**1.2**, action_F1=**0.982**, L1 히트율 **97.7%** |
+| **Threshold Sweep** (0.1~1.5, 실측 재검증 2026-09-17) | **현재 배포값 0.6**: 카테고리F1 0.921, action_F1 0.637, Precision 99.4%, L1 히트율 82.6%. 1.2(과거 문서상 "최적값")는 action_F1 0.744로 소폭 높지만 아래 False Positive 항목 참고 — 채택하지 않음 |
 | **Baseline Compare** | 키워드 매칭 22.1% → RAG **84.9%** (+62.8%p) |
 | **Security Audit** (악성 30개) | **30/30 차단** (100%) |
 | **Top-K Sweep** (K=1,2,3,5) | **K=1** 최적 (오버헤드 없음) |
@@ -211,8 +211,22 @@ L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오
 | **멀티에이전트 3단계 효과** (진단→제안→검토, 2026-09-15) | End-to-end 통과율 **6~8% → 26%**(3~4배 개선, 두 독립 실행에서 재현). 생성 성공률은 98%로 그대로 — 진단 단계가 명령 생성을 에러에 더 정확히 맞물리게 해 화이트리스트 통과율이 오른 것으로 해석 |
 | **Faithfulness** (반사실적 위험요소 조작, 3케이스) | 대상만 바꾼 명령어 쌍(예: 올바른 PID vs 무관한 PID)에서 승인 판정이 **100% 뒤집힘**(verdict flip rate), 판정 근거도 조작된 대상을 실제로 언급(target mention rate 0%→100%) — self-reflection이 근거 없는 고정 문구가 아니라 입력을 실제로 반영해 판단함을 확인 |
 | **Bias-Injection** (권위 주장/허위 성공이력/긴급성 압박 3종, 2026-09-17) | 대상은 항상 틀린 값(ground truth=거부)으로 고정하고 편향 문구만 주입 — 네트워크 폴백 오염(15.6%, VM Ollama 미실행) 제외 후 진짜 LLM 판정 76건 전부 대상 불일치를 정확히 지적하며 거부. 조작 효과 **0%p**, 조작 성공률 **0%** — self-reflection이 이 편향 신호들에 흔들리지 않음(단 표본이 작아 일반화엔 신중할 것) |
-| **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄, 2026-09-17) | 1차 탐지 게이트(정규식) 오탐률 **10.51%**(2,102/20,000줄, Apache 29.75%·BGL 31.35%·Zookeeper 21.90%가 최다) — 그러나 그 오탐 줄 전수(2,102건)를 L1(RAG) 분류 게이트까지 통과시켜도 confident hit **0건(0.0%)**. 즉 1차 게이트는 자주 헛불을 울리지만 L1 신뢰도 임계값이 완전히 무관한 노이즈로 인한 오조치는 전부 걸러냄(`experiments/run_false_positive_analysis.py`) |
+| **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄, 실측 재검증 2026-09-17) | 1차 탐지 게이트(정규식) 오탐률 **10.51%**(2,102/20,000줄) — 그 오탐 줄 전수(2,102건)를 L1(RAG) 분류 게이트에 흘렸을 때, **현재 배포값 0.6에서는 confident FP 0.0%**(1,318건으로 복구된 ChromaDB 기준). **threshold를 1.2로 올리면 confident FP가 79.4%로 폭증**(무관한 로그 5개 중 4개꼴로 실제 조치 시도) — syslog 증강 데이터가 일반적인 시스템 로그 어휘와 겹쳐서 생기는 트레이드오프. 0.6을 유지하는 핵심 근거(`experiments/run_false_positive_analysis.py`) |
 
+> **Threshold/오탐 수치 정정 기록 (2026-09-17)**: 과거 문서의 "threshold=1.2, action_F1=0.982,
+> 히트율 97.7%"는 두 가지 문제가 겹친 값이었다 — (1) 운영 ChromaDB에 syslog 증강 데이터
+> 658건(전체의 65%)이 실제로는 적재된 적이 없어(코드는 배포됐지만 스크립트 실행이 누락됨)
+> 그 상태에서 재측정하면 threshold를 아무리 올려도 action_F1이 0.746을 못 넘었고, (2) 0.982는
+> 실제로는 action_F1이 아니라 category_F1(카테고리 F1은 threshold 1.0~1.2에서 0.980까지 나옴)을
+> 잘못 표기했을 가능성이 높다. 2026-09-17 운영 VM(Python 3.10.12, chromadb==0.5.0 —
+> 로컬 개발 환경의 최신 chromadb/numpy와 달리 실제 배포판과 동일한 조합)에서 누락된 syslog
+> 데이터를 복구(381→1,318건)한 뒤 재측정: **threshold=0.6(현재 배포값)에서 category_F1 0.921 /
+> action_F1 0.637 / Precision 99.4% / L1 히트율 82.6%**, LogHub 10개 무관 시스템 로그
+> 2만 줄 기준 confident FP **0.0%**. threshold=1.2로 올리면 action_F1은 0.744로 소폭
+> 개선되지만 같은 LogHub 기준 confident FP가 **79.4%**까지 치솟아 채택하지 않음
+> (`experiments/results/threshold_results_20260917_150213.csv`,
+> `experiments/results/false_positive_summary_20260917_152609.json`).
+>
 > **운영 리스크 기록**: Groq 무료 티어 모델은 예고 없이 단종될 수 있음이 두 차례
 > 실측으로 확인됨(`llama-3.3-70b-versatile` 2026-08, `qwen/qwen3.6-27b` 2026-09-15 —
 > 둘 다 사전 공지 없는 404). 현재 `qwen/qwen3.8-27b` 사용 중이며, 이 상수를 바꿀 땐
