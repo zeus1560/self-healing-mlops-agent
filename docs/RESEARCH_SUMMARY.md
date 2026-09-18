@@ -43,8 +43,9 @@ MLOps 에이전트를, "검증된 만큼만 자동화 범위를 넓히는" 점�
 대비 전 지표에서 열세를 보여 과적합 위험을 실측으로 드러냈다. 관련 연구
 9편을 검토한 결과 RAG 캐시·멀티에이전트 진단·설명 충실도 검증 개별 요소는
 각각 선행 연구가 있었지만, 이를 SLO 수치 기반 승인 게이트라는 축으로 묶어
-실제 운영 환경에서 전부 실측한 사례는 찾지 못했다 — 이 결합과, 완전
-자동화가 아닌 단계적 신뢰 구축이 실제로 측정 가능한 효과를 내는지를
+실제 운영 환경에서 전부 실측한 **동료심사 학술 문헌**은 찾지 못했다(같은
+패턴이 2026년 업계 블로그·오픈소스엔 이미 존재함, §2 참고) — 이 결합과,
+완전 자동화가 아닌 단계적 신뢰 구축이 실제로 측정 가능한 효과를 내는지를
 정량적으로 보이는 게 이 연구의 기여다.
 
 **English**: This project designs an autonomous MLOps agent that diagnoses
@@ -65,8 +66,10 @@ small model underperformed a commercial LLM (Groq) on every metric for
 novel (out-of-distribution) error types, empirically exposing an
 overfitting risk. A review of 9 related papers found prior work on each
 individual component (RAG caching, multi-agent diagnosis, faithfulness
-testing) but none that combines them under an SLO-gated approval axis
-and validates the whole pipeline on a live production system — this
+testing) but no **peer-reviewed** work that combines them under an
+SLO-gated approval axis and validates the whole pipeline on a live
+production system (the same pattern already exists in 2026 industry
+blogs/open-source, see §2) — this
 combination, and the quantitative demonstration that staged trust-building
 (rather than full automation) produces measurable gains, is this work's
 contribution.
@@ -100,12 +103,21 @@ RCA/조치(Flow-of-Action, STRATUS, Sarda et al.), Faithfulness 검증(Turpin,
 Kamoi). 이 중 STRATUS·Flow-of-Action은 "너무 복잡하면 사람에게 넘긴다"는
 이스케이프 경로 정도는 있지만, **SLO 수치 기준으로 자동화 단계를 명시적으로
 승급시키는 구조**(이 프로젝트의 Progressive Autonomy)를 다룬 논문은 §2
-9편 중엔 없었다. 그래서 이 프로젝트는 **RAG 캐시·멀티에이전트·Faithfulness
-검증 세 요소를, SLO 기반 승인 게이트라는 네 번째 축으로 묶어 실제 운영
-VM 환경에서 전부 실측했다**는 데 기여가 있다고 본다 — 다만 이건 9편의
+9편 중엔 없었다. **(2026-09-19 추가 검증)** 이 claim이 정말 방어 가능한지
+더 타겟팅된 검색(SLO-gated autonomy promotion, canary rollout AI agent
+autonomy 등, §2 참고)으로 한 번 더 찔러본 결과: **동료심사(peer-reviewed)
+논문에선 여전히 못 찾음**(가장 가까운 arXiv 2506.12469, Feng/McDonald/Zhang,
+UW 2025 "Levels of Autonomy for AI Agents"도 정성적 프레임일 뿐 수치 기준
+없음). 하지만 **2026년 업계 블로그·오픈소스에는 이미 같은 패턴(성공률/
+지연/롤백률로 자동화 단계를 승급·강등시키는 구조)이 널리 퍼져 있음**을
+확인함(AWS Architecture Blog, Microsoft Community Hub, `agent-canary`
+오픈소스 라이브러리 등 §2 참고) — 그래서 기여 주장의 범위를 "이 업계
+전체에서 새롭다"가 아니라 **"동료심사 학술 문헌 대비 새롭다"**로 정확히
+좁혀야 한다. 그렇게 좁힌 범위 안에서, 이 프로젝트는 **RAG 캐시·멀티에이전트·
+Faithfulness 검증 세 요소를, SLO 기반 승인 게이트라는 네 번째 축으로 묶어
+실제 운영 VM 환경에서 전부 실측했다**는 데 기여가 있다고 본다 — 다만 이건
 검색 기반 표본 위에서 내린 판단이라 체계적 문헌조사(systematic literature
-review) 수준의 확실성은 아니고, 최종 포맷 확정 전에 한 번 더 검증이
-필요하다.
+review) 수준의 확실성은 아니다.
 
 ## 2. 관련 연구 비교
 
@@ -204,9 +216,21 @@ review) 수준의 확실성은 아니고, 최종 포맷 확정 전에 한 번 �
   Six Levels of Agentic Behavior](https://www.vellum.ai/blog/levels-of-agentic-behavior),
   [Autonomy Levels in AI Agents](https://www.emergentmind.com/topics/levels-of-autonomy-in-ai-agents))라,
   단일 핵심 논문을 못박기보다 "업계에 퍼진 설계 패턴을 SRE 자동화에 구체적
-  수치(SLO 승급 게이트)로 적용한 사례"로 서술하는 게 정확하다. 단계 승급
-  기준을 "일정 횟수 무사고 운영 실적"으로 두는 관행도 이 프로젝트의
-  `docs/SRE_PRACTICES.md` 승급 게이트와 같은 발상.
+  수치(SLO 승급 게이트)로 적용한 사례"로 서술하는 게 정확하다. **(2026-09-19
+  타겟 검색으로 재검증)** "SLO 수치로 자동화 단계를 승급/강등시키는 구조"를
+  동료심사 논문에서 더 좁혀 찾아봤지만 여전히 못 찾음(가장 가까운 arXiv
+  2506.12469, Feng·McDonald·Zhang, UW 2025 "Levels of Autonomy for AI
+  Agents"도 정성적 프레임일 뿐 수치 기준은 없음) — 다만 **2026년 업계
+  블로그·오픈소스에는 이미 같은 패턴이 흔함**: AWS Architecture Blog
+  "Closing the AI agent trust gap with graduated autonomy", Microsoft
+  Community Hub "Applying SRE to Autonomous AI Agents", 오픈소스
+  `agent-canary`(성공률/p95 지연 기준으로 1%→5%→25%→50%→100% 자동 롤아웃·
+  롤백)가 성공률·지연·롤백률 기준 승급/강등을 거의 동일하게 구현함. 그래서
+  이 프로젝트의 기여 주장은 "업계에 전례 없음"이 아니라 **"동료심사 학술
+  문헌 대비 전례를 못 찾음, 다만 2026년 업계 실무 패턴과는 방향이 같음"**
+  으로 정확히 좁혀 서술해야 한다(§1에 반영). 단계 승급 기준을 "일정 횟수
+  무사고 운영 실적"으로 두는 관행도 이 프로젝트의 `docs/SRE_PRACTICES.md`
+  승급 게이트와 같은 발상.
 - **설명 충실도(Faithfulness)**: Bias-Injection 실험은 [Turpin et al. 2023,
   NeurIPS](https://proceedings.neurips.cc/paper_files/paper/2023/hash/ed3fea9033a80fea1376299fa7863f4a-Abstract-Conference.html)
   의 방법론을 SRE 승인 판정이라는 안전-critical 도메인에 적용한 것.
