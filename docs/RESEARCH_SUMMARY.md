@@ -23,6 +23,54 @@ Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"�
 최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
 재확인할 땐 원본을 본다.
 
+## 초록 (Abstract)
+
+대회 형식이 뭐로 정해지든 논문/포스터/슬라이드 어디에나 거의 그대로
+재사용 가능한 유일한 "완성형" 산출물이라 미리 써둠(2026-09-19). §1~§5
+내용을 압축한 것이므로 본문 수정 시 이 절도 같이 갱신할 것.
+
+**국문**: 이 프로젝트는 로그 기반 장애를 실시간으로 진단·복구하는 자율
+MLOps 에이전트를, "검증된 만큼만 자동화 범위를 넓히는" 점진적 자율성
+(Progressive Autonomy) 구조로 설계했다. RAG 기반 벡터 캐시(L1)와 LLM
+폴백(L2)으로 구성된 진단 파이프라인에, 실행 성공 여부를 기준으로 캐시를
+스스로 정제하는 온라인 학습 루프, 그리고 승인 게이트에서 사람이 보는 판단
+근거가 실제로 신뢰할 만한지(Faithfulness) 검증하는 반사실적 조작·편향
+주입 두 실험을 결합했다. 실제 운영 VM 환경에서 실측한 결과, 진단→제안→
+검토 3단계 멀티에이전트 구조 도입으로 완전자동 실행 성공률이 6~8%에서
+26%로 개선됐고, 편향 문구를 주입해도 승인 판정의 조작 성공률은 0%로
+나타나 판단 근거가 입력을 충실히 반영함을 확인했다. 반면 QLoRA로
+파인튜닝한 소형 모델은 학습 분포 밖 새 에러 유형에서 상용 LLM(Groq)
+대비 전 지표에서 열세를 보여 과적합 위험을 실측으로 드러냈다. 관련 연구
+9편을 검토한 결과 RAG 캐시·멀티에이전트 진단·설명 충실도 검증 개별 요소는
+각각 선행 연구가 있었지만, 이를 SLO 수치 기반 승인 게이트라는 축으로 묶어
+실제 운영 환경에서 전부 실측한 사례는 찾지 못했다 — 이 결합과, 완전
+자동화가 아닌 단계적 신뢰 구축이 실제로 측정 가능한 효과를 내는지를
+정량적으로 보이는 게 이 연구의 기여다.
+
+**English**: This project designs an autonomous MLOps agent that diagnoses
+and remediates log-based failures in real time under a **Progressive
+Autonomy** principle — expanding automation scope only as far as it has
+been empirically validated. A RAG-based vector cache (L1) backed by an
+LLM fallback (L2) is paired with an outcome-gated online-learning loop
+(cache entries are kept or evicted based on real execution success/
+failure, not time) and two faithfulness probes — counterfactual target
+manipulation and bias injection — that test whether the explanations
+shown at the human-approval gate actually track the model's real
+reasoning. Measured on a live production VM, introducing a three-stage
+diagnose→propose→review multi-agent structure raised the fully-automatic
+execution success rate from 6-8% to 26%, and injected bias phrases
+produced a 0% manipulation success rate on approval verdicts, indicating
+the shown rationale is faithful to the input. Conversely, a QLoRA-tuned
+small model underperformed a commercial LLM (Groq) on every metric for
+novel (out-of-distribution) error types, empirically exposing an
+overfitting risk. A review of 9 related papers found prior work on each
+individual component (RAG caching, multi-agent diagnosis, faithfulness
+testing) but none that combines them under an SLO-gated approval axis
+and validates the whole pipeline on a live production system — this
+combination, and the quantitative demonstration that staged trust-building
+(rather than full automation) produces measurable gains, is this work's
+contribution.
+
 ## 1. 문제의식
 
 완전 자동화된 장애 복구는 매력적이지만 위험도 크다 — LLM이 잘못 진단한
