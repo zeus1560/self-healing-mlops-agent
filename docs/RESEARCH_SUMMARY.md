@@ -12,10 +12,12 @@
 
 **진행 상태**: 1차 착수 — 이미 나온 결과를 모으고 구조를 잡은 단계, §2
 관련 연구 비교까지 초안 추가(2026-09-18, 웹 검색 기반), 서지사항 확정 +
-§1 서론 문장화까지 완료(2026-09-19). 아직 안 된 것: §2 인용 논문 원문
-정독(세부 수치 직접 인용 전 필요), §1의 "기여" 주장이 실제로 타당한지
-§2 원문으로 재검증, 최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에
-링크해뒀으니 숫자를 재확인할 땐 원본을 본다.
+§1 서론 문장화(2026-09-19), Turpin/Kamoi 2편 abstract 정독으로 방법론·
+핵심결론 정확도 보강(2026-09-19). 아직 안 된 것: 나머지 인용 논문(특히
+IT Support RAG, GPT Semantic Cache) 본문 정독 — abstract만으론 확인 안
+되는 차별점 주장이 §2·§5에 남아있음, §1의 "기여" 주장이 실제로 타당한지
+재검증, 최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니
+숫자를 재확인할 땐 원본을 본다.
 
 ## 1. 문제의식
 
@@ -72,21 +74,30 @@ Faithfulness 검증)은 각각 선행 연구가 있지만 이 프로젝트는 **
 - **RAG 기반 원인진단/사고 대응**: [eARCO](https://arxiv.org/html/2504.11505v1)
   (프롬프트 최적화 결합), [Retrieval Augmented Generation-Based Incident
   Resolution Recommendation System for IT Support](https://arxiv.org/pdf/2409.13707)
-  (IT 지원 티켓에 RAG로 과거 해결책 추천 — 목적이 이 프로젝트의 L1 캐시와
-  가장 유사), [Flow-of-Action](https://arxiv.org/pdf/2502.08224)(SOP 강화
-  멀티에이전트 RCA — 이 프로젝트의 진단→제안→검토 3단계와 구조적으로 비교할
-  거리)가 있다. 공통적으로 "리트리버 품질이 병목"이라는 한계가 지적되는데,
-  §3의 False Positive/threshold 실측이 바로 이 병목을 이 프로젝트 맥락에서
-  정량화한 사례로 자리매김할 수 있다.
-- **시맨틱 캐시 (L1 캐시의 이론적 위치)**: [GPT Semantic Cache](https://arxiv.org/abs/2411.05276),
-  [VectorQ: Adaptive Semantic Prompt Caching](https://arxiv.org/html/2502.03771v1),
+  (IT 지원 티켓에 RAG + 인코더 분류 모델 + 생성 LLM 조합, 목적이 이
+  프로젝트의 L1 캐시와 가장 유사), [Flow-of-Action](https://arxiv.org/pdf/2502.08224)
+  (SOP 강화 멀티에이전트 RCA — 이 프로젝트의 진단→제안→검토 3단계와
+  구조적으로 비교할 거리)가 있다. 공통적으로 "리트리버 품질이 병목"이라는
+  한계가 지적되는데, §3의 False Positive/threshold 실측이 바로 이 병목을
+  이 프로젝트 맥락에서 정량화한 사례로 자리매김할 수 있다. **(2026-09-19
+  abstract 확인)** IT Support 논문의 abstract만으론 이 시스템이 온라인
+  학습(신규 해결 사례를 자동으로 지식베이스에 반영)을 하는지 확인이
+  안 됐다 — "L1 캐시가 온라인 학습까지 한다"는 차별점 주장을 하려면 이
+  논문 본문을 읽고 실제로 정적 지식베이스인지 확인해야 함(§5 한계).
+- **시맨틱 캐시 (L1 캐시의 이론적 위치)**: [GPT Semantic Cache](https://arxiv.org/abs/2411.05276)
+  (Redis에 쿼리 임베딩 저장, API 호출 최대 68.8% 감소, 캐시 히트율
+  61.6~68.8%, 히트 정확도 97% 이상 — 2026-09-19 abstract 확인), [VectorQ:
+  Adaptive Semantic Prompt Caching](https://arxiv.org/html/2502.03771v1),
   GPTCache — 임베딩 유사도로 LLM 호출을 캐시 히트로 대체해 지연·비용을
-  줄이는 일반 기법과 L1(ChromaDB) 캐시는 본질적으로 같은 아이디어. 다만
-  일반적인 시맨틱 캐시 연구는 정적 캐시(사전에 채워둔 것만 히트)를 다루는
-  반면, 이 프로젝트는 **런타임 성공 사례를 자동 upsert하는 온라인 학습**
-  (`learn_from_feedback`)까지 포함한다는 게 차별점 — 다만 이게 실제로
-  캐시 오염 위험 없이 유효한지는 별도 검증이 필요하고 아직 안 함(§5 한계에
-  이미 반영).
+  줄이는 일반 기법과 L1(ChromaDB) 캐시는 본질적으로 같은 아이디어. **주의
+  (2026-09-19 정정)**: GPT Semantic Cache의 abstract는 캐시가 정적인지
+  동적으로 갱신되는지 명시하지 않음 — 앞선 초안에서 "일반 시맨틱 캐시는
+  정적 캐시만 다룬다"고 단정한 건 abstract만으로는 확인 안 되는 주장이라
+  철회. 이 프로젝트의 L1 캐시가 **런타임 성공 사례를 자동 upsert하는 온라인
+  학습**(`learn_from_feedback`)을 한다는 사실 자체는 맞지만, 이게 일반
+  시맨틱 캐시 연구 대비 차별점인지는 각 논문 본문을 읽어야 확정할 수 있다
+  (§5 한계). 이 차별점이 확인되더라도 캐시 오염 위험 없이 유효한지는 별도
+  검증 필요, 아직 안 함.
 - **점진적 자율성(Progressive Autonomy)**: 자율주행 SAE 레벨을 본뜬
   "단계적 자율성" 프레임은 AI 에이전트 일반에서 자주 쓰이는 비유([Vellum —
   Six Levels of Agentic Behavior](https://www.vellum.ai/blog/levels-of-agentic-behavior),
@@ -97,18 +108,32 @@ Faithfulness 검증)은 각각 선행 연구가 있지만 이 프로젝트는 **
   `docs/SRE_PRACTICES.md` 승급 게이트와 같은 발상.
 - **설명 충실도(Faithfulness)**: Bias-Injection 실험은 [Turpin et al. 2023,
   NeurIPS](https://proceedings.neurips.cc/paper_files/paper/2023/hash/ed3fea9033a80fea1376299fa7863f4a-Abstract-Conference.html)
-  (CoT 설명이 실제 판단 근거를 반영 안 할 수 있다는 원 논문, 방법론 설계 시
-  이미 참고함)의 방법론을 SRE 승인 판정이라는 안전-critical 도메인에 적용한
-  것. 최근 관련 연구로 [Investigating the Effects of Cognitive Biases in
-  Prompts on Large Language Model Outputs](https://arxiv.org/pdf/2506.12338)도
-  같은 계열. 다만 Kamoi, Zhang, Zhang, Han, Zhang(2024, TACL), [When Can
-  LLMs Actually Correct Their Own Mistakes? A Critical Survey of
+  의 방법론을 SRE 승인 판정이라는 안전-critical 도메인에 적용한 것.
+  **(2026-09-19 abstract 확인)** 원 논문은 few-shot 프롬프트의 객관식
+  선택지를 항상 "(A)"가 정답이 되도록 재배열하는 식으로 편향을 주입해
+  BIG-Bench Hard 13개 태스크(GPT-3.5, Claude 1.0)에서 정확도가 최대
+  36%까지 떨어지는 걸 보이고, 모델이 그 편향 요인을 설명에서 언급하지
+  않은 채 그럴듯한 사후 합리화를 만든다는 걸 확인함 — 이 프로젝트의
+  Bias-Injection 설계(대상 고정+편향 문구 주입, 언급 여부 측정)와 방법론
+  골격이 정확히 같다. 다만 원 논문은 GPT-3.5/Claude 1.0(2023년 기준)
+  대상이라, 이후 세대 모델(이 프로젝트는 최신 Groq 모델)에서 재현되는지를
+  보여준다는 것도 이 실험의 의의로 추가할 수 있다. 최근 관련 연구로
+  [Investigating the Effects of Cognitive Biases in Prompts on Large
+  Language Model Outputs](https://arxiv.org/pdf/2506.12338)도 같은 계열.
+  다만 Kamoi, Zhang, Zhang, Han, Zhang(2024, TACL), [When Can LLMs
+  Actually Correct Their Own Mistakes? A Critical Survey of
   Self-Correction of LLMs](https://arxiv.org/abs/2406.01297)류 서베이는
-  self-correction/self-reflection 신뢰도에 전반적으로 회의적("신뢰할 수
-  있는 외부 피드백이 있는 태스크에서만 잘 작동한다"는 게 핵심 결론) —
-  이 프로젝트의
-  "조작 성공률 0%" 결과가 그 회의론과 다른 방향인 이유(표본 크기, 태스크
-  특이성)를 논문에서 명시적으로 다뤄야 방어 가능한 주장이 된다.
+  self-correction 신뢰도에 회의적 — **(2026-09-19 abstract 확인)** 정확히는
+  "프롬프트만으로 준 피드백에 의한 자기수정은 성공 사례가 없다, 신뢰할
+  수 있는 외부 피드백이 있는 태스크에서만 잘 작동한다, 대규모 파인튜닝은
+  자기수정을 가능하게 한다"는 세 가지 조건을 제시함. **이 프로젝트의
+  결과와의 관계를 정확히 따지면**: Kamoi et al.이 다루는 "자기수정"은
+  "이미 틀린 답을 스스로 고치는 능력"이고, 이 프로젝트의 Bias-Injection이
+  측정한 건 "원래 맞는 판단(거부)을 편향 유도에도 안 바꾸는 능력(충실한
+  거부)"이라 같은 능력이 아니다 — 그래서 "조작 성공률 0%"가 Kamoi et al.의
+  회의론과 모순되지 않을 수 있다. 다만 이 구분이 논문에서 방어 가능하려면
+  "자기수정"과 "편향에 대한 저항"을 왜 다른 능력으로 취급하는지 근거를
+  더 붙여야 한다(표본 크기 문제와는 별개의 논점).
 
 ## 3. 실험 결과 종합
 
@@ -152,8 +177,12 @@ Faithfulness 검증)은 각각 선행 연구가 있지만 이 프로젝트는 **
 - 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
 - L1 캐시의 온라인 학습(§2에서 지적한 차별점)이 캐시 오염 위험 없이
   유효한지는 별도 검증 필요, 아직 안 함.
-- §2 관련 연구 인용은 전부 서지사항(저자·게재처·링크)까지 확인됐지만
-  원문 전체를 정독한 건 아니라, 세부 수치를 직접 인용할 땐 원문 재확인 필요.
+- §2 관련 연구 인용은 전부 서지사항(저자·게재처·링크)까지 확인됐고, 그 중
+  Turpin et al. 2023과 Kamoi et al. 2024는 abstract 수준까지 확인해 방법론·
+  핵심 결론을 정확히 반영함(2026-09-19). 나머지(IT Support RAG 논문의
+  온라인 학습 여부, GPT Semantic Cache의 정적/동적 캐시 여부 등)는 abstract
+  만으로 확인이 안 돼 "우리 시스템과 다르다"는 차별점 주장을 아직 확정하지
+  못했다 — 전체 정독 필요.
 
 ## 6. 아직 안 된 것
 
