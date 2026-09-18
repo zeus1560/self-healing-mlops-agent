@@ -12,12 +12,16 @@
 
 **진행 상태**: 1차 착수 — 이미 나온 결과를 모으고 구조를 잡은 단계, §2
 관련 연구 비교까지 초안 추가(2026-09-18, 웹 검색 기반), 서지사항 확정 +
-§1 서론 문장화(2026-09-19), 핵심 인용 4편(Turpin, Kamoi, IT Support RAG,
-GPT Semantic Cache) 정독 — 이 과정에서 GPT Semantic Cache 관련 차별점
-주장이 틀렸던 걸 발견해 정정함(2026-09-19). 아직 안 된 것: 나머지 인용
-(eARCO/Flow-of-Action/STRATUS/Sarda et al./AIOps 서베이 등) 본문 정독,
-§1의 "기여" 주장이 실제로 타당한지 재검증, 최종 포맷 변환. 원본 실측
-커밋/스크립트는 각 절에 링크해뒀으니 숫자를 재확인할 땐 원본을 본다.
+§1 서론 문장화(2026-09-19), §2에 인용한 논문 9편 전부 abstract 이상 정독
+완료 — Turpin/Kamoi/IT Support RAG/GPT Semantic Cache/eARCO/Flow-of-Action/
+STRATUS/Sarda et al./AIOps 서베이(2026-09-19). 이 과정에서 GPT Semantic
+Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"는 암시적
+주장, 2건이 틀렸던 걸 발견해 정정·철회함 — 대신 AIOps 서베이 §7.1이
+"저지연 장애탐지를 해낸 LLM 연구가 아직 없다"고 콕 집은 대목에 이
+프로젝트의 L1(<150ms)을 대응시키는 더 강한 포지셔닝을 새로 찾음. 아직
+안 된 것: §1의 "기여" 주장이 이 9편 대비로 실제 타당한지 최종 재검증,
+최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
+재확인할 땐 원본을 본다.
 
 ## 1. 문제의식
 
@@ -41,52 +45,94 @@ GPT Semantic Cache) 정독 — 이 과정에서 GPT Semantic Cache 관련 차별
 4. **자동화 범위를 넓혔을 때 실제로 좋아지는가** — 단계 승급이 숫자로
    정당화되는가 (§3 멀티에이전트 3단계 효과)
 
-이 네 질문 각각을 별도 실험으로 검증한 결과가 §3이다. §2에서 정리한
-선행 연구 지형 위에 놓고 보면, 개별 요소 기술(RAG 캐시, 멀티에이전트 RCA,
-Faithfulness 검증)은 각각 선행 연구가 있지만 이 프로젝트는 **그 네 가지를
-승인 게이트 기반의 단일 파이프라인에 묶어 실제 운영 VM 환경에서 전부
-실측했다**는 데 기여가 있다고 잠정적으로 본다 — 다만 이 기여 주장은
-§2 원문을 더 읽어 정말 그런 결합이 드문지 확인하기 전까지는 초안 수준으로
-취급한다.
+이 네 질문 각각을 별도 실험으로 검증한 결과가 §3이다. §2에서 정리한 9편
+(2026-09-19 기준 전부 abstract 이상 정독 완료) 위에 놓고 보면, 개별 요소
+기술은 각각 선행 연구가 있다 — RAG 캐시(IT Support RAG, eARCO), 멀티에이전트
+RCA/조치(Flow-of-Action, STRATUS, Sarda et al.), Faithfulness 검증(Turpin,
+Kamoi). 이 중 STRATUS·Flow-of-Action은 "너무 복잡하면 사람에게 넘긴다"는
+이스케이프 경로 정도는 있지만, **SLO 수치 기준으로 자동화 단계를 명시적으로
+승급시키는 구조**(이 프로젝트의 Progressive Autonomy)를 다룬 논문은 §2
+9편 중엔 없었다. 그래서 이 프로젝트는 **RAG 캐시·멀티에이전트·Faithfulness
+검증 세 요소를, SLO 기반 승인 게이트라는 네 번째 축으로 묶어 실제 운영
+VM 환경에서 전부 실측했다**는 데 기여가 있다고 본다 — 다만 이건 9편의
+검색 기반 표본 위에서 내린 판단이라 체계적 문헌조사(systematic literature
+review) 수준의 확실성은 아니고, 최종 포맷 확정 전에 한 번 더 검증이
+필요하다.
 
 ## 2. 관련 연구 비교
 
 이 프로젝트를 이루는 네 갈래(RAG 기반 원인진단/캐시, LLM 기반 자동 조치,
 점진적 자율성 단계, 설명 충실도 검증) 각각을 최근 연구·업계 흐름 어디에
-자리매김할지 정리. **주의**: 2026-09-18 웹 검색으로 찾은 포인터 모음이라
-원문을 정독하지 않았음 — 실제 인용 전에 서지사항(저자·게재처·정확한
-페이지)을 원문에서 재확인해야 하고, 링크가 없는 항목은 검색 요약에만
-등장해 정확한 출처를 아직 못 찾은 것.
+자리매김할지 정리. 2026-09-18 웹 검색으로 후보를 찾고(1차), 2026-09-19에
+학술 논문 9편은 abstract 이상(일부 PDF 본문)까지 정독해 서지사항과 핵심
+주장을 검증·정정함(§5에 정정 이력) — 자율주행 SAE 레벨 비유처럼 학술
+논문이 아닌 블로그 자료는 검증 대상에서 제외하고 "비유"로만 표시.
 
 - **LLM 기반 자동 원인진단·조치**: 분야 전반 동향은 [A Survey of AIOps in
-  the Era of Large Language Models](https://arxiv.org/pdf/2507.12472)에
-  정리돼 있음. 가장 가까운 개별 연구로 Sarda, Namrud, Litoiu, Shwartz,
-  Watts, ["Leveraging Large Language Models for the Auto-remediation of
+  the Era of Large Language Models](https://arxiv.org/pdf/2507.12472)(J.
+  ACM, 2025-08)에 정리돼 있음. **(2026-09-19 PDF 본문 확인)** 이 서베이는
+  RQ1(데이터)~RQ4(평가) 4축 taxonomy로 구성되고, 앞선 초안에서 "점진적
+  자율성/승인 게이트를 다룬다"고 암시했던 건 **본문에 없어 철회** —
+  §7(과제와 향후 방향)은 인간 감독/승인 단계가 아니라 (1) 비용·시간효율,
+  (2) trace 데이터 미활용, (3) 소프트웨어 변화에 대한 일반화, (4) 기존
+  AIOps 툴체인과의 통합 4가지만 다룸. 대신 훨씬 더 쓸모있는 대목을
+  찾았다 — **§7.1에서 "장애 탐지(failure perception)는 10초 주기로 계속
+  돌면서 1초 안에 추론을 끝내야 하는데, 이걸 제대로 해낸 LLM 기반 연구가
+  아직 없다"고 명시적으로 지적**한다. 이 프로젝트의 L1(ChromaDB 벡터
+  유사도, <150ms) 캐시가 바로 이 문제에 대한 하나의 답이라, "이 서베이가
+  콕 집어 미해결이라 부른 지점에 이 프로젝트의 결과를 놓을 수 있다"는
+  게 더 강한 포지셔닝이 됨 — §3 False Positive/threshold 실측(리트리버
+  품질 정량화)과 같이 묶어 쓸 수 있다.
+  가장 가까운 개별 연구로 Sarda, Namrud, Litoiu, Shwartz, Watts,
+  ["Leveraging Large Language Models for the Auto-remediation of
   Microservice Applications: An Experimental Study"](https://dl.acm.org/doi/10.1145/3663529.3663855)
   (FSE 2024 Industry Track — Ansible 플레이북을 LLM으로 생성·실행해
-  마이크로서비스 이슈를 자동 조치, 커스텀 데이터셋으로 파인튜닝)와
-  [STRATUS: A Multi-agent System
-  for Autonomous Reliability Engineering of Modern Clouds](https://www.atlantis-press.com/article/126020167.pdf)
-  가 목적이 가장 겹친다 — 둘 다 LLM으로 원인진단→조치를 자동화. 차이점:
-  이 프로젝트는 마이크로서비스 오케스트레이션이 아니라 **로그 라인 단위
-  탐지 → RAG 캐시(L1) 우선 조회 → LLM(L2) 폴백**이라는 더 가벼운 구조이고,
-  승인 게이트(Progressive Autonomy)를 축으로 설계했다는 점이 다르다.
+  마이크로서비스 이슈를 자동 조치, 커스텀 데이터셋으로 파인튜닝.
+  **(2026-09-19 확인)** 기능적 정확도 95.45%, 평균 정확도 98.86%로 SOTA
+  주장 — 이 프로젝트의 L2 정확도(92%/96%)나 end-to-end 완전자동 실행
+  성공률(26%)보다 훨씬 높은데, 이건 평가 방식이 다르기 때문일 가능성이
+  큼(이쪽은 큐레이션된 Ansible 태스크셋 안에서의 정확도, 이 프로젝트는
+  보안 화이트리스트·self-reflection까지 전부 통과한 end-to-end 비율) —
+  직접 비교하면 안 되고, 왜 다른지 논문에서 명시해야 함)와 [STRATUS: A
+  Multi-agent System for Autonomous Reliability Engineering of Modern
+  Clouds](https://www.atlantis-press.com/article/126020167.pdf)(**2026-09-19
+  확인**: CrewAI 기반 4개 전문 에이전트 — Incident Resolution Manager
+  [오케스트레이터], JIRA Manager, Root Cause Analyzer, Code Fix Generator.
+  RCA 정밀도 68%, 단순 작업에선 최대 96%, 에이전트 간 작업 위임 정확도
+  71%. "에이전트가 처리하기 너무 복잡하면 사람에게 넘긴다"는 이스케이프
+  경로가 있지만 Jira 티켓 상태 기반이라, 이 프로젝트처럼 SLO 승급 게이트로
+  자동화 단계 자체를 명시적으로 관리하는 구조는 아님)가 목적이 가장
+  겹친다. 차이점: 이 프로젝트는 마이크로서비스 오케스트레이션이 아니라
+  **로그 라인 단위 탐지 → RAG 캐시(L1) 우선 조회 → LLM(L2) 폴백**이라는
+  더 가벼운 구조이고, 승인 게이트(Progressive Autonomy)를 축으로
+  설계했다는 점이 다르다.
 - **RAG 기반 원인진단/사고 대응**: [eARCO](https://arxiv.org/html/2504.11505v1)
-  (프롬프트 최적화 결합), [Retrieval Augmented Generation-Based Incident
-  Resolution Recommendation System for IT Support](https://arxiv.org/pdf/2409.13707)
-  (IT 지원 티켓에 RAG + 인코더 분류 모델 + 생성 LLM 조합, 목적이 이
-  프로젝트의 L1 캐시와 가장 유사), [Flow-of-Action](https://arxiv.org/pdf/2502.08224)
-  (SOP 강화 멀티에이전트 RCA — 이 프로젝트의 진단→제안→검토 3단계와
-  구조적으로 비교할 거리)가 있다. 공통적으로 "리트리버 품질이 병목"이라는
-  한계가 지적되는데, §3의 False Positive/threshold 실측이 바로 이 병목을
-  이 프로젝트 맥락에서 정량화한 사례로 자리매김할 수 있다. **(2026-09-19
-  PDF 본문 확인)** IT Support 논문의 지식베이스는 Milvus에 색인된 제품
-  문서 500만+ 건짜리 **정적 코퍼스**이고(§4.2 근처), 배포 계획(§5)도
-  "상담원이 별점·useful/not useful로 수동 평가하는 피드백 버튼을 향후
-  붙일 예정"이라 아직 미배포 상태 — 즉 이 논문은 **자동 온라인 학습이
-  없다는 게 실제로 확인됨**(계획조차 수동 평가 UI지 자동 upsert가 아님).
-  그래서 "L1 캐시가 성공 사례를 자동으로 upsert하는 온라인 학습을 한다"는
-  이 프로젝트의 차별점 주장은 이 논문 대비로는 유효하다.
+  (**2026-09-19 확인**: PromptWizard로 프롬프트를 한 번 최적화한 뒤,
+  런타임에 FAISS로 유사 과거 인시던트 top-10을 검색해 프롬프트에 결합 —
+  GPT-4o 기준 수동 프롬프트 대비 21% 정확도 향상, 0-shot 대비 10-shot이
+  완전셋 27%/필터셋 37% 향상. 저자들이 직접 밝힌 한계: Microsoft 사내
+  인시던트 데이터로만 평가해 다른 조직 데이터에서 재현될지 미검증 —
+  이 프로젝트의 QLoRA/Groq 비교가 겪은 것과 같은 종류의 일반화 한계),
+  [Retrieval Augmented Generation-Based Incident Resolution Recommendation
+  System for IT Support](https://arxiv.org/pdf/2409.13707)(IT 지원 티켓에
+  RAG + 인코더 분류 모델 + 생성 LLM 조합, 목적이 이 프로젝트의 L1 캐시와
+  가장 유사), [Flow-of-Action](https://arxiv.org/pdf/2502.08224)(**2026-09-19
+  확인**: SOP 지식베이스 + 5개 에이전트[MainAgent/CodeAgent/JudgeAgent/
+  ObAgent/ActionAgent] 구조. 핵심 결과: ReAct 단일 에이전트 기준선 원인
+  위치 정확도 **35.50%** → Flow-of-Action **64.01%**로 개선 — **이 프로젝트의
+  멀티에이전트 3단계 효과(6~8%→26%, §3)와 같은 방향의 주장(멀티에이전트
+  구조화가 단일 에이전트/체인보다 낫다)을 다른 도메인·다른 절대수치로
+  뒷받침하는 선행 사례**로 정확히 자리매김할 수 있다)가 있다. 공통적으로
+  "리트리버 품질이 병목"이라는 한계가 지적되는데, §3의 False Positive/
+  threshold 실측이 바로 이 병목을 이 프로젝트 맥락에서 정량화한 사례로
+  자리매김할 수 있다. **(2026-09-19 PDF 본문 확인)** IT Support 논문의
+  지식베이스는 Milvus에 색인된 제품 문서 500만+ 건짜리 **정적 코퍼스**이고
+  (§4.2 근처), 배포 계획(§5)도 "상담원이 별점·useful/not useful로 수동
+  평가하는 피드백 버튼을 향후 붙일 예정"이라 아직 미배포 상태 — 즉 이
+  논문은 **자동 온라인 학습이 없다는 게 실제로 확인됨**(계획조차 수동
+  평가 UI지 자동 upsert가 아님). 그래서 "L1 캐시가 성공 사례를 자동으로
+  upsert하는 온라인 학습을 한다"는 이 프로젝트의 차별점 주장은 이 논문
+  대비로는 유효하다.
 - **시맨틱 캐시 (L1 캐시의 이론적 위치)**: [GPT Semantic Cache](https://arxiv.org/abs/2411.05276),
   [VectorQ: Adaptive Semantic Prompt Caching](https://arxiv.org/html/2502.03771v1),
   GPTCache — 임베딩 유사도로 LLM 호출을 캐시 히트로 대체해 지연·비용을
@@ -184,15 +230,17 @@ Faithfulness 검증)은 각각 선행 연구가 있지만 이 프로젝트는 **
 - 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
 - L1 캐시의 온라인 학습(§2에서 지적한 차별점)이 캐시 오염 위험 없이
   유효한지는 별도 검증 필요, 아직 안 함.
-- §2 관련 연구 인용은 전부 서지사항까지 확인됐고, 그 중 Turpin et al.
-  2023·Kamoi et al. 2024(abstract), IT Support RAG 논문·GPT Semantic
-  Cache(PDF 본문)는 실제로 읽어 방법론·핵심 결론을 반영·정정함(2026-09-19).
-  이 과정에서 앞선 초안의 "일반 시맨틱 캐시는 정적이다"는 주장이 **틀린
-  것으로 확인돼 철회**하고, 진짜 차이(TTL 기반 vs 실행결과 기반 캐시
-  관리)로 다시 씀 — 웹 검색 요약만으로 차별점을 단정하면 안 된다는 걸
-  보여준 사례. eARCO·Flow-of-Action·STRATUS·Sarda et al.(FSE 2024)·
-  AIOps 서베이·점진적 자율성 관련 자료는 아직 abstract만 확인, 본문
-  미정독 상태.
+- §2 인용 논문 9편 전부(Turpin, Kamoi, IT Support RAG, GPT Semantic Cache,
+  eARCO, Flow-of-Action, STRATUS, Sarda et al., AIOps 서베이) abstract
+  이상 정독 완료(2026-09-19, 일부는 PDF 본문까지). 이 과정에서 초안 주장
+  2건이 **틀린 것으로 확인돼 철회**됨: (1) "일반 시맨틱 캐시는 정적이다" →
+  GPT Semantic Cache도 동적 upsert였음, 진짜 차이는 TTL 기반 vs 실행결과
+  기반 캐시 관리로 재정의. (2) "AIOps 서베이가 점진적 자율성을 다룬다" →
+  본문엔 없었음, 철회. 웹 검색 요약만으로 차별점을 단정하면 안 된다는 걸
+  이번에 직접 확인한 셈 — 남은 위험은 이 9편이 검색으로 찾은 표본이라
+  이 분야를 대표하는 체계적 문헌조사가 아니라는 점(§1에 명시).
+  자율주행 SAE 레벨 비유(Vellum 등 블로그)는 학술 논문이 아니라서 검증
+  대상에서 제외했고, 그 성격 그대로 서술에 반영돼 있음.
 
 ## 6. 아직 안 된 것
 
