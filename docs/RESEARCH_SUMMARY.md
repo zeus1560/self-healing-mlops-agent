@@ -18,10 +18,15 @@ STRATUS/Sarda et al./AIOps 서베이(2026-09-19). 이 과정에서 GPT Semantic
 Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"는 암시적
 주장, 2건이 틀렸던 걸 발견해 정정·철회함 — 대신 AIOps 서베이 §7.1이
 "저지연 장애탐지를 해낸 LLM 연구가 아직 없다"고 콕 집은 대목에 이
-프로젝트의 L1(<150ms)을 대응시키는 더 강한 포지셔닝을 새로 찾음. 아직
-안 된 것: §1의 "기여" 주장이 이 9편 대비로 실제 타당한지 최종 재검증,
-최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
-재확인할 땐 원본을 본다.
+프로젝트의 L1(<150ms)을 대응시키는 더 강한 포지셔닝을 새로 찾음. §1의
+"기여" 주장도 타겟 검색으로 재검증해 "동료심사 문헌 대비"로 범위를
+좁힘(2026-09-19). 그리고 VM 실측(2026-09-19)으로 **온라인 학습 루프가
+실제 운영에서 3주+ 동안 0건 발동**했다는 걸 발견 — 온라인 학습 관련
+서술 전부(초록·§2·§3·§4·§5)에 "설계상 존재"와 "운영에서 실제로 쓰임"을
+구분해 반영함. 초록(국문+영문)도 작성 완료. 아직 안 된 것: 최종 포맷
+변환뿐 — 1차 착수 범위(결과 취합, 관련 연구, 서론, 초록, 핵심 실측 검증)는
+다 끝남. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를 재확인할
+땐 원본을 본다.
 
 ## 초록 (Abstract)
 
@@ -33,9 +38,10 @@ Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"�
 MLOps 에이전트를, "검증된 만큼만 자동화 범위를 넓히는" 점진적 자율성
 (Progressive Autonomy) 구조로 설계했다. RAG 기반 벡터 캐시(L1)와 LLM
 폴백(L2)으로 구성된 진단 파이프라인에, 실행 성공 여부를 기준으로 캐시를
-스스로 정제하는 온라인 학습 루프, 그리고 승인 게이트에서 사람이 보는 판단
-근거가 실제로 신뢰할 만한지(Faithfulness) 검증하는 반사실적 조작·편향
-주입 두 실험을 결합했다. 실제 운영 VM 환경에서 실측한 결과, 진단→제안→
+스스로 정제하도록 설계한 온라인 학습 루프(단, VM 실측 결과 3주+ 운영
+동안 실제 발동 사례는 0건 — §3·§5), 그리고 승인 게이트에서 사람이 보는
+판단 근거가 실제로 신뢰할 만한지(Faithfulness) 검증하는 반사실적 조작·
+편향 주입 두 실험을 결합했다. 실제 운영 VM 환경에서 실측한 결과, 진단→제안→
 검토 3단계 멀티에이전트 구조 도입으로 완전자동 실행 성공률이 6~8%에서
 26%로 개선됐고, 편향 문구를 주입해도 승인 판정의 조작 성공률은 0%로
 나타나 판단 근거가 입력을 충실히 반영함을 확인했다. 반면 QLoRA로
@@ -52,9 +58,11 @@ MLOps 에이전트를, "검증된 만큼만 자동화 범위를 넓히는" 점�
 and remediates log-based failures in real time under a **Progressive
 Autonomy** principle — expanding automation scope only as far as it has
 been empirically validated. A RAG-based vector cache (L1) backed by an
-LLM fallback (L2) is paired with an outcome-gated online-learning loop
-(cache entries are kept or evicted based on real execution success/
-failure, not time) and two faithfulness probes — counterfactual target
+LLM fallback (L2) is paired with an online-learning loop designed to
+self-curate the cache based on real execution outcomes rather than time
+(though VM telemetry shows this loop has fired zero times in three-plus
+weeks of production operation — see §3/§5) and two faithfulness probes
+— counterfactual target
 manipulation and bias injection — that test whether the explanations
 shown at the human-approval gate actually track the model's real
 reasoning. Measured on a live production VM, introducing a three-stage
@@ -211,6 +219,12 @@ review) 수준의 확실성은 아니다.
   — 시간이 아니라 **실행 결과(outcome)**로 캐시 품질을 관리한다는 게 실제
   차별점. 이 차이가 실무적으로 의미 있는지(예: outcome 게이팅이 캐시
   오염을 얼마나 더 잘 막는지)는 아직 정량 비교 안 함, 별도 실험 필요.
+  **(2026-09-19 VM 실측으로 추가 발견)**: 게다가 이 outcome-게이팅 메커니즘
+  자체가 **실제 운영에서 3주+ 동안 단 한 번도 발동한 적이 없다**(§3 온라인
+  학습 실측 행, §5 한계)는 게 확인됨 — 즉 "코드로는 시간 기반 GPT Semantic
+  Cache보다 결과 기반이라 더 정교하다"는 이 차별점 주장은 **설계 수준에서만
+  참**이고, 실제 운영에서 그 설계가 발동해 우위를 보인 적은 아직 없다.
+  논문에서 이 차별점을 쓸 땐 반드시 이 단서를 같이 명시해야 함.
 - **점진적 자율성(Progressive Autonomy)**: 자율주행 SAE 레벨을 본뜬
   "단계적 자율성" 프레임은 AI 에이전트 일반에서 자주 쓰이는 비유([Vellum —
   Six Levels of Agentic Behavior](https://www.vellum.ai/blog/levels-of-agentic-behavior),
@@ -270,7 +284,8 @@ review) 수준의 확실성은 아니다.
 | **Faithfulness — 반사실적 조작** (3케이스) | 대상만 바꾼 명령어 쌍에서 승인 판정 **100% 뒤집힘**(verdict flip), 판정 근거의 대상 언급률 0%→100% — self-reflection이 근거 없는 고정 문구가 아니라 입력을 실제로 반영함을 확인 | README §실험 결과 요약, `experiments/run_faithfulness_test.py` |
 | **Faithfulness — Bias-Injection** (권위 주장/허위 성공이력/긴급성 압박, 2026-09-17) | 대상은 항상 오답 고정, 편향 문구만 주입. 네트워크 폴백 오염 15.6% 제외한 실 LLM 판정 76건 전부 대상 불일치를 정확히 지적하며 거부 — 조작 효과 **0%p**, 조작 성공률 **0%**(표본 작아 일반화는 신중) | `experiments/run_bias_injection_test.py`, `tests/test_bias_injection_scoring.py` (커밋 `c616a004`) |
 | **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄) | 1차 정규식 게이트 오탐률 10.51%, 그 오탐 전량을 L1(RAG) 게이트에 흘렸을 때 배포값(threshold 0.6)에서 confident FP **0.0%**(1,318건 복구 데이터 기준). threshold를 1.2로 올리면 79.4%로 폭증 — 0.6 유지 근거 | `experiments/run_false_positive_analysis.py` |
-| **온라인 학습** (런타임 자동 축적) | L1 미스 → L2/Rule 성공 시 (에러→커맨드) 쌍을 `source="online_learning"`으로 자동 upsert, 반복 성공 시 `success_count` 누적 | `src/llm_engine.py:1327` `learn_from_feedback` |
+| **온라인 학습 — 설계** (런타임 자동 축적) | L1 미스 → L2/Rule 성공 시 (에러→커맨드) 쌍을 `source="online_learning"`으로 자동 upsert, 반복 성공 시 `success_count` 누적 | `src/llm_engine.py:1327` `learn_from_feedback` |
+| **온라인 학습 — 실제 운영 실측** (2026-09-19, VM `agent_metrics.db` 전수 조회) | **3주+ 24/7 운영 동안 `source="online_learning"` 엔트리가 0건** — 설계는 있지만 한 번도 안 쓰인 기능. 원인: `learn_from_feedback`이 발동하려면 (L2/RULE 결과, success=True, 명령어 non-empty)가 동시에 필요한데, 95건 전수 중 L2_LLM 47건은 28건이 안전 검증기에서 거부(FAILURE), 나머지 19건은 success=True지만 `command`가 빈 문자열(안전한 조치 없음→에스컬레이션이 형식상 success로 기록됨), RULE 경로는 아예 0건 — 세 조건이 동시에 맞은 적이 없음. 카오스 인젝터의 고정된 장애 시그니처가 이미 사전 적재된 L1 플레이북(1,318건)으로 대부분 커버돼, L2가 진짜 새 커맨드를 합성해야 하는 상황 자체가 드묾 | VM `data/agent_metrics.db`(2026-08-26~09-18), `src/log_watcher.py:260-272` 게이팅 조건 |
 
 ## 4. 방법론적으로 주목할 점 (연구 서술 각도)
 
@@ -280,6 +295,14 @@ review) 수준의 확실성은 아니다.
   나온 값이었다는 걸 발견 — 데이터 복구 후 재측정해 전부 정정함
   ([[project_capstone_pivot]] 2026-09-17~18 세션). 논문 서술 시 "실측값의
   신뢰도를 어떻게 검증했는가"의 구체적 사례로 쓸 수 있다.
+- **"설계했다"와 "운영에서 쓰였다"를 구분한 두 번째 사례**: 위 사례와 같은
+  성격의 발견이 하나 더 있다 — 온라인 학습(`learn_from_feedback`)이 설계
+  문서·코드상으로는 명백히 존재하고 §2에서 차별점으로까지 내세웠는데,
+  VM 실측(2026-09-19)으로 확인해보니 3주+ 실제 운영 동안 **한 번도 발동한
+  적이 없었다**(§3, §5). 코드 리뷰나 설계 문서만 봐서는 절대 못 잡는
+  종류의 간극이고, "기능이 존재한다"와 "기능이 프로덕션에서 실제로 작동한
+  증거가 있다"를 항상 분리해서 검증해야 한다는 걸 보여주는 두 번째 사례로
+  §4.1(헤드라인 지표 오류)과 같이 묶어 논문에 쓸 수 있다.
 - **로컬/운영 환경 불일치**: 로컬 개발환경(Python 3.14)이 VM 운영환경
   (Python 3.10, chromadb 0.5.0)과 근본적으로 안 맞아, 실측은 전부 VM에서
   직접 돌려야 했다 — 재현성 논의에 넣을 만한 제약사항.
@@ -300,8 +323,18 @@ review) 수준의 확실성은 아니다.
 - QLoRA 비교는 Colab 무료 티어 제약(소형 모델, 508건 SFT) 안에서 나온 결과라,
   더 큰 모델/데이터로 파인튜닝했을 때도 Groq가 우위인지는 미검증.
 - 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
-- L1 캐시의 온라인 학습(§2에서 지적한 차별점)이 캐시 오염 위험 없이
-  유효한지는 별도 검증 필요, 아직 안 함.
+- **(2026-09-19 VM 실측으로 확정)** L1 캐시의 온라인 학습(`learn_from_feedback`)이
+  실제 운영에서 **3주+ 동안 0건 발동** — VM `agent_metrics.db` 전수 조회로
+  확인(§3). "캐시 오염 위험 없이 유효한지 검증 필요"가 아니라, **애초에
+  검증할 표본 자체가 없다**는 게 정확한 서술 — outcome 게이팅이라는 설계와
+  그 차별점 주장(§2 시맨틱 캐시)은 코드에는 존재하지만 운영 실측 근거는
+  없음. 원인은 `success=True ∧ result_category∉{OBSERVED_ONLY,PROPOSED_ONLY}
+  ∧ resolution_source∈{L2_LLM,RULE} ∧ command≠""` 네 조건이 동시에 맞은
+  적이 없어서(L2 결과 47건 중 28건은 안전검증기 거부, 19건은 success=True
+  지만 command가 빈 문자열) — 카오스 인젝터의 고정 장애셋이 이미 L1
+  플레이북으로 대부분 커버돼 L2가 진짜 새 커맨드를 합성할 상황 자체가
+  드문 것으로 추정. 논문에서 온라인 학습을 다룰 땐 "설계했다"와 "실제로
+  운영에서 쓰였다"를 분리해서 서술해야 함.
 - §2 인용 논문 9편 전부(Turpin, Kamoi, IT Support RAG, GPT Semantic Cache,
   eARCO, Flow-of-Action, STRATUS, Sarda et al., AIOps 서베이) abstract
   이상 정독 완료(2026-09-19, 일부는 PDF 본문까지). 이 과정에서 초안 주장
