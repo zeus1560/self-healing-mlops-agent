@@ -10,9 +10,10 @@
 엔지니어링 레퍼런스(설치·운영·SLO)라 계속 그 역할로 두고, 이 문서는 "연구
 결과 서술"만 담당해 중복을 피한다.
 
-**진행 상태**: 1차 착수 — 이미 나온 결과를 모으고 구조를 잡은 단계. 아직
-안 된 것: 서론(연구 질문을 학술적으로 서술)의 완성된 문장화, 관련 연구
-비교, 최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
+**진행 상태**: 1차 착수 — 이미 나온 결과를 모으고 구조를 잡은 단계, §2
+관련 연구 비교까지 초안 추가(2026-09-18, 웹 검색 기반). 아직 안 된 것:
+서론의 완성된 문장화, §2에 인용한 논문 원문 정독·정확한 서지사항 확정,
+최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
 재확인할 땐 원본을 본다.
 
 ## 1. 문제의식
@@ -25,7 +26,64 @@
 (Faithfulness)", "자동화 범위를 넓혔을 때 실제로 좋아지는가(멀티에이전트
 효과)"를 각각 별도 실험으로 검증했다.
 
-## 2. 실험 결과 종합
+## 2. 관련 연구 비교
+
+이 프로젝트를 이루는 네 갈래(RAG 기반 원인진단/캐시, LLM 기반 자동 조치,
+점진적 자율성 단계, 설명 충실도 검증) 각각을 최근 연구·업계 흐름 어디에
+자리매김할지 정리. **주의**: 2026-09-18 웹 검색으로 찾은 포인터 모음이라
+원문을 정독하지 않았음 — 실제 인용 전에 서지사항(저자·게재처·정확한
+페이지)을 원문에서 재확인해야 하고, 링크가 없는 항목은 검색 요약에만
+등장해 정확한 출처를 아직 못 찾은 것.
+
+- **LLM 기반 자동 원인진단·조치**: 분야 전반 동향은 [A Survey of AIOps in
+  the Era of Large Language Models](https://arxiv.org/pdf/2507.12472)에
+  정리돼 있음. 가장 가까운 개별 연구로 "Leveraging Large Language Models
+  for the Auto-remediation of Microservice Applications"(FSE Industry
+  2024 게재로 검색됨, 정확한 링크 미확인)와 [STRATUS: A Multi-agent System
+  for Autonomous Reliability Engineering of Modern Clouds](https://www.atlantis-press.com/article/126020167.pdf)
+  가 목적이 가장 겹친다 — 둘 다 LLM으로 원인진단→조치를 자동화. 차이점:
+  이 프로젝트는 마이크로서비스 오케스트레이션이 아니라 **로그 라인 단위
+  탐지 → RAG 캐시(L1) 우선 조회 → LLM(L2) 폴백**이라는 더 가벼운 구조이고,
+  승인 게이트(Progressive Autonomy)를 축으로 설계했다는 점이 다르다.
+- **RAG 기반 원인진단/사고 대응**: [eARCO](https://arxiv.org/html/2504.11505v1)
+  (프롬프트 최적화 결합), [Retrieval Augmented Generation-Based Incident
+  Resolution Recommendation System for IT Support](https://arxiv.org/pdf/2409.13707)
+  (IT 지원 티켓에 RAG로 과거 해결책 추천 — 목적이 이 프로젝트의 L1 캐시와
+  가장 유사), [Flow-of-Action](https://arxiv.org/pdf/2502.08224)(SOP 강화
+  멀티에이전트 RCA — 이 프로젝트의 진단→제안→검토 3단계와 구조적으로 비교할
+  거리)가 있다. 공통적으로 "리트리버 품질이 병목"이라는 한계가 지적되는데,
+  §3의 False Positive/threshold 실측이 바로 이 병목을 이 프로젝트 맥락에서
+  정량화한 사례로 자리매김할 수 있다.
+- **시맨틱 캐시 (L1 캐시의 이론적 위치)**: [GPT Semantic Cache](https://arxiv.org/abs/2411.05276),
+  [VectorQ: Adaptive Semantic Prompt Caching](https://arxiv.org/html/2502.03771v1),
+  GPTCache — 임베딩 유사도로 LLM 호출을 캐시 히트로 대체해 지연·비용을
+  줄이는 일반 기법과 L1(ChromaDB) 캐시는 본질적으로 같은 아이디어. 다만
+  일반적인 시맨틱 캐시 연구는 정적 캐시(사전에 채워둔 것만 히트)를 다루는
+  반면, 이 프로젝트는 **런타임 성공 사례를 자동 upsert하는 온라인 학습**
+  (`learn_from_feedback`)까지 포함한다는 게 차별점 — 다만 이게 실제로
+  캐시 오염 위험 없이 유효한지는 별도 검증이 필요하고 아직 안 함(§5 한계에
+  이미 반영).
+- **점진적 자율성(Progressive Autonomy)**: 자율주행 SAE 레벨을 본뜬
+  "단계적 자율성" 프레임은 AI 에이전트 일반에서 자주 쓰이는 비유([Vellum —
+  Six Levels of Agentic Behavior](https://www.vellum.ai/blog/levels-of-agentic-behavior),
+  [Autonomy Levels in AI Agents](https://www.emergentmind.com/topics/levels-of-autonomy-in-ai-agents))라,
+  단일 핵심 논문을 못박기보다 "업계에 퍼진 설계 패턴을 SRE 자동화에 구체적
+  수치(SLO 승급 게이트)로 적용한 사례"로 서술하는 게 정확하다. 단계 승급
+  기준을 "일정 횟수 무사고 운영 실적"으로 두는 관행도 이 프로젝트의
+  `docs/SRE_PRACTICES.md` 승급 게이트와 같은 발상.
+- **설명 충실도(Faithfulness)**: Bias-Injection 실험은 [Turpin et al. 2023,
+  NeurIPS](https://proceedings.neurips.cc/paper_files/paper/2023/hash/ed3fea9033a80fea1376299fa7863f4a-Abstract-Conference.html)
+  (CoT 설명이 실제 판단 근거를 반영 안 할 수 있다는 원 논문, 방법론 설계 시
+  이미 참고함)의 방법론을 SRE 승인 판정이라는 안전-critical 도메인에 적용한
+  것. 최근 관련 연구로 [Investigating the Effects of Cognitive Biases in
+  Prompts on Large Language Model Outputs](https://arxiv.org/pdf/2506.12338)도
+  같은 계열. 다만 "When Can LLMs Actually Correct Their Own Mistakes? —
+  Critical Survey"(검색으로 찾음, 정확한 링크 미확인)류 최근 서베이는
+  self-correction/self-reflection 신뢰도에 전반적으로 회의적 — 이 프로젝트의
+  "조작 성공률 0%" 결과가 그 회의론과 다른 방향인 이유(표본 크기, 태스크
+  특이성)를 논문에서 명시적으로 다뤄야 방어 가능한 주장이 된다.
+
+## 3. 실험 결과 종합
 
 | 실험 | 핵심 결과 | 원본 |
 |---|---|---|
@@ -37,7 +95,7 @@
 | **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄) | 1차 정규식 게이트 오탐률 10.51%, 그 오탐 전량을 L1(RAG) 게이트에 흘렸을 때 배포값(threshold 0.6)에서 confident FP **0.0%**(1,318건 복구 데이터 기준). threshold를 1.2로 올리면 79.4%로 폭증 — 0.6 유지 근거 | `experiments/run_false_positive_analysis.py` |
 | **온라인 학습** (런타임 자동 축적) | L1 미스 → L2/Rule 성공 시 (에러→커맨드) 쌍을 `source="online_learning"`으로 자동 upsert, 반복 성공 시 `success_count` 누적 | `src/llm_engine.py:1327` `learn_from_feedback` |
 
-## 3. 방법론적으로 주목할 점 (연구 서술 각도)
+## 4. 방법론적으로 주목할 점 (연구 서술 각도)
 
 - **헤드라인 지표 오류를 실측으로 잡아낸 사례**: 2026-09-17~18 코드 신뢰도
   점검에서 README에 실려있던 `action_F1=0.982` 등 헤드라인 수치가 운영
@@ -58,18 +116,22 @@
   `conclusion` 필드) — 결과를 보고 나서 기준을 짜맞춘 게 아니라는 점을
   논문에서 명시할 수 있다.
 
-## 4. 한계
+## 5. 한계
 
 - Bias-Injection(n=3케이스, 76건 유효판정)과 Faithfulness 반사실 조작(3케이스)
   모두 표본이 작다 — 일반화 주장은 유보적으로 서술해야 함.
 - QLoRA 비교는 Colab 무료 티어 제약(소형 모델, 508건 SFT) 안에서 나온 결과라,
   더 큰 모델/데이터로 파인튜닝했을 때도 Groq가 우위인지는 미검증.
-- 90일 데이터 분석(§5)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
+- 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
+- L1 캐시의 온라인 학습(§2에서 지적한 차별점)이 캐시 오염 위험 없이
+  유효한지는 별도 검증 필요, 아직 안 함.
+- §2 관련 연구 인용 중 정확한 링크를 못 찾은 항목(FSE 2024 자동복구 논문,
+  self-correction 신뢰도 서베이)이 있어, 정식 인용 전엔 원문 재확인 필요.
 
-## 5. 아직 안 된 것
+## 6. 아직 안 된 것
 
 - **90일 데이터 축적**: 배경에서 자동 진행 중, 끝나면 기존 스크립트
-  (`experiments/run_fp_fn_analysis.py` 등)로 분석해 이 문서 §2에 행 추가.
+  (`experiments/run_fp_fn_analysis.py` 등)로 분석해 이 문서 §3에 행 추가.
 - **자체 로그 누적**: [`DATA_ACCUMULATION_DESIGN.md`](DATA_ACCUMULATION_DESIGN.md)
   설계만 완료, 실제 수집·분석은 미착수.
 - **대회 형식 확정 대기**: 확정되면 이 문서를 그 포맷(논문/포스터/슬라이드)에
