@@ -11,10 +11,10 @@
 결과 서술"만 담당해 중복을 피한다.
 
 **진행 상태**: 1차 착수 — 이미 나온 결과를 모으고 구조를 잡은 단계, §2
-관련 연구 비교까지 초안 추가(2026-09-18, 웹 검색 기반). 아직 안 된 것:
-서론의 완성된 문장화, §2에 인용한 논문 원문 정독·정확한 서지사항 확정,
-최종 포맷 변환. 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를
-재확인할 땐 원본을 본다.
+관련 연구 비교까지 초안 추가(2026-09-18, 웹 검색 기반)하고 서지사항도
+확정(2026-09-19). 아직 안 된 것: 서론의 완성된 문장화, §2 인용 논문 원문
+정독(세부 수치 직접 인용 전 필요), 최종 포맷 변환. 원본 실측 커밋/스크립트는
+각 절에 링크해뒀으니 숫자를 재확인할 땐 원본을 본다.
 
 ## 1. 문제의식
 
@@ -37,9 +37,12 @@
 
 - **LLM 기반 자동 원인진단·조치**: 분야 전반 동향은 [A Survey of AIOps in
   the Era of Large Language Models](https://arxiv.org/pdf/2507.12472)에
-  정리돼 있음. 가장 가까운 개별 연구로 "Leveraging Large Language Models
-  for the Auto-remediation of Microservice Applications"(FSE Industry
-  2024 게재로 검색됨, 정확한 링크 미확인)와 [STRATUS: A Multi-agent System
+  정리돼 있음. 가장 가까운 개별 연구로 Sarda, Namrud, Litoiu, Shwartz,
+  Watts, ["Leveraging Large Language Models for the Auto-remediation of
+  Microservice Applications: An Experimental Study"](https://dl.acm.org/doi/10.1145/3663529.3663855)
+  (FSE 2024 Industry Track — Ansible 플레이북을 LLM으로 생성·실행해
+  마이크로서비스 이슈를 자동 조치, 커스텀 데이터셋으로 파인튜닝)와
+  [STRATUS: A Multi-agent System
   for Autonomous Reliability Engineering of Modern Clouds](https://www.atlantis-press.com/article/126020167.pdf)
   가 목적이 가장 겹친다 — 둘 다 LLM으로 원인진단→조치를 자동화. 차이점:
   이 프로젝트는 마이크로서비스 오케스트레이션이 아니라 **로그 라인 단위
@@ -77,9 +80,12 @@
   이미 참고함)의 방법론을 SRE 승인 판정이라는 안전-critical 도메인에 적용한
   것. 최근 관련 연구로 [Investigating the Effects of Cognitive Biases in
   Prompts on Large Language Model Outputs](https://arxiv.org/pdf/2506.12338)도
-  같은 계열. 다만 "When Can LLMs Actually Correct Their Own Mistakes? —
-  Critical Survey"(검색으로 찾음, 정확한 링크 미확인)류 최근 서베이는
-  self-correction/self-reflection 신뢰도에 전반적으로 회의적 — 이 프로젝트의
+  같은 계열. 다만 Kamoi, Zhang, Zhang, Han, Zhang(2024, TACL), [When Can
+  LLMs Actually Correct Their Own Mistakes? A Critical Survey of
+  Self-Correction of LLMs](https://arxiv.org/abs/2406.01297)류 서베이는
+  self-correction/self-reflection 신뢰도에 전반적으로 회의적("신뢰할 수
+  있는 외부 피드백이 있는 태스크에서만 잘 작동한다"는 게 핵심 결론) —
+  이 프로젝트의
   "조작 성공률 0%" 결과가 그 회의론과 다른 방향인 이유(표본 크기, 태스크
   특이성)를 논문에서 명시적으로 다뤄야 방어 가능한 주장이 된다.
 
@@ -125,8 +131,8 @@
 - 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
 - L1 캐시의 온라인 학습(§2에서 지적한 차별점)이 캐시 오염 위험 없이
   유효한지는 별도 검증 필요, 아직 안 함.
-- §2 관련 연구 인용 중 정확한 링크를 못 찾은 항목(FSE 2024 자동복구 논문,
-  self-correction 신뢰도 서베이)이 있어, 정식 인용 전엔 원문 재확인 필요.
+- §2 관련 연구 인용은 전부 서지사항(저자·게재처·링크)까지 확인됐지만
+  원문 전체를 정독한 건 아니라, 세부 수치를 직접 인용할 땐 원문 재확인 필요.
 
 ## 6. 아직 안 된 것
 
