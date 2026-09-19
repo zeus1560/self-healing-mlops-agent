@@ -14,11 +14,22 @@ run_l2_production_path_check.py
     _make_llm_response를 그대로 호출). 이 메서드 본문은 self를 전혀 참조하지
     않으므로 인스턴스 없이 첫 인자에 None을 넘겨도 안전하다(ChromaDB 등
     무거운 초기화를 유발하지 않음).
-  - ActionExecutor._validate_command() — 운영과 100% 동일한 4중 보안 화이트리스트.
+  - ActionExecutor._validate_command() — 운영과 100% 동일한 4중 보안 화이트리스트
+    (자유형식 명령어, action_type=EXECUTE_LLM_COMMAND 경로).
+  - _validate_process_name() — 구조화 액션(RESTART_SERVICE/KILL_PROCESS/
+    CLEAR_MEMORY, target_process)의 대상 검증. 2026-09-17 진단-라우팅 기능
+    (_route_from_diagnosis, llm_engine.py) 추가 이후 L2가 이 세 ActionType도
+    반환할 수 있게 됐는데, 이 스크립트는 그 기능이 생기기 전에 작성돼 "생성
+    성공" 판정을 action_type==EXECUTE_LLM_COMMAND로만 했었다 — 구조화 액션을
+    전부 "생성 실패"로 잘못 세는 계측 버그였다(2026-09-19 발견·수정,
+    docs/RESEARCH_SUMMARY.md §3.1/§4 참고). 구조화 액션은 원본 코드에서도
+    self-reflection을 의도적으로 건너뛰므로(대상 이름이 명확한 구조화 경로라
+    자유형식보다 검증 필요성이 낮다는 설계, llm_engine.py `_route_from_diagnosis`
+    docstring 참고) reflection_ok를 True로 취급한다 — whitelist(대상 검증)만
+    통과하면 그대로 실행되는 게 실제 운영 동작과 일치한다.
   - _make_llm_response()가 내부에서 이미 호출하는 자가 반성(_reflect_on_command)
-    결과는 별도로 재호출하지 않고 response.reasoning에 "자가 반성" 문구가
-    포함됐는지로 그대로 읽는다(tests/test_groq_smoke.py와 동일한 방식 —
-    API 재호출 없이 비용 절약).
+    결과는 별도로 재호출하지 않고 response.self_reflection_safe를 그대로
+    읽는다(자유형식 경로만 해당 — 구조화 경로는 애초에 이 필드가 None).
 
 같은 신규 에러 50건(run_l2_accuracy.NOVEL_ERRORS 재사용 — 새로 만들지 않고
 동일 테스트셋으로 두 실험을 비교 가능하게 유지)에 대해 아래를 측정한다:
@@ -46,11 +57,18 @@ import time
 from pathlib import Path
 
 from experiments.run_l2_accuracy import NOVEL_ERRORS
-from src.executor import ActionExecutor
+from src.executor import ActionExecutor, _validate_process_name
 from src.llm_engine import GROQ_API_KEY, RAGEngine
 from src.schemas import ActionType
 
 RESULTS_DIR = Path("experiments/results")
+
+# 2026-09-17 진단-라우팅(_route_from_diagnosis, llm_engine.py) 추가 이후 L2가
+# 반환할 수 있는 구조화 액션 — L1과 동일하게 target_process를
+# _validate_process_name()으로 검증하고, self-reflection은 설계상 건너뛴다.
+_STRUCTURED_ACTION_TYPES = (
+    ActionType.RESTART_SERVICE, ActionType.KILL_PROCESS, ActionType.CLEAR_MEMORY,
+)
 
 # Groq 무료 티어 레이트리밋(30 RPM) 회피 — run_l2_accuracy.py와 동일 규칙.
 # 2026-09-15: 멀티에이전트 3단계(진단→제안→검토) 추가로 항목당 Groq 호출이
@@ -110,12 +128,20 @@ def main():
         response = RAGEngine._l2_slow_track(None, log, {}, best_distance=999.0)
         latency_ms = (time.perf_counter() - t0) * 1000
 
-        generated = response.action_type == ActionType.EXECUTE_LLM_COMMAND
+        is_structured = response.action_type in _STRUCTURED_ACTION_TYPES
+        generated = response.action_type == ActionType.EXECUTE_LLM_COMMAND or is_structured
+
         whitelist_ok = False
-        if generated and response.command:
+        reflection_ok = False
+        if is_structured:
+            # 구조화 액션(L1과 동일 경로) — 대상 이름만 검증, self-reflection은
+            # 설계상 건너뛴다(_route_from_diagnosis 참고, 새 실패 모드 아님).
+            whitelist_ok = _validate_process_name(response.target_process or "") is not None
+            reflection_ok = True
+        elif generated and response.command:
             _, err = executor._validate_command(response.command)
             whitelist_ok = err is None
-        reflection_ok = generated and _self_reflection_passed(response)
+            reflection_ok = _self_reflection_passed(response)
         end_to_end_ok = generated and whitelist_ok and reflection_ok
 
         mark = "✓" if end_to_end_ok else "✗"
@@ -129,6 +155,9 @@ def main():
             "idx":               i + 1,
             "true_cat":          true_cat,
             "resolution_source": response.resolution_source,
+            "action_type":       response.action_type.value if response.action_type else None,
+            "is_structured":     is_structured,
+            "target_process":    response.target_process,
             "command":           response.command,
             "generated":         generated,
             "whitelist_ok":      whitelist_ok,
@@ -159,8 +188,11 @@ def main():
         "caveat": (
             "이 지표는 '실제 운영 L2 코드 경로가 신규 에러에 안전하게 끝까지 도달하는가'만 "
             "잰다 — 생성된 명령어가 그 에러의 객관적으로 올바른 해결책인지는 사람이 "
-            "command 컬럼(CSV)을 직접 검토해야 한다. run_l2_accuracy.py의 92%(별도 분류 "
-            "프롬프트, 운영 미사용)와는 완전히 다른 축이니 같이 인용하지 말 것."
+            "command/target_process 컬럼(CSV)을 직접 검토해야 한다. run_l2_accuracy.py의 "
+            "92%(별도 분류 프롬프트, 운영 미사용)와는 완전히 다른 축이니 같이 인용하지 말 것. "
+            "2026-09-19: 구조화 액션(RESTART_SERVICE/KILL_PROCESS/CLEAR_MEMORY, 진단-라우팅) "
+            "을 '생성 실패'로 잘못 세던 계측 버그를 수정 — 이전 실측값(8%)은 이 버그가 "
+            "반영된 것이라 폐기, 이 값이 수정 후 첫 공식 측정."
         ),
         "n_samples":                 n,
         "generation_rate":           round(gen_rate, 4),
