@@ -1,11 +1,10 @@
 {
   "metric_name": "l2_production_path_end_to_end_rate",
-  "caveat": "이 지표는 '실제 운영 L2 코드 경로가 신규 에러에 안전하게 끝까지 도달하는가'만 잰다 — 생성된 명령어가 그 에러의 객관적으로 올바른 해결책인지는 사람이 command 컬럼(CSV)을 직접 검토해야 한다. run_l2_accuracy.py의 92%(별도 분류 프롬프트, 운영 미사용)와는 완전히 다른 축이니 같이 인용하지 말 것.",
+  "caveat": "이 지표는 '실제 운영 L2 코드 경로가 신규 에러에 안전하게 끝까지 도달하는가'만 잰다 — 생성된 명령어가 그 에러의 객관적으로 올바른 해결책인지는 사람이 command/target_process 컬럼(CSV)을 직접 검토해야 한다. run_l2_accuracy.py의 92%(별도 분류 프롬프트, 운영 미사용)와는 완전히 다른 축이니 같이 인용하지 말 것. 2026-09-19: 구조화 액션(RESTART_SERVICE/KILL_PROCESS/CLEAR_MEMORY, 진단-라우팅) 을 '생성 실패'로 잘못 세던 계측 버그를 수정 — 이전 실측값(8%)은 이 버그가 반영된 것이라 폐기, 이 값이 수정 후 첫 공식 측정.",
   "n_samples": 50,
-  "generation_rate": 0.98,
-  "whitelist_pass_rate": 0.26,
-  "self_reflection_pass_rate": 0.56,
-  "end_to_end_pass_rate": 0.26,
-  "avg_latency_ms": 2539.2,
-  "_note_2026_09_15": "_self_reflection_passed() 버그 수정 후 동일 원본 응답 데이터로 재계산 — 자가반성 통과율이 34%(버그)에서 56%(수정)로 정정됨. Groq API 재호출 없이 기존 reasoning 텍스트만 재채점."
+  "generation_rate": 1.0,
+  "whitelist_pass_rate": 0.4,
+  "self_reflection_pass_rate": 0.44,
+  "end_to_end_pass_rate": 0.34,
+  "avg_latency_ms": 1390.6
 }
