@@ -24,14 +24,15 @@
 | **L1(빠른 기억) 응답 지연** | ChromaDB 벡터 검색으로 과거 해결책을 찾아 반환하는 데 걸리는 시간 | `agent_metrics.db`의 `resolution_source='L1_CACHE'` 행의 `latency_sec` |
 | **L2(AI 추론) 응답 지연** | Groq API 호출 + self-reflection까지 포함한 지연 | `agent_metrics.db`의 `resolution_source='L2_LLM'` 행의 `latency_sec` — 2026-08-27 Groq 전환 후 실측 평균 **0.65초**(전환 전 23.7초 대비 36배) |
 | **자동 실행 정확도(카테고리별)** | Shadow mode 승급 심사에 쓰는 FN(미탐)·FP(오탐) 비율 | `experiments/run_fp_fn_analysis.py --since <배포시각>`으로 배포 이후 구간만 집계 (배포 이전 이력이 섞이면 recall이 영구히 낮게 나오는 함정이 있음 — 2026-09-08 세션에서 실측으로 확인된 교훈) |
-| **완전 자동 실행 성공률(end-to-end)** | L2/Rule이 생성한 명령어가 보안 화이트리스트·self-reflection·실제 실행까지 전부 통과해 성공한 비율 | `experiments/run_l2_production_path_check.py` — 2026-09-07/08 VM 실측 8% → 2026-09-15 멀티에이전트 3단계(진단→제안→검토) 도입 후 재실측 **26%**(두 독립 실행에서 재현, 자가반성 측정 버그 수정 반영) |
+| **완전 자동 실행 성공률(end-to-end)** | L2/Rule이 생성한 명령어가 보안 화이트리스트·self-reflection·실제 실행까지 전부 통과해 성공한 비율 | `experiments/run_l2_production_path_check.py` — 2026-09-07/08 VM 실측 8~10% → 멀티에이전트 3단계(진단→제안→검토) 도입 후 32% → 진단-라우팅 추가 후 공식 재측정 **34%**(`experiments/results/l2_production_path_check_summary.json`, 2026-09-21, 계측 버그 수정 반영 — 이전 "26%"는 이 스크립트가 진단-라우팅의 구조화 액션을 "생성 실패"로 잘못 세던 버그로 나온 값이라 폐기) |
 
-> **`26%`를 읽는 법(중요, 오독 방지)**: 이건 "AI가 26%만 맞다"는 정확도가 아니다.
+> **`34%`를 읽는 법(중요, 오독 방지)**: 이건 "AI가 34%만 맞다"는 정확도가 아니다.
 > 나머지는 대부분 실패가 아니라 **사람 승인으로 정상적으로 넘어간 것**이다
 > (Progressive Autonomy의 `approve_then_execute` 단계가 기본값이기 때문).
 > 이 숫자는 "사람 개입 없이 안전하게 완전 자동 실행되는 비율"로만 써야 한다.
-> 8%→26% 개선의 원인 분석은 [`README.md` 실험 결과 요약](../README.md#실험-결과-요약-experiments)
-> 참고 — 멀티에이전트 구조는 이 스펙(§0) 범위 밖이라 여기선 SLI 숫자 갱신만 반영한다.
+> 8~10%→32%→34% 개선의 원인 분석은 [`README.md` 실험 결과 요약](../README.md#실험-결과-요약-experiments)
+> 와 [`docs/RESEARCH_SUMMARY.md` §3.1](RESEARCH_SUMMARY.md) 참고 — 멀티에이전트
+> 구조는 이 스펙(§0) 범위 밖이라 여기선 SLI 숫자 갱신만 반영한다.
 
 ### 1.2 SLO (승급 게이트 기준 — 2026-09-03 `/grill-me` 세션에서 확정)
 
