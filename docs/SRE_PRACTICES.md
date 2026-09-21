@@ -170,3 +170,60 @@ Progressive Autonomy는 4단계(읽기전용 → 제안 → 승인후실행 → 
   결과를 반영하지 못해 학습 데이터가 왜곡된다.
 - Circuit Breaker `OPEN` 상태를 근본 원인 확인 없이 코드/DB를 직접 건드려
   강제로 `CLOSED`로 되돌리지 않는다 — 이 버짓 소진은 의도된 안전장치다.
+
+## 4. 배포 브랜치 동기화 (VM ↔ GitHub 브랜치가 벌어졌을 때)
+
+VM의 상시 서비스가 체크아웃한 브랜치가 `main`보다 뒤처지는 일이 재발할 수
+있다(2026-09-22, `feature/oracle-deploy`가 `main` 대비 90+ 커밋 뒤처져 발견 —
+[[project_vm_stale_deploy]] 참고, 이하 그 실제 사례를 절차로 일반화한 것).
+증상을 발견하면 아래 순서로 확인·진행한다. **7번(전환 실행) 전에는 반드시
+1~6번 결과를 사람에게 보고하고 승인받을 것** — 라이브 서비스에 영향을 주는
+작업이다.
+
+### 4.1 사전 검증
+
+1. **동일 커밋인지, 그냥 뒤처진 건지 구분한다**: `git cherry <upstream>
+   <vm-branch>`로 VM 쪽에만 있다고 보이는 커밋들이 실제로 upstream에 없는
+   고유 작업인지, 아니면 cherry-pick으로 해시만 다른 동일 내용인지 판별한다.
+   `-`가 나오면 동일 patch 확정, `+`가 나오면 **patch-id는 커밋이 나뉜
+   방식에 민감해 false negative가 흔하다** — `git diff <vm-branch> <upstream>
+   -- <해당 파일>`로 직접 대조해 실제로 내용이 다른지 재확인할 것.
+   `git diff --diff-filter=M <vm-head> <upstream>`으로 "진짜 수정된 파일"만
+   걸러보면 이 검증이 훨씬 빠르다.
+2. **VM 로컬 미커밋 변경 확인**: `git status --short --ignored`로 확인.
+   `.gitignore` 대상(`.env`, `.venv/`, `data/chroma_db/`, `data/*.db` 등
+   런타임 산출물)은 `git checkout`/`reset --hard`에 영향받지 않으니 별도
+   조치 불필요 — untracked인데 gitignore 대상이 아닌 파일만 보존 여부를
+   판단한다.
+3. **의존성 변경**: `git diff <vm-head> <upstream> -- requirements*.txt
+   pyproject.toml`.
+4. **환경변수/설정 변경**: `git diff <vm-head> <upstream> -- .env.example
+   config/`.
+5. **DB 마이그레이션**: 이 프로젝트는 `migrations/` 디렉터리 없이 각
+   `*_store.py`의 `CREATE TABLE IF NOT EXISTS` + 컬럼 마이그레이션으로
+   스키마를 관리한다(`src/observability.py::_SCHEMA_MIGRATIONS` 패턴 참고)
+   — 스키마 관련 파일(`src/approval_store.py`/`autonomy_store.py`/
+   `observability.py`) diff로 새 컬럼 추가 여부만 확인하면 된다.
+6. **카오스 인젝터 스케줄 확인**: `sudo crontab -u zeus3826 -l`(`scripts/
+   chaos_cron.sh`, 기본 6시간마다) 다음 실행 시각과 안 겹치는 안전한 창을
+   고른다.
+
+### 4.2 전환 실행
+
+7. **롤백 태그**: `sudo git -C ~/agent tag pre-<설명>-YYYYMMDD <vm-head>`
+8. **전환**: `fc9d5313`처럼 cherry-pick으로 해시가 다시 쓰인 브랜치는
+   upstream의 진짜 ancestor가 아니라서 `merge --ff-only`가 실패한다 —
+   `git checkout main`(로컬에 없으면 `git checkout -b main origin/main`)
+   후 `git merge --ff-only origin/main`으로 진행. **미커밋 변경이 있을
+   때만** `reset --hard`를 검토하고, 그 전엔 반드시 2번 결과부터 재확인.
+9. **서비스 재시작 + 헬스체크**: `sudo systemctl restart self-healing-agent`
+   후 (a) `systemctl show -p NRestarts`로 크래시 루프가 없는지, (b) `git
+   diff HEAD -- <핵심 파일>`이 빈 출력인지(작업 트리가 목표 커밋과 완전
+   일치하는지)로 검증한다 — 이 서비스는 HTTP 헬스체크 엔드포인트가 없는
+   헤드리스 스크립트라, "재시작 후 새 프로세스 시작 시각이 checkout 이후"
+   + "작업 트리가 목표 커밋과 diff 없음"의 조합이 실질적으로 가장 확실한
+   증거다(커밋 해시를 리턴하는 버전 엔드포인트보다 나음 — 애초에 그런
+   엔드포인트가 없다).
+10. **완료 후 기록**: 전환 완료 사실과 정확한 재시작 타임스탬프(UTC)를
+    `docs/RESEARCH_SUMMARY.md`의 관련 절(예: 90일 데이터 축적 — 이
+    타임스탬프가 구/신 아키텍처 데이터를 나누는 컷오프가 된다)에 남긴다.
