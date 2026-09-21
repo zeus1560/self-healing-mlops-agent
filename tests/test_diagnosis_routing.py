@@ -78,6 +78,25 @@ class TestRouteFromDiagnosis(unittest.TestCase):
         )
         self.assertIsNone(resp)
 
+    def test_restart_service_with_description_target_falls_back(self):
+        """공백 섞인 설명문("mlflow tracking server")은 _PROCESS_NAME_RE에 걸려
+        SecurityBlock으로 무조건 실패하므로 구조화 라우팅을 포기해야 한다
+        (2026-09-22, §3.1/§6에서 16건 중 4건꼴로 재현된 버그)."""
+        resp = _route_from_diagnosis(
+            _diag("restart_service", "mlflow tracking server"), "요약",
+            nearest_category=None, best_distance=3.5,
+        )
+        self.assertIsNone(resp)
+
+    def test_kill_process_with_file_path_target_falls_back(self):
+        """파일 경로("/tmp/tensorboard_logs")를 서비스명으로 착각한 경우도
+        _PROCESS_NAME_RE에 걸려 무조건 실패하므로 폴백해야 한다."""
+        resp = _route_from_diagnosis(
+            _diag("kill_process", "/tmp/tensorboard_logs"), "요약",
+            nearest_category=None, best_distance=3.5,
+        )
+        self.assertIsNone(resp)
+
     def test_missing_target_falls_back_for_target_requiring_actions(self):
         for action_type in ("restart_service", "kill_process"):
             with self.subTest(action_type=action_type):

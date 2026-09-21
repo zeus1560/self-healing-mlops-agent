@@ -541,6 +541,17 @@ def _route_from_diagnosis(
     포함)은 그 정규식 자체에 걸려 SecurityBlock으로 실패한다 — 둘 다 기존
     자유형식 경로라면 정상 처리됐을 요청을 헛되이 태워버리는 회귀다.
 
+    **설명문·경로처럼 보이는 대상도 마찬가지다** (2026-09-22, §3.1/§6에서
+    16건 중 4건꼴로 재현된 버그 수정): 진단 에이전트가 TARGET에 깔끔한
+    프로세스/서비스 이름 대신 "mlflow tracking server"(공백 섞인 설명문)나
+    "/tmp/tensorboard_logs"(파일 경로)를 낼 때가 있다. 둘 다
+    `_validate_process_name`의 `_PROCESS_NAME_RE`(영숫자·`_-.`만 허용)에
+    걸려 SecurityBlock으로 무조건 실패하는데, 이걸 구조화 라우팅으로
+    넘기면 자유형식 경로라면 정상 처리됐을(또는 최소한 self-reflection이
+    걸러줬을) 요청을 똑같이 헛되이 태운다. PID/포트와 같은 이유로, target에
+    공백이나 `/`가 하나라도 있으면 깔끔한 식별자가 아니라고 보고 구조화
+    라우팅을 포기한다.
+
     **self-reflection을 건너뛰는 게 새 위험은 아니다**: L1이 이미 이 세
     ActionType을 self-reflection 없이 실행해왔고, 여기서도 동일한
     `_validate_process_name()` 검증 + autonomy 게이트(approve_then_execute
@@ -555,9 +566,10 @@ def _route_from_diagnosis(
     target = diagnosis["target"].strip()
     has_target = bool(target) and target.lower() != "none"
     looks_like_pid_or_port = bool(_re.search(r"\d", target))
+    looks_like_description_or_path = bool(_re.search(r"[\s/]", target))
 
     if action_type in ("restart_service", "kill_process") and (
-        not has_target or looks_like_pid_or_port
+        not has_target or looks_like_pid_or_port or looks_like_description_or_path
     ):
         return None
 
