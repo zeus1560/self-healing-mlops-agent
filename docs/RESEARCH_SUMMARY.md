@@ -38,6 +38,13 @@ Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"�
 서비스명으로 착각)도 두 차례 실행에서 일관되게 재현돼 실제 버그로 확정(§3.1).
 아직 안 된 것: README/SRE_PRACTICES의 동일 수치 정정(§6), 최종 포맷 변환.
 원본 실측 커밋/스크립트는 각 절에 링크해뒀으니 숫자를 재확인할 땐 원본을 본다.
+**(2026-09-22 추가)** §6 1번 항목("self-healing" 키워드로 직접 검색한 적
+없음)을 해소 — WebSearch로 "self-healing"/"self-healing MLOps" 자체를
+검색해 §2에 결과 추가. "self-healing"이라는 용어가 에이전트 자신의 내부
+신뢰성/모델 재적응을 가리키는 용법과 혼동될 수 있다는 것과, 가장 가까운
+실제 비교 대상(IaC 드리프트 복구 멀티에이전트 시스템)을 새로 찾음 — 전부
+abstract 수준 확인이라 §2 기존 9편(본문 정독)보다 검증 레벨이 낮음, 후속
+세션에서 필요시 본문 정독으로 승급.
 
 ## 초록 (Abstract)
 
@@ -167,6 +174,51 @@ review) 수준의 확실성은 아니다.
 주장을 검증·정정함(§5에 정정 이력) — 자율주행 SAE 레벨 비유처럼 학술
 논문이 아닌 블로그 자료는 검증 대상에서 제외하고 "비유"로만 표시.
 
+- **self-healing/self-healing MLOps 키워드 직접 검색 (2026-09-22 보강)**:
+  §6에서 지적된 대로 지금까지 이 절은 "AIOps"/"incident response"/"RAG"
+  위주로 검색했고 "self-healing"/"self-healing MLOps" 자체를 키워드로
+  검색한 적이 없었음. 직접 검색해보니(WebSearch, **abstract 수준 확인**,
+  아래 9편처럼 본문 정독은 아직 안 함) "self-healing"이라는 용어를 쓰는
+  LLM 에이전트 문헌이 크게 두 갈래로 갈린다는 걸 발견:
+  1. **에이전트 자신의 내부 신뢰성**을 가리키는 용법 — [Self-Healing
+     Agentic Orchestrators for Reliable Tool-Augmented LLM
+     Systems](https://arxiv.org/abs/2606.01416)(툴 타임아웃·잘못된 인자·
+     재시도 루프 같은 오케스트레이션 레벨 실패를 스스로 복구, self-healing
+     98.8% vs retry-only 94.5% vs 전체 재계획 93.8%), [A Self-Healing
+     Framework for Reliable LLM-Based Autonomous
+     Agents](https://arxiv.org/abs/2605.06737)(실패 탐지+신뢰성 평가+
+     적응적 재계획/교정 프롬프팅) — 둘 다 "에이전트가 자기 자신의 실행을
+     고친다"는 뜻이라, 이 프로젝트가 하는 "대상 시스템(로그·인프라)의
+     장애를 고친다"와는 self-healing의 **대상이 다름**. 용어 혼동 주의가
+     필요한 지점 — 논문 §1 서론에서 이 구분을 명시해두는 게 안전.
+  2. **모델/데이터 레벨 자가치유**를 가리키는 용법 — [Self-Healing
+     Machine Learning: A Framework for Autonomous Adaptation in
+     Real-World Environments](https://arxiv.org/pdf/2411.00186)
+     (concept/data drift에 모델이 스스로 재적응). 이것도 이 프로젝트와는
+     self-healing의 대상이 또 다름 — 모델 자체가 아니라 모델이 진단하는
+     대상 시스템이 healing 됨.
+
+  가장 가까운 실제 비교 대상은 [Self-Healing Infrastructure: Autonomous
+  LLM Agents for Real-Time Remediation of Configuration Drift and
+  Security Misconfigurations in IaC
+  Deployments](https://zenodo.org/records/19234454) — 드리프트 탐지/
+  보안설정오류 탐지/근본원인분석/조치생성/사후검증 5개 전문 에이전트로
+  구성된 멀티에이전트 구조로, 이 프로젝트의 진단→제안→검토 구조와
+  목적(자동 인프라 복구)·구조(멀티에이전트 파이프라인) 둘 다 가장 가깝다.
+  드리프트 탐지율 96.8%, 보안설정오류 탐지율 95.2%, MTTR 6.9분 — 이
+  프로젝트의 완전자동 실행 성공률(34%)/MTTR 수치와 직접 비교하려면
+  평가 방법론(태스크 정의, 데이터셋 성격)이 같은지부터 확인해야 함
+  (Sarda et al. 항목에서 이미 지적한 "다른 평가방식은 직접 비교 금지"
+  원칙이 여기도 적용).
+
+  안전장치 측면에서는 [Safe and Adaptive Cloud Healing: Verifying
+  LLM-Generated Recovery Plans with a Neural-Symbolic World
+  Model](https://arxiv.org/pdf/2607.01595)이 흥미로운 대조군 — LLM이
+  만든 복구 계획을 실행 전에 신경-기호 월드모델로 형식 검증하는
+  접근인데, 이 프로젝트는 같은 문제(LLM이 만든 조치가 안전한지)를
+  형식 검증이 아니라 **사람의 승인 게이트 + Faithfulness(근거가 입력을
+  반영하는지) 검증**으로 푼다는 게 방법론적 차이 — "LLM 생성 복구안의
+  안전성 보장" 문제에 대한 두 가지 다른 답으로 나란히 놓을 수 있다.
 - **LLM 기반 자동 원인진단·조치**: 분야 전반 동향은 [A Survey of AIOps in
   the Era of Large Language Models](https://arxiv.org/pdf/2507.12472)(J.
   ACM, 2025-08)에 정리돼 있음. **(2026-09-19 PDF 본문 확인)** 이 서베이는
@@ -495,10 +547,13 @@ API 한도 초과를 측정한 것일 뿐 시스템 성능이 아니었음), 한
 아직 이 문서 다른 절에 반영 안 된 것들. 우선순위는 투입 대비 효과 기준으로
 정렬(1번이 제일 가볍고 빠름).
 
-1. **문헌 검색 키워드 보강 — 낮은 비용**: §2의 웹 검색이 주로 "AIOps"/
-   "incident response"/"RAG" 위주였고 **"self-healing"/"self-healing MLOps"
-   자체를 키워드로 한 검색은 한 번도 안 함** — 인접 분야를 놓쳤을 가능성.
-   검색 몇 번(WebSearch)이면 되는 가벼운 작업, §2에 결과 추가.
+1. ✅ **완료(2026-09-22) — 문헌 검색 키워드 보강**: "self-healing"/
+   "self-healing MLOps" 자체를 키워드로 WebSearch, §2에 결과 추가.
+   "self-healing"이 에이전트 내부 신뢰성/모델 재적응을 가리키는 용법과
+   섞여 쓰인다는 것, IaC 드리프트 복구 멀티에이전트 시스템(가장 가까운
+   비교 대상)과 신경-기호 검증 기반 복구 안전장치(대조군)를 새로 찾음.
+   abstract 수준 확인이라 §2 기존 9편보다 검증 레벨 낮음 — 논문에 실제
+   인용 시 본문 정독으로 승급 필요.
 2. **Explainability를 Faithfulness와 분리해서 별도로 측정 — 중간 비용**:
    §1이 스스로 세운 4가지 질문 중 2번("판단이 설명 가능한가")을 직접 잰
    실험이 없다 — 지금 있는 건 전부 3번(Faithfulness, 근거가 입력을 반영
