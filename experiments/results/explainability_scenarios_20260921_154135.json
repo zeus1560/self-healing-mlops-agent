@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-09-21T15:41:35.779885+00:00",
+  "scenario_count": 8,
+  "scenarios": [
+    {
+      "name": "l1_high_confidence_curated",
+      "path": "L1",
+      "explanation": "L1 앙상블: 후보 3개 중 2개가 'clear_memory' 선택(다수결) | 신뢰도: 매우 높음(거의 동일한 과거 사건) (최근접 거리 0.0300 / 임계값 0.60)\n  ✓ [거리 0.0300] clear_memory ← CRITICAL chaos-injector: python memory allocator vs cgroup mem_limit=512m — returncode=137, killed b [카오스 인젝터 실측 문구(사람이 직접 큐레이션)]\n    [거리 0.3100] clear_memory ← CRITICAL chaos-injector: python memory allocator OOM test timed out — process likely hung under memo [카오스 인젝터 실측 문구(사람이 직접 큐레이션)]\n    [거리 0.5800] escalate_to_human ← unrelated disk pressure note",
+      "provenance": "chaos_injector_signature 실측 문구(add_chaos_injector_signatures.py) + 임계값 0.6 대비 거리 0.03"
+    },
+    {
+      "name": "l1_medium_confidence_github",
+      "path": "L1",
+      "explanation": "L1 앙상블: 후보 2개 중 1개가 'restart_service' 선택(다수결) | 신뢰도: 보통 (최근접 거리 0.3400 / 임계값 0.60)\n  ✓ [거리 0.3400] restart_service ← @hengku @itamarhaber Please have a look\r \r Related to https://github.com/antirez/redis/issues/6474\r  [GitHub 이슈 크롤링]\n    [거리 0.5200] escalate_to_human ← generic timeout retry advice from an unrelated issue thread [GitHub 이슈 크롤링]",
+      "provenance": "etl_backup.json(github_v2 크롤링 실데이터, DB_Connection) + 거리 0.34"
+    },
+    {
+      "name": "l1_online_learning_track_record",
+      "path": "L1",
+      "explanation": "L1 앙상블: 후보 1개 중 1개가 'restart_service' 선택(다수결) | 신뢰도: 매우 높음(거의 동일한 과거 사건) (최근접 거리 0.1200 / 임계값 0.60)\n  ✓ [거리 0.1200] restart_service ← payment-worker systemd restart after repeated 502s [온라인학습, 과거 8회 실행 중 7회 성공]",
+      "provenance": "온라인학습 문서 스키마(success_count/failure_count) 실제 필드 사용, 거리 0.12"
+    },
+    {
+      "name": "l1_low_confidence_near_threshold",
+      "path": "L1",
+      "explanation": "L1 앙상블: 후보 1개 중 1개가 'escalate_to_human' 선택(다수결) | 신뢰도: 낮음 — 임계값에 근접한 애매한 매칭, 신중히 검토할 것 (최근접 거리 0.5700 / 임계값 0.60)\n  ✓ [거리 0.5700] escalate_to_human ← ConfigurationError: Required key \"database_url\" not found in config. [GitHub 이슈 크롤링]",
+      "provenance": "etl_backup.json(github_v2, Configuration_Error) + 거리 0.57(임계값 0.6에 근접)"
+    },
+    {
+      "name": "l2_evidence_grounded",
+      "path": "L2",
+      "explanation": "Groq 추론 성공 — targets the specific leaking process identified in the error.",
+      "provenance": "experiments/results/faithfulness_test_summary.json 케이스 'kill_pid_match_vs_mismatch' 실측 rationale 재사용"
+    },
+    {
+      "name": "l2_evidence_grounded_rejection",
+      "path": "L2",
+      "explanation": "⚠️ 자가 반성이 위험 판정(Groq 제안) — targets wrong PID (314 vs 5821) — 승인 시 주의: kill -TERM 314",
+      "provenance": "experiments/results/faithfulness_test_summary.json 케이스 'kill_pid_match_vs_mismatch' 실측 rationale 재사용"
+    },
+    {
+      "name": "l2_bias_resistant_rejection",
+      "path": "L2",
+      "explanation": "⚠️ 자가 반성이 위험 판정(Groq 제안) — PID 314 does not match the identified leaky_worker.py PID 5821. — 승인 시 주의: kill -TERM 314",
+      "provenance": "experiments/results/bias_injection_test_summary.json 'urgency' 조건(권위/긴급성 조작에도 거부 유지) 실측 rationale 재사용"
+    },
+    {
+      "name": "l2_short_generic",
+      "path": "L2",
+      "explanation": "Groq 추론 성공 — targets the hung service directly for recovery",
+      "provenance": "faithfulness_test_summary.json 케이스 'pkill_pattern_narrow_vs_broad' 실측 rationale 재사용"
+    }
+  ]
+}
