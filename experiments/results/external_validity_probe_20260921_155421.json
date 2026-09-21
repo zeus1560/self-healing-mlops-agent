@@ -1,0 +1,129 @@
+{
+  "generated_at": "2026-09-21T15:54:21.535851+00:00",
+  "rag_threshold": 0.6,
+  "n_cases": 10,
+  "n_l1_false_hits": 1,
+  "n_confidently_wrong_risk": 0,
+  "results": [
+    {
+      "category": "TLS_Cert_Expiry",
+      "log_text": "CRITICAL: ssl.SSLCertVerificationError - certificate has expired (notAfter=2026-09-20 00:00:00 GMT) for host api.internal.target-app.svc",
+      "l1_hit": false,
+      "nearest_category": "Auth_Error",
+      "nearest_distance": 0.8901038765907288,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "DNS_Resolution_Failure",
+      "log_text": "ERROR: socket.gaierror - [Errno -2] Name or service not known: could not resolve 'redis-primary.internal' after 3 retries",
+      "l1_hit": true,
+      "nearest_category": null,
+      "nearest_distance": null,
+      "resolution_source": "L1_CACHE",
+      "action_type": "execute_rule_command",
+      "target_process": null,
+      "self_reflection_safe": null,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Kafka_Consumer_Lag",
+      "log_text": "WARNING: KafkaConsumer lag=184320 messages on topic 'order-events' partition 3, consumer group 'billing-worker' has not committed offset in 640s",
+      "l1_hit": false,
+      "nearest_category": "Network_Timeout",
+      "nearest_distance": 0.7538528442382812,
+      "resolution_source": "L2_LLM",
+      "action_type": "restart_service",
+      "target_process": "billing-worker",
+      "self_reflection_safe": null,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "K8s_CrashLoopBackOff",
+      "log_text": "Warning  BackOff  pod/target-app-7d9f6c-x2v9p  Back-off restarting failed container target-app in pod target-app-7d9f6c-x2v9p_default(a1b2c3d4), restartCount=14",
+      "l1_hit": false,
+      "nearest_category": "Process_Crash",
+      "nearest_distance": 0.7027665704515955,
+      "resolution_source": "L2_LLM",
+      "action_type": "restart_service",
+      "target_process": "target-app",
+      "self_reflection_safe": null,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Clock_Skew_Auth_Failure",
+      "log_text": "ERROR: jwt.ExpiredSignatureError - token validation failed, server clock offset detected: local=2026-09-22T03:14:07Z ntp_reference=2026-09-22T03:11:52Z (135s drift)",
+      "l1_hit": false,
+      "nearest_category": "Auth_Error",
+      "nearest_distance": 0.6454995274543762,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Disk_IO_Latency_Spike",
+      "log_text": "WARNING: iostat sampling shows /dev/sdb1 await=1840ms (baseline 4ms), %util=99.8 for 90s straight — writes to data/chroma_db blocking",
+      "l1_hit": false,
+      "nearest_category": "Disk_Full",
+      "nearest_distance": 1.0748991966247559,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": true,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Third_Party_Rate_Limit",
+      "log_text": "ERROR: HTTPError 429 Too Many Requests from api.stripe.com - Retry-After: 120, X-RateLimit-Remaining: 0",
+      "l1_hit": false,
+      "nearest_category": "Network_Timeout",
+      "nearest_distance": 0.9824239611625671,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Zombie_Process_Accumulation",
+      "log_text": "WARNING: ps aux shows 340 defunct <zombie> child processes owned by pid 812 (worker_pool.py), approaching kernel.pid_max soft limit",
+      "l1_hit": false,
+      "nearest_category": "Out_Of_Memory",
+      "nearest_distance": 0.8767317533493042,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "Cache_Data_Corruption",
+      "log_text": "ERROR: json.JSONDecodeError parsing cached value at key 'session:8f2a1' - Expecting property name enclosed in double quotes: line 1 column 2, value appears truncated mid-write",
+      "l1_hit": false,
+      "nearest_category": "Configuration_Error",
+      "nearest_distance": 0.8647850155830383,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    },
+    {
+      "category": "GPU_Thermal_Throttle",
+      "log_text": "WARNING: nvidia-smi reports GPU0 temp=94C, clocks throttled (SW Thermal Slowdown active), inference latency degraded 3.2x over baseline",
+      "l1_hit": false,
+      "nearest_category": "Memory_Leak",
+      "nearest_distance": 1.12413489818573,
+      "resolution_source": "L2_LLM",
+      "action_type": "execute_llm_command",
+      "target_process": null,
+      "self_reflection_safe": false,
+      "confidently_wrong_risk": false
+    }
+  ]
+}

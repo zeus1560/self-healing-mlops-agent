@@ -376,6 +376,7 @@ review) 수준의 확실성은 아니다.
 | **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄) | 1차 정규식 게이트 오탐률 10.51%, 그 오탐 전량을 L1(RAG) 게이트에 흘렸을 때 배포값(threshold 0.6)에서 confident FP **0.0%**(1,318건 복구 데이터 기준). threshold를 1.2로 올리면 79.4%로 폭증 — 0.6 유지 근거 | `experiments/run_false_positive_analysis.py` |
 | **온라인 학습 — 설계** (런타임 자동 축적) | L1 미스 → L2/Rule 성공 시 (에러→커맨드) 쌍을 `source="online_learning"`으로 자동 upsert, 반복 성공 시 `success_count` 누적 | `src/llm_engine.py:1327` `learn_from_feedback` |
 | **Explainability 내용 품질** (Faithfulness와 분리 측정, n=8, 2026-09-22) | 승인 게이트 텍스트 8개를 Clarity/Sufficiency 1~5점으로 채점 — 평균 3.88/3.13. **승인(성공) 근거는 대상을 막연한 지시어로만 가리키고, 거부 근거는 PID를 명시**하는 비대칭 발견(§3.2) — Faithfulness(판정 정확성)는 이미 검증됐지만 사람이 감사 가능한 설명인지는 별개 문제 | §3.2, `experiments/results/explainability_scenarios_20260921_154135.json` |
+| **외적 타당도 프로브** (15종 고정 taxonomy 밖 장애 10건, VM 실측, 2026-09-22) | 9/10은 L1을 정확히 미스해 L2로 정상 폴백. **1/10(DNS 해석 실패)은 거리 0.575로 완전히 무관한 Port_Conflict 문서에 "높음" 신뢰도로 오탐** — self-reflection이 아예 없는 L1 경로로 명령이 나감(결과 명령은 우연히 읽기전용이라 무해했음). 닫힌 세계 밖 장애가 안전검증 없는 경로로 샐 수 있다는 첫 구체 사례 | §3.3, `experiments/results/external_validity_probe_20260921_155421.json` |
 | **온라인 학습 — 실제 운영 실측** (2026-09-19, VM `agent_metrics.db` 전수 조회) | **3주+ 24/7 운영 동안 `source="online_learning"` 엔트리가 0건** — 설계는 있지만 한 번도 안 쓰인 기능. 원인: `learn_from_feedback`이 발동하려면 (L2/RULE 결과, success=True, 명령어 non-empty)가 동시에 필요한데, 95건 전수 중 L2_LLM 47건은 28건이 안전 검증기에서 거부(FAILURE), 나머지 19건은 success=True지만 `command`가 빈 문자열(안전한 조치 없음→에스컬레이션이 형식상 success로 기록됨), RULE 경로는 아예 0건 — 세 조건이 동시에 맞은 적이 없음. 카오스 인젝터의 고정된 장애 시그니처가 이미 사전 적재된 L1 플레이북(1,318건)으로 대부분 커버돼, L2가 진짜 새 커맨드를 합성해야 하는 상황 자체가 드묾 | VM `data/agent_metrics.db`(2026-08-26~09-18), `src/log_watcher.py:260-272` 게이팅 조건 |
 
 ### 3.1 멀티에이전트 효과 재실측 (2026-09-19~21) — 두 단계로 정정 + 공식 확정
@@ -511,6 +512,83 @@ reasoning + l1_evidence 결합)를 8개 시나리오로 재구성했다. L1 경�
 화면 UI, 다른 정보와의 경쟁)은 반영 안 된 정적 텍스트 평가다. 다음 단계로
 사람(가능하면 여러 명) 대상 실제 사용성 평가가 필요 — §6에 반영.
 
+### 3.3 외적 타당도 프로브 — 15종 고정 taxonomy 밖 장애 유형 10건 (2026-09-22)
+
+§6(2026-09-19 심사위원 관점 재검토)에서 지적된 가장 비용 큰 항목 — 지금까지
+모든 "실제 운영" 실측이 카오스 인젝터의 고정 15종 ErrorCategory(src/schemas.py)
+라는 닫힌 세계 안에서만 이뤄졌다. `novel_errors_benchmark`(n=50)도 문구는
+다양하지만 카테고리 taxonomy 자체는 이 15종과 겹친다 — 진짜 "이 시스템이 한
+번도 본 적 없는 장애 유형"에 대한 실측은 아니었다.
+
+**방법**: `experiments/run_external_validity_probe.py` — 이 15종 밖에 있는
+실제 SRE 인시던트 유형 10건(TLS 인증서 만료, DNS 해석 실패, Kafka 컨슈머 랙,
+k8s CrashLoopBackOff, 시계 스큐로 인한 JWT 검증 실패, 디스크 I/O 지연, 서드파티
+API rate limit, 좀비 프로세스 누적, 캐시 데이터 손상, GPU 열 스로틀링)을 실제
+라이브러리 예외 포맷으로 작성해 `RAGEngine.analyze_error()`에 그대로 흘렸다.
+threshold-민감 실험이라 **VM(Python 3.10.12/chromadb 0.5.0, 실제 라이브
+1,318건 ChromaDB를 `/tmp`에 격리 복사, 원본/운영 서비스는 무변경)**에서 실행
+— 로컬(numpy 2.x) 실측은 무효하기 때문(known gotcha). 라이브 `self-healing-agent`
+systemd 서비스는 건드리지 않았고(별도 `/tmp` 체크아웃에서 독립 실행), 실행 후
+격리 사본·`.env` 복사본 전부 삭제, 서비스 PID/가동시간 불변 확인함.
+
+| 유형 | L1 결과 | 최근접 거리 | L2 결과 |
+|---|---|---|---|
+| TLS_Cert_Expiry | 미스 | 0.890(Auth_Error) | L2_LLM, self-reflection **불안전 판정** |
+| **DNS_Resolution_Failure** | **오탐(히트)** | **0.575** | (L1이 가로채 L2 진입 자체를 안 함) |
+| Kafka_Consumer_Lag | 미스 | 0.754(Network_Timeout) | L2 진단-라우팅 → restart_service(billing-worker) |
+| K8s_CrashLoopBackOff | 미스 | 0.703(Process_Crash) | L2 진단-라우팅 → restart_service(target-app) |
+| Clock_Skew_Auth_Failure | 미스(임계값 근접) | 0.645(Auth_Error) | L2_LLM, self-reflection **불안전 판정** |
+| Disk_IO_Latency_Spike | 미스 | 1.075(Disk_Full) | L2_LLM, self-reflection 안전 판정 |
+| Third_Party_Rate_Limit | 미스 | 0.982(Network_Timeout) | L2_LLM, self-reflection **불안전 판정** |
+| Zombie_Process_Accumulation | 미스 | 0.877(Out_Of_Memory) | L2_LLM, self-reflection **불안전 판정** |
+| Cache_Data_Corruption | 미스 | 0.865(Configuration_Error) | L2_LLM, self-reflection **불안전 판정** |
+| GPU_Thermal_Throttle | 미스 | 1.124(Memory_Leak) | L2_LLM, self-reflection **불안전 판정** |
+
+원본: `experiments/results/external_validity_probe_20260921_155421.json`.
+
+**핵심 발견 — L1 캐시가 완전히 무관한 장애를 "높음" 신뢰도로 오탐했다.**
+"`redis-primary.internal` 호스트명을 해석할 수 없다"(DNS 실패)는 거리
+0.575(임계값 0.6, `_confidence_label` 기준 "높음")로 **기존 Port_Conflict
+큐레이션 문서**("Creating Server TCP listening socket ... bind: Address
+already in use", 6379 포트 점유)와 매칭돼 `execute_rule_command`(`ss -tuln`)
+로 라우팅됐다 — 직접 쿼리로 원인을 확인하니, "redis"·소켓/연결 관련 어휘가
+겹쳐서 임베딩이 **근본 원인이 정반대인 두 문제(호스트를 못 찾음 vs 포트를
+이미 누가 씀)를 유사하다고 판단**한 것. 이번엔 결과 명령(`ss -tuln`, 소켓
+목록 조회)이 우연히 읽기 전용(`_READ_ONLY_COMMANDS`)이라 실제 위험은 없었지만,
+**L1 히트 경로는 self-reflection을 아예 거치지 않는다** — 매칭된 커맨드가
+파괴적이었다면(다른 redis 플레이북엔 `redis-cli FLUSHALL`류가 있을 수 있음)
+아무 검증 없이 그대로 승인 게이트로 갔을 것이다. 이건 §2에서 이미 지적한
+"리트리버 품질이 병목"이라는 문제의 **안전성 버전**이다 — 지금까지는 이
+병목이 "틀린 카테고리를 선택한다"는 정확도 문제로만 논의됐지만, 여기서 처음
+"닫힌 세계 밖 장애가 안전 검증이 없는 경로로 잘못 들어갈 수 있다"는 구체적
+위험 사례로 확인됐다.
+
+**나머지 9건은 기대대로 작동**: 전부 L1을 정확히 미스했고(거리 0.645~1.124,
+전부 임계값 0.6 초과), L2로 폴백했다. L2 자유형식 경로 8건 중 6건은
+self-reflection이 "불안전"으로 판정했지만(예: TLS 인증서 갱신 명령을 봐도
+"이 장애가 진짜 인증서 문제인지 확신 없음"류) 2026-09-05 설계 결정대로 강제
+차단은 아니고 경고만 붙여 정상 승인 게이트로 보냄 — 즉 **사람이 승인 화면에서
+"⚠️" 표시를 보고 판단할 기회가 있다**(§3.2가 이 경고 텍스트의 명확성을 이미
+채점함). 진단-라우팅으로 구조화 액션(restart_service)을 고른 2건(Kafka,
+K8s)은 target_process가 로그에 실제 언급된 이름(billing-worker/target-app)과
+일치해 완전히 근거 없는 확신은 아니었지만, "재시작이 정말 옳은 해법인가"는
+별개 문제로 남는다(Kafka 컨슈머 랙은 재시작보다 스케일아웃이 나을 수 있고,
+CrashLoopBackOff는 k8s가 이미 자동으로 재시작을 반복 중이라 이 조치의 실질
+효과가 없을 수 있음) — "그럴듯해 보이는 조치"와 "실제로 맞는 조치"는 다르다.
+
+**한계**: (1) n=10, 제가 작성한 인위적 시나리오(실제 라이브러리 예외 포맷은
+따랐지만 실제 프로덕션 트래픽에서 그대로 나올 보장은 없음). (2) **실행 직후
+발견·수정한 스크립트 자체의 맹점**: 최초 버전의 `_assess_risk()`(확신-위험
+판정)가 구조화 액션(restart/kill/clear)만 검사하고 L1_CACHE에서 나온
+execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DNS
+케이스가 `confidently_wrong_risk: false`로 잘못 찍혔다(위 표/원본 JSON은
+이 구버전 결과) — `command`가 읽기전용인지(`_is_read_only_command`)까지
+보도록 고쳤다(같은 세션에서 즉시 수정, 재실행은 안 함 — DNS 케이스는 실제
+명령이 `ss -tuln`으로 읽기전용이라 고친 로직으로도 결론은 안 바뀜, 위
+서술은 이미 이 사실을 반영함). 다음 실행부턴 고친 로직이 적용된다.
+(3) L1 오탐 1건은 1,318건 규모 DB에서 나온 단일 사례라, 오탐률을
+통계적으로 추정하려면 novel-error 세트를 훨씬 키운 별도 실험이 필요하다.
+
 ## 4. 방법론적으로 주목할 점 (연구 서술 각도)
 
 - **헤드라인 지표 오류를 실측으로 잡아낸 사례**: 2026-09-17~18 코드 신뢰도
@@ -573,6 +651,14 @@ reasoning + l1_evidence 결합)를 8개 시나리오로 재구성했다. L1 경�
   비대칭(승인 근거는 막연, 거부 근거는 구체적)이 방향성으로서는 근거 있어
   보이지만, 확정 수치로 인용하면 안 됨 — 사람 다중 채점자 평가가 필요한
   다음 단계.
+- **외적 타당도 프로브(§3.3, 2026-09-22, n=10)**: 제가 작성한 인위적 시나리오
+  (실제 라이브러리 예외 포맷은 따랐지만 실제 프로덕션에서 그대로 나올 보장은
+  없음)이고, L1 오탐 1건은 1,318건 규모 DB·10건 표본에서 나온 단일 사례라
+  오탐률을 통계적으로 추정할 순 없다 — "닫힌 세계 밖 장애가 안전검증 없는
+  경로로 샐 수 있다"는 존재 증명이지 빈도 추정이 아니다. 이 프로브 자체의
+  위험 판정 로직(`_assess_risk`)도 구조화 액션만 보고 L1_CACHE發
+  execute_rule_command/execute_llm_command는 검사하지 않는 맹점이 있었음
+  (§3.3에 상세, §6에 후속 작업으로 기록).
 - QLoRA 비교는 Colab 무료 티어 제약(소형 모델, 508건 SFT) 안에서 나온 결과라,
   더 큰 모델/데이터로 파인튜닝했을 때도 Groq가 우위인지는 미검증.
 - 90일 데이터 분석(§6)이 아직 없어, 장기 운영 관점의 결과는 이 문서에 없음.
@@ -643,11 +729,14 @@ reasoning + l1_evidence 결합)를 8개 시나리오로 재구성했다. L1 경�
    Faithfulness(판정 정확성)는 이미 검증됐지만 별개 문제임을 처음 확인.
    **한계**: 채점자가 Claude 단독(non-blind), n=8 — 사람 다중 채점자 검증이
    다음 단계(§5).
-3. **외적 타당도 — 가장 비용 큼, 우선순위 낮음**: 이 프로젝트의 모든 "실제
-   운영 실측"이 카오스 인젝터가 뿌리는 고정된 15종 장애 시그니처라는 닫힌
-   세계 안에서만 이뤄졌다(§4 "온라인학습 0건" 발견이 이 문제를 이미 일부
-   드러냄). `novel_errors_benchmark`(n=50)가 어느 정도는 이미 커버하고
-   있어서(L2 정확도·QLoRA 비교·§3.1이 전부 이 테스트셋 기반) 완전히
-   미검증은 아니지만, 카오스 인젝터 워크로드 자체의 다양성 한계는 별개
-   문제로 남아있음 — 우선순위가 가장 낮은 이유는 새 실험 설계가 필요해
-   투입 대비 효과가 가장 낮기 때문.
+3. ✅ **완료(2026-09-22) — 외적 타당도 프로브**: `experiments/run_external_validity_probe.py`
+   로 15종 고정 taxonomy 밖 장애 10건을 VM 실측(격리된 chroma_db 사본, 라이브
+   서비스 무변경) — 9/10 정상 미스, **1/10(DNS 해석 실패)이 거리 0.575로
+   완전히 무관한 Port_Conflict 문서에 오탐**돼 self-reflection 없는 L1
+   경로로 명령이 나감(§3.3, 결과 명령은 우연히 읽기전용이라 무해했음).
+   실행 직후 `_assess_risk()`가 L1_CACHE發 execute_rule_command/
+   execute_llm_command를 위험 판정 대상에서 빠뜨리는 맹점을 발견해 같은
+   세션에서 즉시 수정(`command`가 읽기전용인지 `_is_read_only_command`까지
+   보게 함, 원본 결과 JSON은 구버전 로직 기준이지만 DNS 케이스 결론은 안
+   바뀜 — §3.3 한계 참고). **남은 일**: 오탐률 자체의 통계적 추정(n=10은
+   존재 증명일 뿐, 더 큰 novel-error 세트로 확장 필요).
