@@ -528,12 +528,16 @@ API 한도 초과를 측정한 것일 뿐 시스템 성능이 아니었음), 한
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
   `50290d30`/`9947e19d`). 멀티에이전트 헤드라인 수치 관련 작업은 이걸로 마무리.
-- **작은 후속 버그 — 진단 에이전트의 target 추출**: 구조화 라우팅에서 대상
-  추출이 잘못되는 사례(빈 문자열, `mlflow tracking server`처럼 공백 섞인
-  설명문, `/tmp/tensorboard_logs`처럼 파일 경로를 서비스명으로 착각)가
-  두 차례 실행(2026-09-19/21)에서 일관되게 16건 중 4건꼴로 나타남(§3.1) —
-  `_validate_process_name`을 통과 못 해 실행 안 됨. 진단 프롬프트나 파싱
-  쪽에 target 정제 규칙을 추가하면 34%에서 더 올라갈 여지가 있음.
+- ✅ **완료(2026-09-22) — 진단 에이전트의 target 추출 버그**: `_route_from_diagnosis`
+  (src/llm_engine.py)의 PID/포트 숫자 타겟 폴백 조건에 공백·`/` 포함 여부를
+  추가(`ee53a196`) — 설명문(`mlflow tracking server`)/파일경로
+  (`/tmp/tensorboard_logs`) 타겟은 이제 구조화 라우팅을 포기하고 자유형식
+  경로(self-reflection 검토 포함)로 폴백한다. 회귀 테스트 2건 추가
+  (tests/test_diagnosis_routing.py). **검증 수준**: 로컬 numpy 2.x/chromadb
+  0.5.0 비호환(known gotcha, [[project_capstone_pivot]])으로 정식 pytest는
+  못 돌림 — chromadb를 스텁으로 대체해 로직만 격리 검증. VM(Python 3.10)
+  에서 정식 pytest 재확인 필요. 다음 공식 재측정 때 이 4/16 실패가 실제로
+  줄었는지 §3.1에 반영할 것.
 - **90일 데이터 축적**: 배경에서 자동 진행 중, 끝나면 기존 스크립트
   (`experiments/run_fp_fn_analysis.py` 등)로 분석해 이 문서 §3에 행 추가.
 - **자체 로그 누적**: [`DATA_ACCUMULATION_DESIGN.md`](DATA_ACCUMULATION_DESIGN.md)
