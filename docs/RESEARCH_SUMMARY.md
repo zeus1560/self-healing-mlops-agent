@@ -696,11 +696,15 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
   추가(`ee53a196`) — 설명문(`mlflow tracking server`)/파일경로
   (`/tmp/tensorboard_logs`) 타겟은 이제 구조화 라우팅을 포기하고 자유형식
   경로(self-reflection 검토 포함)로 폴백한다. 회귀 테스트 2건 추가
-  (tests/test_diagnosis_routing.py). **검증 수준**: 로컬 numpy 2.x/chromadb
-  0.5.0 비호환(known gotcha, [[project_capstone_pivot]])으로 정식 pytest는
-  못 돌림 — chromadb를 스텁으로 대체해 로직만 격리 검증. VM(Python 3.10)
-  에서 정식 pytest 재확인 필요. 다음 공식 재측정 때 이 4/16 실패가 실제로
-  줄었는지 §3.1에 반영할 것.
+  (tests/test_diagnosis_routing.py). **검증 완료(2026-09-23)**: VM(Python
+  3.10.12/chromadb 0.5.0)에서 정식 pytest로 재확인 — `test_diagnosis_routing.py`
+  13개(추가한 2건 포함) 전부 통과. 이 김에 VM에서 `tests/` 전체(326개)도
+  돌려 CI 밖에서 처음 실행해봤는데, 무관한 사전 이슈 2건(환경 드리프트로
+  venv에 `redis` 패키지 누락 — requirements.txt엔 이미 있었음, 설치만 안
+  됨; `test_autonomy.py`의 알림 채널 mock이 `get_chatops_client()`를 안
+  고정해 실제 `TELEGRAM_BOT_TOKEN`이 있는 VM 환경에서만 재현되던 격리
+  누락)을 발견해 즉시 수정, 326개 전부 통과로 확정. 다음 공식 재측정 때 이
+  4/16 실패가 실제로 줄었는지 §3.1에 반영할 것.
 - ✅ **완료(2026-09-22) — VM 배포 정합성**: VM(`self-healing-agent`)이
   `feature/oracle-deploy`(2026-09-17 `fc9d5313`에 멈춰있던, 멀티에이전트/
   진단-라우팅 도입 이전 구식 코드)로 24/7 상시 서비스를 돌리고 있었다는

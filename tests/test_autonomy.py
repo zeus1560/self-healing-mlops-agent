@@ -92,7 +92,13 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
     def test_propose_sends_notification_and_blocks_execution(self):
         autonomy_store.set_level("Process_Crash", AutonomyLevel.PROPOSE, "tester")
         with patch.object(self.ex, "_restart_service") as mock_restart, \
+             patch("src.executor.get_chatops_client", return_value=None), \
              patch("src.executor.SlackChatOps") as mock_slack_cls:
+            # get_chatops_client()를 None으로 고정해 `get_chatops_client() or
+            # SlackChatOps()` 폴백이 결정적으로 SlackChatOps로 떨어지게 한다 —
+            # 안 그러면 실제 TELEGRAM_BOT_TOKEN이 설정된 환경(예: VM)에서
+            # get_chatops_client()가 진짜 Telegram 클라이언트를 반환해 이 mock이
+            # 호출되지 않는다(2026-09-23 VM 전체 스위트 실행 중 발견).
             mock_slack_cls.return_value.send_notification.return_value = True
             result = self.ex.execute(_decision(ActionType.RESTART_SERVICE, target_process="nginx"))
         mock_restart.assert_not_called()

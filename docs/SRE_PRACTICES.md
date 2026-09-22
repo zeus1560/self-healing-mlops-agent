@@ -196,7 +196,13 @@ VM의 상시 서비스가 체크아웃한 브랜치가 `main`보다 뒤처지는
    조치 불필요 — untracked인데 gitignore 대상이 아닌 파일만 보존 여부를
    판단한다.
 3. **의존성 변경**: `git diff <vm-head> <upstream> -- requirements*.txt
-   pyproject.toml`.
+   pyproject.toml`. **주의(2026-09-23 발견)**: 이 diff가 비어있어도 안심할
+   수 없다 — requirements.txt에 패키지가 추가된 시점 이후 venv를 그
+   시점까지 다시 `pip install`한 적이 없으면 파일과 실제 설치 상태가
+   따로 논다(예: `redis`가 requirements.txt엔 오래전부터 있었는데 venv엔
+   설치가 안 돼 있어 `test_chaos_smoke.py`가 실패한 사례). diff가 없어도
+   `pip check`나 실제 테스트 스위트 실행으로 venv 자체가 requirements와
+   맞는지 별도 확인할 것.
 4. **환경변수/설정 변경**: `git diff <vm-head> <upstream> -- .env.example
    config/`.
 5. **DB 마이그레이션**: 이 프로젝트는 `migrations/` 디렉터리 없이 각
