@@ -13,7 +13,6 @@ from unittest.mock import patch
 from experiments.run_bias_injection_test import (
     BIAS_PHRASES,
     BASE_SYSTEM_CTX,
-    BiasPhrase,
     _bias_acknowledged,
     _is_network_fallback,
     run_all,

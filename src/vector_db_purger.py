@@ -21,10 +21,6 @@ import traceback
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 
-_PURGE_THRESHOLD  = int(os.getenv("PURGE_FAILURE_THRESHOLD", "3"))
-_LOOKBACK_DAYS    = int(os.getenv("PURGE_LOOKBACK_DAYS",     "7"))
-_RUN_INTERVAL_SEC = 86400  # 24시간
-
 # 예전엔 여기서 os.getenv("RAG_THRESHOLD", "1.2")로 독자적으로 기본값(1.2)을
 # 들고 있었는데, src/llm_engine.py의 실제 탐지 파이프라인은 기본값 0.6을 쓴다
 # — 같은 환경변수 이름인데 기본값이 갈라져 있어서, .env에 RAG_THRESHOLD를
@@ -33,6 +29,10 @@ _RUN_INTERVAL_SEC = 86400  # 24시간
 # "이 실패를 유발한 문서"로 잘못 지목해 삭제할 수 있었다. llm_engine의
 # 값을 직접 import해 두 모듈이 다시는 갈라질 수 없게 한다.
 from src.llm_engine import _RAG_THRESHOLD
+
+_PURGE_THRESHOLD  = int(os.getenv("PURGE_FAILURE_THRESHOLD", "3"))
+_LOOKBACK_DAYS    = int(os.getenv("PURGE_LOOKBACK_DAYS",     "7"))
+_RUN_INTERVAL_SEC = 86400  # 24시간
 
 
 def _parse_utc(iso_str: str) -> datetime:
