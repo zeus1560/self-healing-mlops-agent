@@ -298,6 +298,18 @@ cp .env.example .env
 # 최소 GROQ_API_KEY / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 채우기
 ```
 
+### 테스트 실행
+
+CI는 `pytest tests/ -m "not slow"`를 돌린다(`.github/workflows/ci.yml`) — 새 테스트
+파일을 추가해도 별도 등록 없이 자동으로 CI 대상이 된다. 느리거나 외부 API/라이브
+DB 등 외부 의존이 있는 테스트는 `@pytest.mark.slow`로 표시해달라 — CI는 기본적으로
+`slow`가 아닌 테스트만 실행한다. 전체(slow 포함)를 로컬에서 돌리려면:
+
+```bash
+pytest tests/              # 전체(slow 포함)
+pytest tests/ -m "not slow"  # CI와 동일한 범위
+```
+
 ### 데이터 수집 및 학습
 
 ```bash
