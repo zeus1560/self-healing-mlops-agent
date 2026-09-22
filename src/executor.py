@@ -249,7 +249,9 @@ class ActionExecutor:
                 )
                 if outcome != "approved":
                     return self._approval_failure_result(outcome)
-            # level == AUTO, 또는 APPROVE_THEN_EXECUTE + LLM/Rule 커맨드(아래에서 자체 승인 처리)
+            # level == AUTO, 또는 APPROVE_THEN_EXECUTE + LLM/Rule 커맨드.
+            # 승인 게이트는 여기서 처리하지 않음 — 실제 검증은 _execute_llm_command() 참조
+            # (명령어 자체가 여기선 아직 없어 command 인자로 _await_approval을 못 부름).
             # → 그대로 통과해서 실제 액션 분기로 진행
 
         if decision.action_type == ActionType.CLEAR_MEMORY:

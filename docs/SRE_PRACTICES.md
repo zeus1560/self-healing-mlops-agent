@@ -175,7 +175,7 @@ Progressive Autonomy는 4단계(읽기전용 → 제안 → 승인후실행 → 
 
 VM의 상시 서비스가 체크아웃한 브랜치가 `main`보다 뒤처지는 일이 재발할 수
 있다(2026-09-22, `feature/oracle-deploy`가 `main` 대비 90+ 커밋 뒤처져 발견 —
-[[project_vm_stale_deploy]] 참고, 이하 그 실제 사례를 절차로 일반화한 것).
+이하 그 실제 사례를 절차로 일반화한 것).
 증상을 발견하면 아래 순서로 확인·진행한다. **7번(전환 실행) 전에는 반드시
 1~6번 결과를 사람에게 보고하고 승인받을 것** — 라이브 서비스에 영향을 주는
 작업이다.
@@ -210,7 +210,7 @@ VM의 상시 서비스가 체크아웃한 브랜치가 `main`보다 뒤처지는
    스키마를 관리한다(`src/observability.py::_SCHEMA_MIGRATIONS` 패턴 참고)
    — 스키마 관련 파일(`src/approval_store.py`/`autonomy_store.py`/
    `observability.py`) diff로 새 컬럼 추가 여부만 확인하면 된다.
-6. **카오스 인젝터 스케줄 확인**: `sudo crontab -u zeus3826 -l`(`scripts/
+6. **카오스 인젝터 스케줄 확인**: `sudo crontab -u <서비스 계정> -l`(`scripts/
    chaos_cron.sh`, 기본 6시간마다) 다음 실행 시각과 안 겹치는 안전한 창을
    고른다.
 

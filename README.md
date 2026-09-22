@@ -1,7 +1,10 @@
 # Self-Healing MLOps Agent
 
-Intel Arc / Iris Xe GPU 환경에서 동작하는 **비용 0원의 자율 장애 복구 에이전트**입니다.  
-시스템 로그를 실시간으로 감시하고, Vector DB 기반 L1 캐시와 로컬 LLM L2 추론을 결합해 장애를 자동으로 진단·복구합니다.
+프로덕션 장애를 실시간으로 감지·진단하고, 복구 방안을 제안하되 **실행은 항상
+사람의 승인을 거치는**(Progressive Autonomy로 검증된 카테고리만 예외) 오픈소스·
+셀프호스팅 로그 이상 감지·복구 제안 에이전트입니다.  
+Vector DB 기반 L1 캐시와 LLM L2 추론(1순위 Groq API, 로컬 Ollama/Intel Arc·Iris Xe
+GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니다.
 
 ---
 
@@ -16,8 +19,8 @@ Intel Arc / Iris Xe GPU 환경에서 동작하는 **비용 0원의 자율 장애
     ▼
 [RAGEngine: L1 Fast Track]
     ChromaDB 벡터 유사도 검색 (< 150ms)
-    ├─ Hit (distance < 0.8) ──────────────────▶ ActionExecutor
-    └─ Miss (distance ≥ 0.8) → [L2 Slow Track, 5단계 폴백 체인]
+    ├─ Hit (distance < 0.6) ──────────────────▶ ActionExecutor
+    └─ Miss (distance ≥ 0.6) → [L2 Slow Track, 5단계 폴백 체인]
                                     │
                           1순위 Groq API (qwen/qwen3.8-27b), 평균 0.65초
                           멀티에이전트 3단계(진단→제안→검토):
@@ -427,4 +430,4 @@ git push origin feature/기능명
 - **예외 비침묵**: `except: pass` 절대 금지 — 모든 예외는 traceback 포함 로깅
 - **보안 우선**: shlex 파싱 + 메타문자 차단 + 화이트리스트/블랙리스트 3중 방어
 - **멱등성**: ChromaDB 적재 시 MD5 해시 ID + upsert → 중복 방지
-- **테스트셋 분리**: `test_set.json`은 ChromaDB에 절대 포함 금지 (교수님 피드백 반영)
+- **테스트셋 분리**: `test_set.json`은 ChromaDB에 절대 포함 금지 (실무자 피드백 반영)
