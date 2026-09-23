@@ -375,7 +375,7 @@ review) 수준의 확실성은 아니다.
 | **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄) | 1차 정규식 게이트 오탐률 10.51%, 그 오탐 전량을 L1(RAG) 게이트에 흘렸을 때 배포값(threshold 0.6)에서 confident FP **0.0%**(1,318건 복구 데이터 기준). threshold를 1.2로 올리면 79.4%로 폭증 — 0.6 유지 근거 | `experiments/run_false_positive_analysis.py` |
 | **온라인 학습 — 설계** (런타임 자동 축적) | L1 미스 → L2/Rule 성공 시 (에러→커맨드) 쌍을 `source="online_learning"`으로 자동 upsert, 반복 성공 시 `success_count` 누적 | `src/llm_engine.py:1327` `learn_from_feedback` |
 | **Explainability 내용 품질** (Faithfulness와 분리 측정, n=8, 2026-09-22) | 승인 게이트 텍스트 8개를 Clarity/Sufficiency 1~5점으로 채점 — 평균 3.88/3.13. **승인(성공) 근거는 대상을 막연한 지시어로만 가리키고, 거부 근거는 PID를 명시**하는 비대칭 발견(§3.2) — Faithfulness(판정 정확성)는 이미 검증됐지만 사람이 감사 가능한 설명인지는 별개 문제 | §3.2, `experiments/results/explainability_scenarios_20260921_154135.json` |
-| **외적 타당도 프로브** (15종 고정 taxonomy 밖 장애 10건, VM 실측, 2026-09-22) | 9/10은 L1을 정확히 미스해 L2로 정상 폴백. **1/10(DNS 해석 실패)은 거리 0.575로 완전히 무관한 Port_Conflict 문서에 "높음" 신뢰도로 오탐** — self-reflection이 아예 없는 L1 경로로 명령이 나감(결과 명령은 우연히 읽기전용이라 무해했음). 닫힌 세계 밖 장애가 안전검증 없는 경로로 샐 수 있다는 첫 구체 사례 | §3.3, `experiments/results/external_validity_probe_20260921_155421.json` |
+| **외적 타당도 프로브** (15종 고정 taxonomy 밖 장애 10건, VM 실측, 2026-09-22) | 9/10은 L1을 정확히 미스해 L2로 정상 폴백. **1/10(DNS 해석 실패)은 거리 0.575로 완전히 무관한 Port_Conflict 문서에 오탐**(신뢰도 라벨 자체는 "낮음 — 애매한 매칭"으로 정확히 경고했음) — self-reflection이 아예 없는 L1 경로로 명령이 나감(결과 명령은 우연히 읽기전용이라 무해했음). 닫힌 세계 밖 장애가 안전검증 없는 경로로 샐 수 있다는 첫 구체 사례 | §3.3, `experiments/results/external_validity_probe_20260921_155421.json` |
 | **온라인 학습 — 실제 운영 실측** (2026-09-19, VM `agent_metrics.db` 전수 조회) | **3주+ 24/7 운영 동안 `source="online_learning"` 엔트리가 0건** — 설계는 있지만 한 번도 안 쓰인 기능. 원인: `learn_from_feedback`이 발동하려면 (L2/RULE 결과, success=True, 명령어 non-empty)가 동시에 필요한데, 95건 전수 중 L2_LLM 47건은 28건이 안전 검증기에서 거부(FAILURE), 나머지 19건은 success=True지만 `command`가 빈 문자열(안전한 조치 없음→에스컬레이션이 형식상 success로 기록됨), RULE 경로는 아예 0건 — 세 조건이 동시에 맞은 적이 없음. 카오스 인젝터의 고정된 장애 시그니처가 이미 사전 적재된 L1 플레이북(1,318건)으로 대부분 커버돼, L2가 진짜 새 커맨드를 합성해야 하는 상황 자체가 드묾 | VM `data/agent_metrics.db`(2026-08-26~09-18), `src/log_watcher.py:260-272` 게이팅 조건 |
 
 ### 3.1 멀티에이전트 효과 재실측 (2026-09-19~21) — 두 단계로 정정 + 공식 확정
@@ -545,9 +545,11 @@ systemd 서비스는 건드리지 않았고(별도 `/tmp` 체크아웃에서 독
 
 원본: `experiments/results/external_validity_probe_20260921_155421.json`.
 
-**핵심 발견 — L1 캐시가 완전히 무관한 장애를 "높음" 신뢰도로 오탐했다.**
-"`redis-primary.internal` 호스트명을 해석할 수 없다"(DNS 실패)는 거리
-0.575(임계값 0.6, `_confidence_label` 기준 "높음")로 **기존 Port_Conflict
+**핵심 발견 — L1 캐시가 완전히 무관한 장애를 오탐했다(단, 신뢰도 라벨 자체는
+정확히 경고를 냄).** "`redis-primary.internal` 호스트명을 해석할 수 없다"
+(DNS 실패)는 거리 0.575(임계값 0.6, `_confidence_label` 기준 **"낮음 —
+임계값에 근접한 애매한 매칭, 신중히 검토할 것"**로 정정 — 이 문서 이전 버전이
+"높음"으로 잘못 기재했었음, 2026-09-23 재확인)로 **기존 Port_Conflict
 큐레이션 문서**("Creating Server TCP listening socket ... bind: Address
 already in use", 6379 포트 점유)와 매칭돼 `execute_rule_command`(`ss -tuln`)
 로 라우팅됐다 — 직접 쿼리로 원인을 확인하니, "redis"·소켓/연결 관련 어휘가
@@ -721,24 +723,40 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
   컷오프로만 구분하기로 결정, `metrics` 테이블은 `src/observability.py`
   참고) — 90일 분석 시 이 컷오프를 반드시 명시하고 필요하면 컷오프
   이후 데이터만 따로 집계할 것.
-- **L1 임베딩이 의미상 무관한 문서를 고신뢰도로 오탐할 수 있음** (§3.3,
-  2026-09-22 발견, DNS_Resolution_Failure→Port_Conflict 오탐 사례): 거리
-  0.575(임계값 0.6, "높음" 신뢰도)로 "redis 호스트를 못 찾음"과 "redis 포트가
-  이미 사용 중"이라는 정반대 원인의 장애가 매칭됐다 — `redis`·소켓/연결
-  어휘 중첩이 원인으로 추정. **`_assess_risk()`(`experiments/
-  run_external_validity_probe.py`)는 이 프로브 스크립트 안에만 있는 리포팅용
-  분류 함수다 — src/의 실제 프로덕션 파이프라인 어디에도 연결돼 있지 않고,
-  프로덕션에서 이런 오탐이 일어나는 걸 막지 않는다.** 이번 세션에 고친 건
-  "프로브 결과 JSON에 이 사례를 위험으로 정확히 라벨링하는가"였을 뿐, 근본
-  원인인 **L1 리트리버 자체의 오탐**은 프로덕션 코드(src/llm_engine.py)
-  기준으로 아직 손 안 댐 — "이미 부분적으로 완화돼 있다"고 오해하지 말 것.
-  후보 대응(우선순위 미정, 다음 세션에서 재우선순위화
-  필요): (1) 거리 임계값을 더 보수적으로 낮추기(재현율과 트레이드오프),
-  (2) L1 히트도 self-reflection을 거치게 하기(현재는 L1 경로가 검증을
-  아예 건너뜀 — 설계 의도였지만 이 사례로 재검토 필요), (3) 임베딩 모델
-  자체를 원인(cause) 어휘 대비 증상(symptom) 어휘를 더 잘 구분하는 것으로
-  교체. n=1 사례라 빈도는 모름 — §3.3 "남은 일"(오탐률 통계적 추정)이
-  먼저 필요할 수도 있음.
+- ✅ **완료(2026-09-23) — L1 임베딩 오탐 대응**: §3.3(DNS_Resolution_Failure→
+  Port_Conflict 오탐, 거리 0.575, `_confidence_label` 기준 "낮음 — 애매한
+  매칭, 신중히 검토할 것" — 신뢰도 라벨은 정확히 경고했음, 이 문서 이전
+  버전의 "높음" 기재는 오류였고 이번에 정정함) 사례에서 나온 후보 대응 3가지
+  (①거리 임계값 강화 ②L1 히트도 self-reflection 적용 ③임베딩 모델 교체)
+  중 **②를 채택**했다 — ①은 근본 원인을 안 고치고 재현율만 깎고, ③은 전체
+  ChromaDB 재임베딩+기존 threshold/FP 튜닝 재검증이 필요해 스코프가 너무 큼.
+  `_reflect_on_l1_hit()`(`src/llm_engine.py`)를 추가해 L1 히트 중
+  RESTART_SERVICE/KILL_PROCESS(커맨드 합성)·EXECUTE_RULE_COMMAND/
+  EXECUTE_LLM_COMMAND(`response.command` 직접 사용)에 self-reflection을
+  적용, CLEAR_MEMORY만 제외(순수 in-process 동작이라 타겟 오류 위험 자체가
+  없음). **최초 구현이 RESTART_SERVICE/KILL_PROCESS만 다뤘다가, 실제 사고
+  재현 검증 중 원본 사고의 매칭 문서 action_type이 사실 execute_rule_command
+  였다는 걸 발견해 뒤늦게 추가함** — 라이브 ChromaDB 기준
+  execute_rule_command(415건)가 clear_memory(251건) 제외 구조화 액션 중
+  실제로 가장 큰 비중을 차지해 이 누락이 작지 않았다. self-reflection이
+  "NO"를 내도 L2 자유형식 경로와 동일하게 강제 차단 없이 reasoning에 경고만
+  남긴다(새 차단 로직 미추가). 레이턴시 실측: RESTART_SERVICE 0.019초(이미
+  `_is_bounded_state_change_command` 화이트리스트 경로라 LLM 호출 자체가
+  없음), KILL_PROCESS 0.279초(실제 Groq 호출 포함). 원본 사고를 VM 격리
+  chroma_db 사본에서 재현한 결과, self-reflection이 정상 개입해
+  `self_reflection_safe`가 채워짐(이 특정 사례는 매칭된 명령 `ss -tuln`이
+  읽기전용이라 결정론적으로 안전 판정 — "위험한 명령이었다면 경고가 붙는가"
+  는 별도 mock 단위테스트로 검증). 회귀 테스트 7건 추가
+  (`tests/test_groq_smoke.py::TestReflectOnL1Hit`).
+  **백로그(코드 변경 아님)**: 이 조사 중 `Port_Conflict`가 `auto` 승급 6개
+  카테고리에 없어 `approve_then_execute`로 갔던 게 설계된 안전망이 아니라
+  우연이었다는 걸 확인함(VM 라이브 `autonomy_state` 조회로 확인) — 다만 이번
+  수정으로 self-reflection이 autonomy 게이팅보다 앞선 RAGEngine 단계에서
+  무조건 적용되게 됐으므로, 이 특정 우려는 사실상 해소됨. 그래도 일반
+  원칙으로 남겨둘 것: **향후 새 action_type이 L1 히트 경로에 추가되거나
+  어떤 카테고리든 `auto`로 승급 검토할 때는, 그 경로의 self-reflection
+  커버리지(`_L1_REFLECTABLE_TEMPLATES`/`_L1_REFLECTABLE_DIRECT_COMMAND_ACTIONS`)
+  도 같이 재검토할 것.**
 - **자체 로그 누적**: [`DATA_ACCUMULATION_DESIGN.md`](DATA_ACCUMULATION_DESIGN.md)
   설계만 완료, 실제 수집·분석은 미착수.
 - **최종 발표 포맷 확정 대기**: 확정되면 이 문서를 그 포맷(논문/포스터/슬라이드)에

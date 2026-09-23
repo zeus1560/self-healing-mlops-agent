@@ -269,6 +269,120 @@ class TestSelfReflectionNoForcedEscalation(unittest.TestCase):
         self.assertNotIn("자가 반성", response.reasoning)
 
 
+class TestReflectOnL1Hit(unittest.TestCase):
+    """
+    2026-09-23 추가: L1 캐시 히트도 (CLEAR_MEMORY 제외) 실행 가능 액션엔
+    self-reflection을 거치게 한다(§6 — DNS_Resolution_Failure가 거리 0.575로
+    완전히 무관한 Port_Conflict 문서에 매칭된 사례에서 발견, L1 히트는
+    지금까지 self-reflection을 아예 안 거쳐서 벡터 유사도만으로 확신한 오탐이
+    아무 독립 검증 없이 승인 게이트/자동실행으로 직행할 수 있었다).
+
+    최초 구현은 RESTART_SERVICE/KILL_PROCESS만 다뤘다가, 실제 사고 재현
+    검증(§6 원본 케이스는 매칭된 L1 문서의 action_type이 execute_rule_command
+    였음) 과정에서 이 두 액션을 빠뜨린 걸 발견해 추가했다 — 라이브 ChromaDB
+    기준 execute_rule_command(415건)가 clear_memory(251건) 제외 구조화 액션
+    중 실제로 가장 큰 비중을 차지한다.
+    """
+
+    def _response(self, action_type, target_process="nginx", reasoning="", command=None):
+        from src.schemas import AgentResponse
+        return AgentResponse(
+            error_category="Port_Conflict", severity="HIGH",
+            action_type=action_type, target_process=target_process,
+            reasoning=reasoning, command=command, resolution_source="L1_CACHE",
+        )
+
+    def test_restart_service_goes_through_self_reflection(self):
+        with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch.object(llm_engine, "_reflect_on_command",
+                          return_value=(True, "matches expected restart target")) as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.RESTART_SERVICE), "some error log",
+            )
+        mock_reflect.assert_called_once()
+        self.assertEqual(mock_reflect.call_args[0][0], "systemctl restart nginx")
+        self.assertTrue(response.self_reflection_safe)
+
+    def test_kill_process_goes_through_self_reflection(self):
+        with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch.object(llm_engine, "_reflect_on_command",
+                          return_value=(True, "target matches error")) as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.KILL_PROCESS, target_process="leaky_worker"),
+                "some error log",
+            )
+        mock_reflect.assert_called_once()
+        self.assertEqual(mock_reflect.call_args[0][0], "pkill -x leaky_worker")
+        self.assertTrue(response.self_reflection_safe)
+
+    def test_execute_rule_command_uses_response_command_directly(self):
+        """§6 원본 사고의 실제 재현 케이스 — 매칭된 L1 문서가
+        execute_rule_command + command="ss -tuln"을 메타데이터로 직접
+        들고 있던 경우. 합성 없이 response.command를 그대로 태워야 한다."""
+        with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch.object(llm_engine, "_reflect_on_command",
+                          return_value=(True, "read-only, no risk")) as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.EXECUTE_RULE_COMMAND,
+                                target_process=None, command="ss -tuln"),
+                "ERROR: socket.gaierror - could not resolve redis-primary.internal",
+            )
+        mock_reflect.assert_called_once()
+        self.assertEqual(mock_reflect.call_args[0][0], "ss -tuln")
+        self.assertTrue(response.self_reflection_safe)
+
+    def test_execute_llm_command_uses_response_command_directly(self):
+        with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch.object(llm_engine, "_reflect_on_command",
+                          return_value=(True, "matches error")) as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.EXECUTE_LLM_COMMAND,
+                                target_process=None, command="kill -TERM 5821"),
+                "some error log",
+            )
+        mock_reflect.assert_called_once()
+        self.assertEqual(mock_reflect.call_args[0][0], "kill -TERM 5821")
+        self.assertTrue(response.self_reflection_safe)
+
+    def test_execute_rule_command_without_command_text_is_skipped(self):
+        """command 필드가 비어있으면(방어적) reflect 대상에서 제외한다."""
+        with patch.object(llm_engine, "_reflect_on_command") as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.EXECUTE_RULE_COMMAND,
+                                target_process=None, command=None),
+                "some error log",
+            )
+        mock_reflect.assert_not_called()
+        self.assertIsNone(response.self_reflection_safe)
+
+    def test_clear_memory_is_excluded(self):
+        """CLEAR_MEMORY는 외부 커맨드가 없는 순수 in-process 동작이라
+        self-reflection 대상에서 제외한다."""
+        with patch.object(llm_engine, "_reflect_on_command") as mock_reflect:
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.CLEAR_MEMORY, target_process=None),
+                "some error log",
+            )
+        mock_reflect.assert_not_called()
+        self.assertIsNone(response.self_reflection_safe)
+
+    def test_unsafe_verdict_warns_but_does_not_block(self):
+        """self-reflection이 NO를 내도 action_type은 그대로 유지된다 — 강제
+        차단 없음(L2 자유형식 경로와 동일한 원칙, TestSelfReflectionNoForcedEscalation
+        참고). 재현 시나리오: DNS 해석 실패가 Port_Conflict(redis)로 오탐된 실제 사례."""
+        with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
+             patch.object(llm_engine, "_reflect_on_command",
+                          return_value=(False, "target does not match error root cause")):
+            response = llm_engine._reflect_on_l1_hit(
+                self._response(ActionType.KILL_PROCESS, target_process="redis-server"),
+                "ERROR: socket.gaierror - Name or service not known: redis-primary.internal",
+            )
+        self.assertEqual(response.action_type, ActionType.KILL_PROCESS)
+        self.assertFalse(response.self_reflection_safe)
+        self.assertIn("자가 반성", response.reasoning)
+        self.assertIn("target does not match error root cause", response.reasoning)
+
+
 class TestSplitVerdictAndRationale(unittest.TestCase):
     """
     _reflect_on_command()이 2026-09-12 Explainability 확장으로 판정 근거(rationale)도

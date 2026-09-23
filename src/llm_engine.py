@@ -922,6 +922,68 @@ def _build_response_from_meta(
     )
 
 
+# L1 히트 중 self-reflection을 태울 액션. 두 갈래로 나뉜다:
+#  - RESTART_SERVICE/KILL_PROCESS: executor.py가 실제로 생성하는 커맨드와 정확히
+#    같은 형태로 합성해야 한다(_kill_process/_restart_service 참고).
+#  - EXECUTE_RULE_COMMAND/EXECUTE_LLM_COMMAND: L1 큐레이션 문서가 메타데이터에
+#    완성된 커맨드 문자열을 이미 들고 있다(response.command) — 합성 불필요,
+#    그대로 쓴다. 2026-09-23 최초 구현이 이 두 액션을 빠뜨렸다가 §6 원본 사고
+#    (DNS_Resolution_Failure→Port_Conflict, 실제 action_type이 execute_rule_command
+#    였음)를 재현 검증하는 과정에서 발견 — 이 둘이 라이브 ChromaDB에서 execute_
+#    rule_command 415건/execute_llm_command 5건으로, clear_memory(251건) 제외한
+#    구조화 액션 중 실제로 가장 큰 비중을 차지한다.
+# CLEAR_MEMORY는 계속 뺀다 — 외부 커맨드가 없는 순수 in-process 동작(gc.collect()
+# 등)이라 "타겟이 틀렸다"는 위험 자체가 없다.
+_L1_REFLECTABLE_TEMPLATES: dict[ActionType, str] = {
+    ActionType.RESTART_SERVICE: "systemctl restart {target}",
+    ActionType.KILL_PROCESS:    "pkill -x {target}",
+}
+_L1_REFLECTABLE_DIRECT_COMMAND_ACTIONS = (
+    ActionType.EXECUTE_RULE_COMMAND,
+    ActionType.EXECUTE_LLM_COMMAND,
+)
+
+
+def _reflect_on_l1_hit(response: AgentResponse, error_log: str) -> AgentResponse:
+    """
+    L1 캐시 히트도 (CLEAR_MEMORY를 제외한) 실행 가능 액션엔 self-reflection을
+    거치게 한다(2026-09-23, §6 — DNS_Resolution_Failure가 거리 0.575로 완전히
+    무관한 Port_Conflict 문서에 매칭된 사례에서 발견). 지금까지 L1 히트는
+    self-reflection을 아예 안 거쳤다 — 벡터 유사도만으로 확신한 오탐이 아무
+    독립 검증 없이 승인 게이트/자동실행으로 직행할 수 있었다는 뜻이다.
+
+    RESTART_SERVICE(`systemctl restart`)는 이미 `_is_bounded_state_change_command`
+    화이트리스트에 걸려 LLM 호출 없이 즉시 결정되므로 레이턴시 영향이 사실상
+    없다 — 실제 Groq 호출이 붙는 건 KILL_PROCESS(`pkill`)와, 화이트리스트 밖
+    커맨드일 수 있는 EXECUTE_RULE_COMMAND/EXECUTE_LLM_COMMAND뿐이다.
+
+    L2 자유형식 경로(`_make_llm_response`)와 동일한 원칙 그대로 재사용한다 —
+    self-reflection이 "NO"를 내도 강제 차단하지 않고 reasoning에 경고만 남긴다.
+    새 차단 로직을 만들면 그 자체가 새 회귀 위험이라, 이미 L2에서 검증된 "경고만,
+    승인 여부는 사람/게이트가 최종 판단" 설계를 그대로 따른다.
+    """
+    if response.action_type in _L1_REFLECTABLE_TEMPLATES:
+        if not response.target_process:
+            return response
+        command = _L1_REFLECTABLE_TEMPLATES[response.action_type].format(
+            target=response.target_process
+        )
+    elif response.action_type in _L1_REFLECTABLE_DIRECT_COMMAND_ACTIONS:
+        if not response.command:
+            return response
+        command = response.command
+    else:
+        return response
+
+    system_ctx = gather_system_context(error_log)
+    safe, rationale = _reflect_on_command(command, error_log, system_ctx)
+    response.self_reflection_safe = safe
+    if not safe:
+        warning = f"⚠️ 자가 반성이 위험 판정(L1 캐시 제안) — {rationale} — 승인 시 주의: {command}"
+        response.reasoning = f"{response.reasoning}\n\n{warning}" if response.reasoning else warning
+    return response
+
+
 def _make_llm_response(
     command: str, error_log: str, system_context: str, backend: str,
     nearest_category: str | None = None, nearest_distance: float | None = None,
@@ -1277,7 +1339,8 @@ class RAGEngine:
                 f"  [앙상블] {len(candidates)}/{len(dists)}개 후보 "
                 f"→ 다수결 action: {best_meta.get('action_type')}"
             )
-            return _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
+            response = _build_response_from_meta(best_meta, "L1_CACHE", doc_id=best_id, evidence=evidence)
+            return _reflect_on_l1_hit(response, log_text)
 
         return self._l2_slow_track(log_text, metas[0], dists[0])
 
