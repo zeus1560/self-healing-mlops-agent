@@ -740,10 +740,42 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
   execute_rule_command(415건)가 clear_memory(251건) 제외 구조화 액션 중
   실제로 가장 큰 비중을 차지해 이 누락이 작지 않았다. self-reflection이
   "NO"를 내도 L2 자유형식 경로와 동일하게 강제 차단 없이 reasoning에 경고만
-  남긴다(새 차단 로직 미추가). 레이턴시 실측: RESTART_SERVICE 0.019초(이미
-  `_is_bounded_state_change_command` 화이트리스트 경로라 LLM 호출 자체가
-  없음), KILL_PROCESS 0.279초(실제 Groq 호출 포함). 원본 사고를 VM 격리
-  chroma_db 사본에서 재현한 결과, self-reflection이 정상 개입해
+  남긴다(새 차단 로직 미추가). 레이턴시 실측(VM): RESTART_SERVICE 0.019초
+  (이미 `_is_bounded_state_change_command` 화이트리스트 경로라 LLM 호출
+  자체가 없음), KILL_PROCESS 0.279초(실제 Groq 호출 포함).
+
+  **레이턴시 실측 — EXECUTE_RULE_COMMAND/EXECUTE_LLM_COMMAND(2026-09-23
+  추가 실측, 최초 커밋 리뷰 중 두 경로가 레이턴시 측정에서 빠진 걸 발견해
+  보완)**: `EXECUTE_RULE_COMMAND`는 라이브 ChromaDB 기준 415건으로 가장 큰
+  비중을 차지해 영향이 클 수 있다고 판단, 415건 전수를 `_is_read_only_command`/
+  `_is_bounded_state_change_command`로 검사한 결과 **311건이 읽기전용
+  (`ss`), 104건이 bounded 화이트리스트(`journalctl`)로 415건 전부가 무료
+  경로** — 실제 Groq 호출이 필요한 케이스 0건. 실측(VM): `ss -tuln` 0.0125초,
+  `journalctl --vacuum-time=1d` 0.0056초. `EXECUTE_LLM_COMMAND`(5건)는
+  전수 확인 결과 **5건 전부 `command` 필드가 빈 문자열**이라
+  `_reflect_on_l1_hit()`의 "command 없으면 skip" 분기를 타 실측 0.0000초.
+  **현재 라이브 데이터 기준 두 경로의 처리량 영향은 0.**
+
+  **워스트케이스와 발동 조건**: 위 실측은 어디까지나 지금 큐레이션된 데이터가
+  우연히 전부 안전한 커맨드였다는 사실에 의존한다 — 코드가 구조적으로
+  보장하는 게 아니다. **향후 non-bounded 커맨드가 execute_rule_command
+  또는 execute_llm_command 경로로 유입될 경우, 레이턴시가 각각
+  0.265초/0.608초까지 늘어날 수 있음(KILL_PROCESS와 동급, 실측 완료 —
+  가상 워스트케이스로 `pkill -f leaky_worker`/`kill -TERM 5821` 사용해
+  직접 측정함). 현재는 해당 경로에 non-bounded 커맨드가 없어 영향 없음으로
+  판단하나, 새 rule이나 LLM 커맨드 생성 로직이 추가되면 이 조건(전부
+  읽기전용/bounded라는 전제)이 달라지는지 재확인하고 필요 시 재측정할 것.**
+
+  **결론 — 허용 가능, 별도 완화 조치 없음**: 전수 검사로 확인한 현재 실제
+  Groq 호출 0건(execute_rule_command/execute_llm_command 둘 다), 그리고
+  워스트케이스가 발생하더라도 이미 이번 수정에서 KILL_PROCESS 0.279초를
+  감수하기로 판단한 것과 동일한 규모(0.2~0.6초)라는 두 근거로, 캐싱이나
+  조건부 범위 축소 같은 별도 완화 조치 없이 그대로 유지하기로 결정함
+  (캐싱은 실제 프로덕션에서 (command, error_log) 조합이 매번 달라 히트율이
+  낮을 것으로 예상돼 실효성이 의심되고, 범위 축소는 이번 수정의 안전
+  커버리지 목적과 직접 상충).
+
+  원본 사고를 VM 격리 chroma_db 사본에서 재현한 결과, self-reflection이 정상 개입해
   `self_reflection_safe`가 채워짐(이 특정 사례는 매칭된 명령 `ss -tuln`이
   읽기전용이라 결정론적으로 안전 판정 — "위험한 명령이었다면 경고가 붙는가"
   는 별도 mock 단위테스트로 검증). 회귀 테스트 7건 추가
