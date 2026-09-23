@@ -689,6 +689,80 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
 
 ## 6. 아직 안 된 것
 
+### 긴급 백로그 (우선순위: 높음, 2026-09-23 등록)
+
+[`DATA_ACCUMULATION_DESIGN.md`](DATA_ACCUMULATION_DESIGN.md) v2 작성 중
+발견한 **기존 코드/운영 문제**. 이번 등록은 기록까지만이고 코드는 고치지
+않았다 — 전부 **다음 세션에서 대응 방향·우선순위를 논의할 항목**이다.
+B1이 B2·B3 판단의 선행 조건이다.
+
+- [ ] **B1. prod VM DB 스캔 (미실행)** — 로컬 개발 DB 스캔(2026-09-23)에서
+  나온 항목을 prod에서도 확인한다. 로컬 DB는 데모 데이터라 prod 상태를
+  대변하지 않는다. **출력은 건수·패턴 종류만 남기고 실제 값(계정명·IP·
+  텔레그램 ID)은 화면/문서에 옮기지 않는다.** 스캔 범위:
+  - `pending_approvals.decided_by` — 접두어별 건수(`telegram:` / `web:` /
+    NULL), 즉 PII가 실제로 몇 건 쌓였는지
+  - `pending_approvals` — 전체 행 수, 가장 오래된 `created_at` (무기한 보관
+    실태), 만료 후에도 남아 있는 `token` 수
+  - `metrics.error_log` / `error_detail` / `command` — `/home/<x>/` 경로,
+    `sudo: <x> :`류 계정명, 사설·공인 IPv4, 이메일, 토큰 접두어(`gsk_` 등)
+    패턴별 건수. 특히 VM 실행 계정명이 몇 건에 남아 있는지
+  - ChromaDB — `source`별 건수(9/19 기준 `online_learning` 0건이었음, 그
+    뒤 생겼는지), 문서 본문의 마스킹 안 된 IP/경로 패턴 건수
+  - `autonomy_state.updated_by` / `shadow_events` — 사람 이름이 들어갔는지
+  - 결과는 `DATA_ACCUMULATION_DESIGN.md` §2.2에 prod 열로 추가하고, 잠정
+    수치(§1.3·§7)를 재검토한다.
+
+- [ ] **B2. Groq 제3자 전송 미고지 — 포지셔닝과 충돌 (대응 방향 미결정)**
+  - **현재 동작**: `GROQ_API_KEY`가 설정돼 있으면 L2 경로에서 에러 로그
+    원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py`
+    `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps comm`/`ss`,
+    `src/system_diagnostics.py`)이 `api.groq.com`으로 전송된다. 9/23부터는
+    L1 히트 중 커맨드를 실행하는 경로의 self-reflection도 Groq를 부른다
+    (§6 L1 임베딩 오탐 대응 항목). Slack/Telegram 알림도 로그 앞부분을
+    제3자로 보낸다.
+  - **고지 상태**: README는 "1순위 Groq API"라고만 쓰고, 로그 원문이 제3자로
+    나간다는 사실은 README·문서 어디에도 없다. README 설치 가이드는 오히려
+    `.env`에 `GROQ_API_KEY`를 채우는 것을 기본 절차로 안내한다.
+  - **충돌**: `docs/one-pager.md`의 규제 산업 포지셔닝("로그·운영 데이터가
+    제3자 SaaS로 나가는 것 자체가 컴플라이언스 문제 → 셀프호스팅은 요건")과,
+    기본 설치 절차대로 쓰면 로그가 Groq로 나간다는 현재 동작이 정면으로
+    충돌한다.
+  - **확인할 것 — prod VM에 키가 실제로 설정돼 있고 서비스가 쓰고 있는가.**
+    "Groq 호출 0건"이라는 기존 실측(위 §6 L1 오탐 대응 항목)은 **L1 히트 중
+    execute_rule_command/execute_llm_command 두 경로의 self-reflection
+    한정** 수치다. 서비스 전체에서 Groq가 안 불렸다는 뜻이 아니다. 반대로
+    같은 날 VM에서 잰 KILL_PROCESS 0.279초는 "실제 Groq 호출 포함"이었고, §3의
+    VM 전수 조회(8/26~9/18)에는 L2_LLM 47건이 있다. 다만 `resolution_source`는
+    Groq와 Ollama 폴백을 구분하지 않고, 실측이 서비스 프로세스가 아니라 셸에서
+    돌았을 수도 있어서 아래 세 가지를 나눠 확인한다(키 값은 출력하지 말 것):
+    1. 서비스가 읽는 `.env`에 키가 있는가 — `grep -c '^GROQ_API_KEY=gsk_' <REPO_DIR>/.env`
+       (1이면 설정됨, 값은 안 보임)
+    2. 서비스 로그에 Groq 미설정 폴백 메시지가 있는가 —
+       `sudo journalctl -u self-healing-agent --since 2026-09-21 | grep -c "GROQ_API_KEY 미설정"`
+    3. 9/21 아키텍처 컷오프 이후 L2_LLM 행이 실제로 있는가 — `metrics`에서
+       `resolution_source='L2_LLM' AND timestamp >= '2026-09-21T16:30:43'` 건수.
+       0건이면 "키는 있지만 트래픽 특성상(L1이 대부분 커버) 안 불림",
+       있으면 "실제로 전송 중"
+  - **대응 방향 후보(미결정)**: README에 전송 내용 명시 / 기본값을 Ollama
+    전용으로 바꾸고 Groq를 opt-in으로 / Groq 전송 전에 마스킹 적용 / 현행 유지 +
+    포지셔닝 문구 수정. 다음 세션 논의 대상.
+
+- [ ] **B3. `decided_by` PII + `pending_approvals` 무기한 보관**
+  - **현재 동작**: 승인·거부 시 `decided_by`에 텔레그램 user id와 username(없으면
+    이름)(`src/telegram_bot.py`) 또는 웹 승인 클라이언트 IP
+    (`src/approval_server.py` `_client_identity`)가 저장된다. 9/17 감사 추적
+    보강(누가 승인했나) 때 넣은 필드다.
+  - **보관**: `src/maintenance.py`는 `metrics`·`circuit_breaker`만 30일 정리한다.
+    `pending_approvals`(`decided_by`, 만료된 승인 `token`, `error_log` 원문 포함)와
+    `shadow_events`에는 삭제 정책이 없어 무기한 쌓인다.
+  - **판단 필요(B1 이후)**: (a) 앞으로의 보관기간을 얼마로 할지 — 감사
+    추적 목적과 최소 보관 원칙 사이 균형, (b) prod에 이미 쌓인 데이터를
+    소급 정리할지(B1 결과로 건수·기간 확인 후), (c) 식별자를 원문 그대로
+    둘지 채널 종류만 남길지. `DATA_ACCUMULATION_DESIGN.md` §6.1은 외부
+    공유 번들에서는 채널 종류만 남기도록 이미 정했다. 로컬 보관 정책은 이
+    항목에서 정한다.
+
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
   `50290d30`/`9947e19d`). 멀티에이전트 헤드라인 수치 관련 작업은 이걸로 마무리.
@@ -790,7 +864,9 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
   커버리지(`_L1_REFLECTABLE_TEMPLATES`/`_L1_REFLECTABLE_DIRECT_COMMAND_ACTIONS`)
   도 같이 재검토할 것.**
 - **자체 로그 누적**: [`DATA_ACCUMULATION_DESIGN.md`](DATA_ACCUMULATION_DESIGN.md)
-  설계만 완료, 실제 수집·분석은 미착수.
+  v2(2026-09-23) 확정 — 수집 범위(Tier 0/1), 동의(기본 비수집, 로컬 export
+  번들, L0/L1/L2), 필드 단위 비식별화 규칙까지 설계 완료. 수치는 B1(prod
+  VM 스캔) 전까지 잠정치. 실제 수집·분석 코드는 미착수.
 - **최종 발표 포맷 확정 대기**: 확정되면 이 문서를 그 포맷(논문/포스터/슬라이드)에
   맞게 재구성.
 
