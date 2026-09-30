@@ -4,7 +4,8 @@
 사람의 승인을 거치는**(Progressive Autonomy로 검증된 카테고리만 예외) 오픈소스·
 셀프호스팅 로그 이상 감지·복구 제안 에이전트입니다.  
 Vector DB 기반 L1 캐시와 LLM L2 추론(1순위 Groq API, 로컬 Ollama/Intel Arc·Iris Xe
-GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니다.
+GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니다. Groq를 쓰면 로그
+일부가 외부로 전송됩니다 — [외부로 나가는 데이터](#외부로-나가는-데이터-반드시-확인) 참고.
 
 ---
 
@@ -299,6 +300,8 @@ pip install -e .                  # 개발 의존성(pytest 등)까지: pip inst
 # 2. 환경변수 설정
 cp .env.example .env
 # 최소 GROQ_API_KEY / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 채우기
+# ⚠️ GROQ_API_KEY를 채우면 L2 경로에서 로그 원문이 api.groq.com으로 전송됨
+#    → 아래 "외부로 나가는 데이터" 참고
 ```
 
 ### 테스트 실행
@@ -400,6 +403,20 @@ sudo systemctl start self-healing-agent   # install.sh로 유닛을 미리 설�
 | **Ollama** | Ollama 설치 + `qwen2.5:0.5b` pull | CPU/GPU 무관, Groq 미설정/실패 시 2순위 폴백 |
 | **ipex_llm** | Intel Arc / Iris Xe GPU | spawn 멀티프로세싱으로 VRAM 격리, 3순위 폴백 |
 | **Rule-based** | 없음 | LLM 전부 실패 시 키워드 기반 자동 폴백 |
+
+### 외부로 나가는 데이터 (반드시 확인)
+
+에이전트 본체와 L1 캐시(ChromaDB)·메트릭 DB는 전부 설치한 서버 안에서 돕니다.
+다만 아래 설정을 켜면 **로그 일부가 외부 서비스로 전송됩니다.**
+
+| 설정 | 전송 대상 | 전송 내용 |
+|------|----------|----------|
+| `GROQ_API_KEY` | `api.groq.com` | L2 경로: 에러 로그 원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py` `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps`/`ss`, `src/system_diagnostics.py`). L1 히트 중 명령을 실행하는 경로의 self-reflection 검토도 Groq를 호출할 수 있음 |
+| `TELEGRAM_BOT_TOKEN` / Slack 설정 | Telegram / Slack | 알림 메시지에 포함된 로그 앞부분 |
+
+로그가 외부로 나가면 안 되는 환경(규제 산업 등)이라면 `GROQ_API_KEY`를 비워두고
+Ollama(`--profile llm`)만 쓰세요 — L2 추론이 서버 안에서만 처리됩니다(응답은
+Groq보다 느림). 전송 전 마스킹은 아직 적용되지 않습니다.
 
 ---
 

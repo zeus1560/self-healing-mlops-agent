@@ -26,7 +26,7 @@ Datadog은 관측 시장에서 데이터센터 관리 부문 기준 약 51.82%�
 
 ### 2.2 승인 화면 근거 자체의 신뢰성 검증 (Explainability 적대적 검증)
 
-Datadog·New Relic 어느 쪽 마케팅에서도 "승인 화면에 뜨는 근거 문구 자체가 신뢰할 만한지"를 적대적으로 검증했다는 주장은 확인되지 않았다. 본 프로젝트는 bias-injection·counterfactual 검증까지 거쳤고, 그 과정에서 승인 근거는 모호("the specific leaking process" 식)한 반면 거부 근거는 PID를 정확히 명시하는 비대칭을 직접 발견해 문서화했다(§3, RESEARCH_SUMMARY.md). 이는 "승인 게이트가 있다"가 아니라 "그 게이트에 뜨는 근거를 우리가 검증한다"는, 한 단계 더 구체적인 신뢰 신호다.
+Datadog·New Relic 어느 쪽 마케팅에서도 "승인 화면에 뜨는 근거 문구 자체가 신뢰할 만한지"를 적대적으로 검증했다는 주장은 확인되지 않았다. 본 프로젝트는 bias-injection·counterfactual 검증으로 검토 단계의 판정이 편향 문구에 흔들리지 않음을 확인했고, 별도의 근거 문구 품질 채점(Explainability, n=8, 채점자 Claude 단독 — 2026-09-30 출처 정정)에서 승인 근거는 모호("the specific leaking process" 식)한 반면 거부 근거는 PID를 정확히 명시하는 비대칭을 발견해 문서화했다(§3.2, RESEARCH_SUMMARY.md). 이는 "승인 게이트가 있다"가 아니라 "그 게이트에 뜨는 근거를 우리가 검증한다"는, 한 단계 더 구체적인 신뢰 신호다.
 
 ---
 
