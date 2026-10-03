@@ -13,6 +13,7 @@ Usage:
 """
 import argparse
 import getpass
+import sys
 
 from src import autonomy_store
 from src.schemas import AutonomyLevel
@@ -61,7 +62,10 @@ def main() -> None:
     updated_by = getpass.getuser()
 
     if args.shadow:
-        autonomy_store.start_shadow(args.category, AutonomyLevel(args.shadow), updated_by)
+        try:
+            autonomy_store.start_shadow(args.category, AutonomyLevel(args.shadow), updated_by)
+        except autonomy_store.LocalModeAutoNotAllowed as e:
+            sys.exit(f"거부: {e}")
         print(
             f"'{args.category}' → Shadow 승급 검토 시작 "
             f"(목표: {args.shadow}). experiments/run_shadow_gate_report.py로 진행 상황 확인."
@@ -71,7 +75,10 @@ def main() -> None:
     if not args.level:
         parser.error("category만 지정한 경우 level 또는 --shadow가 필요합니다.")
 
-    autonomy_store.set_level(args.category, AutonomyLevel(args.level), updated_by, args.note)
+    try:
+        autonomy_store.set_level(args.category, AutonomyLevel(args.level), updated_by, args.note)
+    except autonomy_store.LocalModeAutoNotAllowed as e:
+        sys.exit(f"거부: {e}")
     print(f"'{args.category}' → {args.level} 로 변경 완료 (변경자: {updated_by}).")
 
 

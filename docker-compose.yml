@@ -8,7 +8,10 @@
 # 이 파일의 역할:
 #   - approval-server : Slack ChatOps 승인 콜백 수신 (FastAPI)
 #   - dashboard       : 모니터링 대시보드 (Streamlit)
-#   - ollama          : L2 추론 LLM 서버 (선택)
+#   - ollama          : L2 추론 LLM 서버 — 로컬 모드(LLM_PROVIDER=ollama)에서 사용.
+#                       .env의 COMPOSE_PROFILES=llm(install.sh가 로컬 모드 선택 시 기록)이면
+#                       `docker compose up -d`만으로 함께 뜬다. 이 줄이 없으면(클라우드 모드
+#                       서버 등) 지금처럼 Ollama 없이 동작한다.
 #
 # 실행 순서:
 #   1. docker compose up -d                    # 인프라 기동
@@ -63,7 +66,6 @@ services:
     command: uvicorn deploy.target_app:app --host 0.0.0.0 --port 9000
     env_file: .env
     environment:
-      - GROQ_API_KEY=${GROQ_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     ports:
@@ -85,8 +87,9 @@ services:
       timeout: 5s
       retries: 3
 
-  # ── 3. Ollama LLM 서버 (선택 — L2 추론 필요 시만 활성화) ──────────────
-  # 활성화: docker compose --profile llm up -d
+  # ── 3. Ollama LLM 서버 (로컬 모드의 L2 추론) ─────────────────────────
+  # 활성화: .env에 COMPOSE_PROFILES=llm, 또는 docker compose --profile llm up -d
+  # 모델 받기(최초 1회): docker compose exec ollama ollama pull qwen2.5:0.5b
   ollama:
     image: ollama/ollama:latest
     container_name: mlops_ollama

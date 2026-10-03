@@ -1,13 +1,14 @@
 """
 RAGEngine — L1 Cache(ChromaDB) + L2 Fallback(Groq → Ollama → ipex_llm → Rule) 투트랙 추론 엔진.
+Groq는 클라우드 모드(LLM_PROVIDER=groq)에서만 쓴다 — 기본값인 로컬 모드는 Ollama부터 시작한다.
 
 아키텍처:
   analyze_error(log) 호출 시:
     1. ChromaDB 벡터 검색 (L1 — 임계치 이하 거리)
        → 적중 시 앙상블 투표로 최적 메타데이터 선택 → AgentResponse 즉시 반환
     2. L1 미스 → _l2_slow_track()
-       a. Groq API (llama-3.3-70b, GROQ_API_KEY 설정 시 1순위)
-       b. Ollama (경량 LLM, keep_alive로 메모리 상주 — Groq 미설정/실패 시 폴백)
+       a. Groq API (클라우드 모드 = LLM_PROVIDER=groq + GROQ_API_KEY일 때만)
+       b. Ollama (경량 LLM, keep_alive로 메모리 상주 — 로컬 모드의 L2, 클라우드 모드에선 Groq 실패 시 폴백)
        c. ipex_llm (spawn 프로세스, VRAM 반환 보장)
        d. Rule-based heuristic
        e. 인간 에스컬레이션
@@ -28,6 +29,7 @@ ipex_llm 메모리 설계:
   os.getcwd() 의존을 제거해 실행 디렉터리 변경에 독립적이다.
 """
 import hashlib
+import importlib.util
 import json
 import logging
 import multiprocessing as mp
@@ -45,6 +47,7 @@ import chromadb
 from chromadb.config import Settings
 from dotenv import load_dotenv
 
+from src import llm_mode
 from src.system_diagnostics import gather_system_context
 from src.schemas import AgentResponse, ActionType
 
@@ -54,6 +57,9 @@ load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "")
+# L2 LLM 모드(LLM_PROVIDER: ollama=로컬 모드 기본값 / groq=클라우드 모드)는 src/llm_mode.py 참고.
+# Groq 사용 여부는 _is_groq_available() 하나로 게이트된다.
+
 # llama-3.3-70b-versatile는 Groq에서 단종됨 (2026-08 기준).
 # qwen/qwen3.x-27b + reasoning_effort=none 조합이 사고형(thinking) 오버헤드 없이
 # 안정적으로 원샷 명령어를 반환하는 것으로 검증됨 — gpt-oss 계열은 harmony 포맷상
@@ -368,8 +374,48 @@ def _run_ollama(error_log: str, system_context: str, timeout: int = 60) -> str:
 
 # ── Groq ──────────────────────────────────────────────────────────────────────
 def _is_groq_available() -> bool:
-    """GROQ_API_KEY 설정 여부로 판별한다 (별도 헬스체크 엔드포인트 없음)."""
-    return bool(GROQ_API_KEY)
+    """클라우드 모드(LLM_PROVIDER=groq)이고 GROQ_API_KEY가 있을 때만 True.
+
+    Groq로 나가는 경로(L2 진단·생성, self-reflection)는 전부 이 함수 하나로 게이트된다 —
+    로컬 모드에서는 키가 있어도 False라 Groq를 절대 호출하지 않는다(별도 헬스체크
+    엔드포인트는 없음).
+    """
+    return llm_mode.LLM_PROVIDER == "groq" and bool(GROQ_API_KEY)
+
+
+def _llm_mode_messages(raw: str, provider: str, groq_key_set: bool) -> list[tuple[int, str]]:
+    """시작 시 남길 LLM 모드 로그 (레벨, 메시지) 목록. 키 값은 절대 포함하지 않는다."""
+    value = raw.strip().lower()
+    messages: list[tuple[int, str]] = []
+    if value and value not in llm_mode.VALID_LLM_PROVIDERS:
+        messages.append((logging.ERROR, (
+            f"!!! LLM_PROVIDER 값 '{raw.strip()}'은(는) 유효하지 않습니다 "
+            f"(허용: {', '.join(llm_mode.VALID_LLM_PROVIDERS)}). 로컬 모드(ollama)로 동작합니다. !!!"
+        )))
+    elif not value and groq_key_set:
+        messages.append((logging.WARNING, (
+            "!!! GROQ_API_KEY가 있지만 LLM_PROVIDER가 설정되지 않아 로컬 모드로 동작합니다. "
+            "클라우드 모드를 쓰려면 LLM_PROVIDER=groq를 설정하세요. !!!"
+        )))
+    if provider == "groq" and not groq_key_set:
+        messages.append((logging.ERROR, (
+            "!!! LLM_PROVIDER=groq(클라우드 모드)지만 GROQ_API_KEY가 없습니다 — Groq를 쓸 수 "
+            "없어 로컬 Ollama로만 동작합니다. !!!"
+        )))
+    if provider == "groq":
+        mode = f"cloud (groq/{GROQ_MODEL}, 실패 시 ollama/{OLLAMA_MODEL}) — L2 분석 데이터가 외부로 전송됨"
+    else:
+        mode = f"local (ollama/{OLLAMA_MODEL}) — L2 분석 데이터 외부 전송 없음"
+    messages.append((logging.INFO, f"[LLM] L2 mode={mode}"))
+    return messages
+
+
+def log_llm_mode() -> None:
+    """현재 L2 LLM 모드를 시작 로그에 남긴다(RAGEngine 초기화 시 1회)."""
+    for level, msg in _llm_mode_messages(
+        llm_mode.LLM_PROVIDER_RAW, llm_mode.LLM_PROVIDER, bool(GROQ_API_KEY)
+    ):
+        logging.log(level, msg)
 
 
 def _call_groq_chat(prompt: str, max_tokens: int, timeout: int) -> str:
@@ -865,6 +911,10 @@ def _ipex_inference_worker(conn, error_log: str, system_context: str) -> None:
         os._exit(0)
 
 
+def _is_ipex_installed() -> bool:
+    return importlib.util.find_spec("ipex_llm") is not None
+
+
 def run_ipex_engine(error_log: str, system_context: str, timeout: int = 600) -> str:
     """
     ipex_llm 추론을 격리된 spawn 프로세스에서 실행하고 결과를 반환한다.
@@ -1192,6 +1242,7 @@ class RAGEngine:
                 name="error_playbook_vectors"
             )
             logging.info("[RAGEngine] 빈 콜렉션 생성 완료. 추가 학습이 필요합니다.")
+        log_llm_mode()
         _ollama_warmup()
 
     def _query_l1(self, log_texts: list[str]) -> dict:
@@ -1282,12 +1333,24 @@ class RAGEngine:
                     diagnosis=diagnosis_summary,
                 )
             logging.warning(f"[RAGEngine] Groq 실패: {groq_result}")
+        elif llm_mode.is_local_mode():
+            logging.info("[RAGEngine] 로컬 모드 — Groq를 쓰지 않음(외부 전송 없음). Ollama로 추론...")
         else:
+            # 이 문구는 RESEARCH_SUMMARY §6 B2의 VM 확인 절차가 grep한다 — 바꾸지 말 것.
             logging.info("[RAGEngine] GROQ_API_KEY 미설정. Ollama로 폴백...")
 
         # Step 2: Ollama
         llm_result = None
-        if _is_ollama_available():
+        ollama_up = _is_ollama_available()
+        if not ollama_up and llm_mode.is_local_mode():
+            # 로컬 모드는 Ollama가 죽어도 외부 LLM으로 넘어가지 않는다 — 서버 안의 폴백
+            # (ipex_llm 설치 시) → Rule → 사람 승인으로만 처리한다.
+            logging.warning(
+                "[RAGEngine] [로컬 모드] Ollama 연결 불가 — L2 LLM 추론 불가. 외부 LLM으로 "
+                "넘어가지 않고 Rule 기반 처리/사람 승인으로 진행합니다. "
+                f"(OLLAMA_BASE_URL={OLLAMA_BASE_URL})"
+            )
+        if ollama_up:
             logging.info(f"[RAGEngine] Ollama({OLLAMA_MODEL}) 추론 시작...")
             llm_result = _run_ollama(error_log, system_context)
             if not llm_result.startswith("ERROR:"):
@@ -1297,11 +1360,15 @@ class RAGEngine:
                     nearest_category=nearest_category, nearest_distance=best_distance,
                 )
             logging.warning(f"[RAGEngine] Ollama 실패: {llm_result}")
-        else:
+        elif not llm_mode.is_local_mode():
             logging.warning("[RAGEngine] Ollama 미실행. ipex_llm으로 시도...")
 
-        # Step 3: ipex_llm
-        ipex_result = run_ipex_engine(error_log, system_context)
+        # Step 3: ipex_llm — 패키지가 없으면 spawn 자식 프로세스(모듈 재임포트로 수 초)를
+        # 띄우지 않고 바로 건너뛴다(VM 등 ipex 미설치 환경의 불필요한 지연 제거, 2026-10-04).
+        if _is_ipex_installed():
+            ipex_result = run_ipex_engine(error_log, system_context)
+        else:
+            ipex_result = "ERROR: ipex_llm not installed"
         if ipex_result not in ("TIMEOUT", "ERROR") and not ipex_result.startswith("ERROR:"):
             logging.info(f"  👉 [ipex_llm] 명령어: {ipex_result}")
             return _make_llm_response(

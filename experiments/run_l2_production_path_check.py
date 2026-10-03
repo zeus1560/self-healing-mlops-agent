@@ -48,17 +48,32 @@ run_l2_production_path_check.py
 무관하지만, 운영에서도 시스템 컨텍스트는 항상 "그 순간의 실제 호스트 상태"이므로
 이건 재현 오차가 아니라 운영과 동일한 동작이다.
 
-실행 (GROQ_API_KEY 설정 시 Groq, 없으면 Ollama로 자동 폴백 — RAGEngine과 동일 규칙):
-    python -m experiments.run_l2_production_path_check
+실행 — 백엔드는 운영과 동일하게 LLM_PROVIDER로 정해진다(2026-10-04, §6 B2):
+    LLM_PROVIDER=groq python -m experiments.run_l2_production_path_check          # 클라우드 모드
+    GROQ_API_KEY= LLM_PROVIDER=ollama OLLAMA_MODEL=qwen2.5:0.5b \
+        python -m experiments.run_l2_production_path_check --run 1                 # 로컬 모드
+
+로컬 모드 측정은 GROQ_API_KEY를 빈 값으로 명시해 키를 환경에서 뺀다(load_dotenv는
+이미 있는 환경변수를 덮어쓰지 않으므로 .env의 키도 안 읽힌다). 그 위에 모든 HTTP
+요청을 목적지별로 세서(groq_http_requests/ollama_http_requests) 실제 쓰인 백엔드를
+결과 JSON에 남기고, 로컬 모드인데 Groq 요청이 1건이라도 나가면 결과를 저장하지 않고
+중단한다. 클라우드 모드가 아닌 결과는 공식 수치 파일(..._summary.json)을 덮어쓰지
+않도록 provider·모델·회차를 붙인 별도 파일로 저장한다.
 """
+import argparse
 import csv
 import json
+import re
+import subprocess
 import time
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 from experiments.run_l2_accuracy import NOVEL_ERRORS
 from src.executor import ActionExecutor, _validate_process_name
-from src.llm_engine import GROQ_API_KEY, RAGEngine
+from src import llm_engine, llm_mode
+from src.llm_engine import RAGEngine
 from src.schemas import ActionType
 
 RESULTS_DIR = Path("experiments/results")
@@ -97,27 +112,78 @@ def _self_reflection_passed(response) -> bool:
     return bool(response.self_reflection_safe)
 
 
-def main():
+class _HttpDestinationCounter:
+    """urllib.request.urlopen을 감싸 요청 목적지(Groq/Ollama/기타)별 건수를 센다.
+
+    llm_engine의 Groq·Ollama 호출은 전부 urllib.request.urlopen을 거치므로, 백엔드
+    판정 로직이 아니라 실제로 나간 요청을 기준으로 어떤 백엔드가 쓰였는지 확인한다.
+    """
+
+    def __init__(self):
+        self.groq_host   = urlparse(llm_engine.GROQ_API_URL).netloc
+        self.ollama_host = urlparse(llm_engine.OLLAMA_BASE_URL).netloc
+        self.counts      = {"groq": 0, "ollama": 0, "other": 0}
+        self._orig       = urllib.request.urlopen
+
+    def __enter__(self):
+        def counting_urlopen(url, *args, **kwargs):
+            full_url = url.full_url if isinstance(url, urllib.request.Request) else str(url)
+            host = urlparse(full_url).netloc
+            if host == self.groq_host:
+                self.counts["groq"] += 1
+            elif host == self.ollama_host:
+                self.counts["ollama"] += 1
+            else:
+                self.counts["other"] += 1
+            return self._orig(url, *args, **kwargs)
+        urllib.request.urlopen = counting_urlopen
+        return self
+
+    def __exit__(self, *exc):
+        urllib.request.urlopen = self._orig
+
+
+def _git_commit() -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except Exception:
+        return None
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run", type=int, default=None,
+                        help="반복 측정 회차 번호 — 결과 파일명에 _run<N>을 붙인다")
+    args = parser.parse_args(argv)
+
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     executor = ActionExecutor()
+
+    use_groq = llm_engine._is_groq_available()
+    provider = llm_mode.LLM_PROVIDER
+    model    = llm_engine.GROQ_MODEL if use_groq else llm_engine.OLLAMA_MODEL
 
     n = len(NOVEL_ERRORS)
     print("=" * 70)
     print("  운영 L2 실제 경로 점검 — 신규 에러 50건")
     print("  (Category Accuracy 아님 — 실제 L2가 끝까지 안전하게 처리하는가)")
+    print(f"  LLM_PROVIDER={provider}, Groq 사용={use_groq}, 모델={model}")
     print("=" * 70)
-    if GROQ_API_KEY:
+    if use_groq:
         print(f"  (레이트리밋 회피를 위해 요청 간 {GROQ_CALL_INTERVAL_SEC}초 간격 — 총 약 {GROQ_CALL_INTERVAL_SEC * n:.0f}초 소요 예상)\n")
 
     print(f"{'#':>3} {'Category':>20} {'생성':>5} {'화이트리스트':>7} {'자가반성':>7} {'ms':>7}")
     print("-" * 70)
 
     records = []
+    counter = _HttpDestinationCounter()
     for i, item in enumerate(NOVEL_ERRORS):
         true_cat = item["category"]
         log = item["log"]
 
-        if GROQ_API_KEY and i > 0:
+        if use_groq and i > 0:
             time.sleep(GROQ_CALL_INTERVAL_SEC)
 
         t0 = time.perf_counter()
@@ -125,8 +191,15 @@ def main():
         # best_meta 인자가 새로 생겼다 — 이 스크립트는 L1 미스를 인위적으로
         # 강제하는 것이라 실제 최근접 후보가 없으므로 빈 dict(카테고리 추측 없음)로
         # 넘긴다. best_meta.get()이 안전하게 None을 반환해 에러 나지 않는다.
-        response = RAGEngine._l2_slow_track(None, log, {}, best_distance=999.0)
+        with counter:
+            response = RAGEngine._l2_slow_track(None, log, {}, best_distance=999.0)
         latency_ms = (time.perf_counter() - t0) * 1000
+
+        if provider != "groq" and counter.counts["groq"] > 0:
+            raise SystemExit(
+                f"중단: 로컬 모드(LLM_PROVIDER={provider})인데 Groq 요청이 "
+                f"{counter.counts['groq']}건 나갔다 — 결과를 저장하지 않는다."
+            )
 
         is_structured = response.action_type in _STRUCTURED_ACTION_TYPES
         generated = response.action_type == ActionType.EXECUTE_LLM_COMMAND or is_structured
@@ -155,6 +228,7 @@ def main():
             "idx":               i + 1,
             "true_cat":          true_cat,
             "resolution_source": response.resolution_source,
+            "error_category":    response.error_category,
             "action_type":       response.action_type.value if response.action_type else None,
             "is_structured":     is_structured,
             "target_process":    response.target_process,
@@ -163,6 +237,7 @@ def main():
             "whitelist_ok":      whitelist_ok,
             "reflection_ok":     reflection_ok,
             "end_to_end_ok":     end_to_end_ok,
+            "self_reflection_safe": response.self_reflection_safe,
             "reasoning":         response.reasoning,
             "latency_ms":        round(latency_ms, 1),
         })
@@ -181,6 +256,7 @@ def main():
     print(f"  자가반성 통과     : {refl_rate*100:.1f}%")
     print(f"  End-to-end 통과   : {e2e_rate*100:.1f}%  (승인만 받으면 그대로 실행됐을 비율)")
     print(f"  평균 응답 지연     : {avg_lat:.0f}ms")
+    print(f"  실제 HTTP 요청     : Groq {counter.counts['groq']}건 / Ollama {counter.counts['ollama']}건 / 기타 {counter.counts['other']}건")
     print("=" * 70)
 
     summary = {
@@ -194,6 +270,14 @@ def main():
             "을 '생성 실패'로 잘못 세던 계측 버그를 수정 — 이전 실측값(8%)은 이 버그가 "
             "반영된 것이라 폐기, 이 값이 수정 후 첫 공식 측정."
         ),
+        "llm_provider":              provider,
+        "groq_used":                 use_groq,
+        "model":                     model,
+        "groq_http_requests":        counter.counts["groq"],
+        "ollama_http_requests":      counter.counts["ollama"],
+        "other_http_requests":       counter.counts["other"],
+        "run":                       args.run,
+        "git_commit":                _git_commit(),
         "n_samples":                 n,
         "generation_rate":           round(gen_rate, 4),
         "whitelist_pass_rate":       round(wl_rate, 4),
@@ -201,10 +285,17 @@ def main():
         "end_to_end_pass_rate":      round(e2e_rate, 4),
         "avg_latency_ms":            round(avg_lat, 1),
     }
-    summary_path = RESULTS_DIR / "l2_production_path_check_summary.json"
+    # 클라우드 모드 기본 실행만 기존 공식 파일명을 쓰고, 그 외(로컬 모드·반복 회차)는
+    # 공식 수치를 덮어쓰지 않도록 provider·모델·회차를 붙인 별도 파일로 저장한다.
+    suffix = ""
+    if not use_groq:
+        suffix += "_" + provider + "-" + re.sub(r"[^A-Za-z0-9.]+", "-", model)
+    if args.run is not None:
+        suffix += f"_run{args.run}"
+    summary_path = RESULTS_DIR / f"l2_production_path_check_summary{suffix}.json"
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    csv_path = RESULTS_DIR / "l2_production_path_check_results.csv"
+    csv_path = RESULTS_DIR / f"l2_production_path_check_results{suffix}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=records[0].keys())
         writer.writeheader()

@@ -20,9 +20,9 @@ reasoning_effort 등)만 맞췄을 뿐, 이 근본적인 프롬프트/과제 차
 재려면 명령어 생성 프롬프트(`_build_prompt()`)를 그대로 재사용하는 별도 스크립트
 (예: run_l2_action_accuracy.py)가 필요하다.
 
-GROQ_API_KEY가 설정되어 있으면 Groq를 사용하고(현재 운영 중인 L2 1순위와 동일한
-백엔드 선택 규칙일 뿐, 아래에서 실제로 던지는 질문 자체는 운영과 다름),
-없으면 Ollama로 폴백한다.
+LLM_PROVIDER=groq(클라우드 모드)이고 GROQ_API_KEY가 있을 때만 Groq를 사용하고
+(운영 L2와 동일한 백엔드 선택 규칙일 뿐, 아래에서 실제로 던지는 질문 자체는 운영과
+다름), 그 외에는 Ollama를 쓴다 — 2026-10-04 이전엔 키만 있으면 Groq를 썼다(§6 B2).
 """
 import csv
 import json
@@ -40,6 +40,7 @@ OLLAMA_URL   = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:0.5b"
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "").strip().lower()
 GROQ_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
 
@@ -236,7 +237,7 @@ def call_groq(log_text: str) -> tuple[str, str, float]:
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    if GROQ_API_KEY:
+    if LLM_PROVIDER == "groq" and GROQ_API_KEY:
         backend, model, call_fn = "groq", GROQ_MODEL, call_groq
     else:
         backend, model, call_fn = "ollama", OLLAMA_MODEL, call_ollama

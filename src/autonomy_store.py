@@ -10,11 +10,13 @@ experiments/run_shadow_gate_report.py(승급 판정 리포트)가 공유한다.
 
 thread-safety: approval_store.py와 동일한 패턴(쓰기는 _lock으로 직렬화).
 """
+import logging
 import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 
+from src import llm_mode
 from src.schemas import AutonomyLevel
 
 _DB_PATH = "./data/agent_metrics.db"
@@ -64,8 +66,15 @@ def init_table() -> None:
             conn.close()
 
 
-def get_level(category: str) -> AutonomyLevel:
-    """카테고리의 현재 레벨을 반환한다. 저장된 값이 없으면 DEFAULT_AUTONOMY_LEVEL."""
+class LocalModeAutoNotAllowed(ValueError):
+    """로컬 모드에서 LLM_Inferred 같은 로컬 모델 제안 카테고리를 auto로 올리려 할 때."""
+
+
+def _local_mode_blocks_auto(category: str) -> bool:
+    return llm_mode.is_local_mode() and category in llm_mode.LOCAL_MODE_NO_AUTO_CATEGORIES
+
+
+def _stored_level(category: str) -> AutonomyLevel:
     conn = _conn()
     try:
         row = conn.execute(
@@ -81,9 +90,35 @@ def get_level(category: str) -> AutonomyLevel:
         return DEFAULT_AUTONOMY_LEVEL
 
 
+def get_level(category: str) -> AutonomyLevel:
+    """카테고리의 현재 레벨을 반환한다. 저장된 값이 없으면 DEFAULT_AUTONOMY_LEVEL.
+
+    로컬 모드에서는 LLM_Inferred(로컬 모델이 만든 L2 자유형식 명령)가 auto로 저장돼
+    있어도(클라우드 모드 때 승급했거나 DEFAULT_AUTONOMY_LEVEL=auto) approve_then_execute로
+    낮춰 반환한다 — 사람 승인 없이 실행되지 않게 하는 실행 시점 안전장치(2026-10-04).
+    """
+    level = _stored_level(category)
+    if level == AutonomyLevel.AUTO and _local_mode_blocks_auto(category):
+        logging.warning(
+            f"[Autonomy] 로컬 모드에서는 '{category}'를 auto로 실행할 수 없어 "
+            f"approve_then_execute로 처리합니다(저장된 레벨: auto)."
+        )
+        return AutonomyLevel.APPROVE_THEN_EXECUTE
+    return level
+
+
 def set_level(category: str, level: AutonomyLevel, updated_by: str, note: str = "") -> None:
-    """카테고리의 레벨을 수동으로 변경한다. shadow_events에 이벤트를 기록한다."""
-    prev = get_level(category)
+    """카테고리의 레벨을 수동으로 변경한다. shadow_events에 이벤트를 기록한다.
+
+    로컬 모드에서 LLM_Inferred를 auto로 올리려 하면 LocalModeAutoNotAllowed를 던지고
+    아무것도 바꾸지 않는다(2026-10-04 — 로컬 모델의 대상 일치 조치 비율 0~2% 실측).
+    """
+    if level == AutonomyLevel.AUTO and _local_mode_blocks_auto(category):
+        raise LocalModeAutoNotAllowed(
+            f"로컬 모드(LLM_PROVIDER={llm_mode.LLM_PROVIDER})에서는 '{category}'를 auto로 "
+            f"승급할 수 없습니다 — 로컬 모델 제안은 사람 승인을 거쳐야 합니다."
+        )
+    prev = _stored_level(category)
     now  = datetime.now(timezone.utc).isoformat()
     with _lock:
         conn = _conn()
@@ -115,6 +150,10 @@ def set_level(category: str, level: AutonomyLevel, updated_by: str, note: str = 
 
 def start_shadow(category: str, target_level: AutonomyLevel, updated_by: str = "") -> None:
     """카테고리를 target_level로 승급 검토 중 상태로 표시한다(실제 레벨은 바꾸지 않음)."""
+    if target_level == AutonomyLevel.AUTO and _local_mode_blocks_auto(category):
+        raise LocalModeAutoNotAllowed(
+            f"로컬 모드에서는 '{category}'의 auto 승급 검토를 시작할 수 없습니다."
+        )
     current = get_level(category)
     now     = datetime.now(timezone.utc).isoformat()
     with _lock:

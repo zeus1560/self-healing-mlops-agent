@@ -3,9 +3,10 @@
 프로덕션 장애를 실시간으로 감지·진단하고, 복구 방안을 제안하되 **실행은 항상
 사람의 승인을 거치는**(Progressive Autonomy로 검증된 카테고리만 예외) 오픈소스·
 셀프호스팅 로그 이상 감지·복구 제안 에이전트입니다.  
-Vector DB 기반 L1 캐시와 LLM L2 추론(1순위 Groq API, 로컬 Ollama/Intel Arc·Iris Xe
-GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니다. Groq를 쓰면 로그
-일부가 외부로 전송됩니다 — [외부로 나가는 데이터](#외부로-나가는-데이터-반드시-확인) 참고.
+Vector DB 기반 L1 캐시와 LLM L2 추론을 결합해 원인을 진단하고 복구 명령을 제안합니다.
+L2 LLM은 회사 정책에 맞춰 **로컬 모드**(기본값, 서버 안 Ollama — LLM 분석용 데이터 외부
+전송 없음)와 **클라우드 모드**(Groq API — 성능 우선, 로그 일부 외부 전송) 중에서 고릅니다 —
+[L2 LLM 모드](#l2-llm-모드-로컬--클라우드), [외부로 나가는 데이터](#외부로-나가는-데이터-반드시-확인) 참고.
 
 ---
 
@@ -23,7 +24,7 @@ GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니
     ├─ Hit (distance < 0.6) ──────────────────▶ ActionExecutor
     └─ Miss (distance ≥ 0.6) → [L2 Slow Track, 5단계 폴백 체인]
                                     │
-                          1순위 Groq API (qwen/qwen3.8-27b), 평균 0.65초
+                          [클라우드 모드만] Groq API (qwen/qwen3.8-27b), 평균 0.65초
                           멀티에이전트 3단계(진단→제안→검토):
                             ① 진단(_diagnose_error) — 원인/조치유형/대상 구조화 추출
                                ├─ 확신 있는 구조화 조치(대상이 PID/포트가 아닌
@@ -34,10 +35,10 @@ GPU는 폴백)을 결합해 원인을 진단하고 복구 명령을 제안합니
                             ② 제안(_run_groq)       — ①로 보강된 컨텍스트로 명령어 생성
                             ③ 검토(self-reflection) — 원본 컨텍스트만 보고 독립 재검증
                           │
-                    실패/미설정 시 ↓
-                          2순위 Ollama API (CPU/GPU 무관)
-                          실패 시 ↓
-                          3순위 ipex_llm (Arc GPU, multiprocessing spawn)
+                    로컬 모드(기본값)는 여기서 시작 / 클라우드 모드는 Groq 실패 시 ↓
+                          Ollama API (서버 안, CPU/GPU 무관, 단일 프롬프트)
+                          실패 시 ↓ (로컬 모드는 어떤 경우에도 Groq로 넘어가지 않음)
+                          ipex_llm (Arc GPU, multiprocessing spawn — 설치된 경우만)
                           실패 시 ↓
                           4순위 Rule-based Fallback (키워드 매칭)
                           실패 시 ↓
@@ -262,8 +263,9 @@ L1 캐시(ChromaDB)는 큐레이션된 데이터(GitHub 이슈 크롤링, 카오
 ### 원클릭 실행 (Makefile)
 
 ```bash
-make install   # venv+패키지, .env, Docker 인프라, ChromaDB 초기 데이터, systemd 유닛까지 전부 준비 (최초 1회, install.sh 실행)
-#                 → 이 단계 끝나면 .env에 GROQ_API_KEY/TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID만 채우면 됨
+make install   # venv+패키지, .env, L2 LLM 모드 선택, Docker 인프라, ChromaDB 초기 데이터, systemd 유닛까지 전부 준비 (최초 1회, install.sh 실행)
+#                 → 설치 중 "1) 로컬 모드 2) 클라우드 모드"를 묻는다(질문 없이: bash install.sh --mode local|cloud)
+#                 → 이 단계 끝나면 .env에 TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID만 채우면 됨
 make start     # Docker 인프라 + 에이전트(systemd) 한 번에 기동
 make stop      # 전체 종료
 make status    # 컨테이너 + 에이전트 상태 확인
@@ -310,9 +312,9 @@ pip install -e .                  # 개발 의존성(pytest 등)까지: pip inst
 
 # 2. 환경변수 설정
 cp .env.example .env
-# 최소 GROQ_API_KEY / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 채우기
-# ⚠️ GROQ_API_KEY를 채우면 L2 경로에서 로그 원문이 api.groq.com으로 전송됨
-#    → 아래 "외부로 나가는 데이터" 참고
+# 최소 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 채우기. 기본은 로컬 모드(LLM_PROVIDER=ollama).
+# ⚠️ 클라우드 모드(LLM_PROVIDER=groq + GROQ_API_KEY)를 켜면 L2 경로에서 로그 원문이
+#    api.groq.com으로 전송됨 → 아래 "L2 LLM 모드", "외부로 나가는 데이터" 참고
 ```
 
 ### 테스트 실행
@@ -325,6 +327,20 @@ DB 등 외부 의존이 있는 테스트는 `@pytest.mark.slow`로 표시해달�
 ```bash
 pytest tests/              # 전체(slow 포함)
 pytest tests/ -m "not slow"  # CI와 동일한 범위
+```
+
+**개발 환경 주의 — 테스트는 Python 3.10 환경에서 돌릴 것.** 운영 VM은 Python 3.10 +
+`chromadb==0.5.0` + `numpy==1.26.4`(requirements.txt 고정)이다. Python 3.14 같은 최신
+인터프리터에는 numpy 1.26.4 휠이 없어 numpy 2.x가 깔리고, chromadb 0.5.0이 import 단계에서
+`np.float_` 제거 에러로 깨진다(로컬 통과 ≠ VM 통과). 2026-10-04부터는 VM과 같은 구성의
+별도 환경을 만들어 쓴다(Intel 전용 인덱스가 필요한 ipex-llm/torch는 제외 — 테스트에 불필요):
+
+```bash
+# uv로 Python 3.10 환경 생성 (예: ~/ollama-bench/py310)
+uv venv --python 3.10 ~/ollama-bench/py310
+grep -v -E 'extra-index-url|^ipex-llm|^torch' requirements.txt > /tmp/req-noipex.txt
+uv pip install --python ~/ollama-bench/py310/bin/python -r /tmp/req-noipex.txt pytest
+~/ollama-bench/py310/bin/python -m pytest tests/ -m "not slow"
 ```
 
 ### 데이터 수집 및 학습
@@ -380,11 +396,10 @@ python experiments/run_dataset_scale.py     # Learning curve
 ```bash
 cp .env.example .env   # 환경변수 설정
 
-# 인프라 기동 (target-app + 대시보드 + 승인 서버)
+# 인프라 기동 (target-app + 대시보드 + 승인 서버
+#  + 로컬 모드면 Ollama — .env의 COMPOSE_PROFILES=llm이 --profile llm과 같은 효과)
 docker compose up -d
-
-# Ollama LLM 포함 (Groq 미설정/실패 시 L2 폴백용)
-docker compose --profile llm up -d
+docker compose exec ollama ollama pull qwen2.5:0.5b   # 로컬 모드, 최초 1회
 
 # 에이전트 본체는 별도로 (호스트 네이티브)
 sudo systemctl start self-healing-agent   # install.sh로 유닛을 미리 설치해뒀다면
@@ -402,32 +417,97 @@ sudo systemctl start self-healing-agent   # install.sh로 유닛을 미리 설�
 | `dashboard` | Docker | Streamlit 실시간 대시보드 |
 | `approval-server` | Docker | Human-in-the-Loop FastAPI 승인 서버 |
 | `target-app` | Docker | 카오스 엔지니어링 대상 워크로드(장애 주입용) |
-| `ollama` | Docker (선택 — `--profile llm`) | 로컬 LLM 서버, Groq 폴백용 |
+| `ollama` | Docker (`--profile llm`, 로컬 모드는 `.env`의 `COMPOSE_PROFILES=llm`로 자동) | 로컬 모드의 L2 LLM 서버 / 클라우드 모드에선 Groq 실패 시 폴백 |
 
 ---
 
-## L2 추론 환경 요구사항
+## L2 LLM 모드 (로컬 / 클라우드)
 
-| 방식 | 요구사항 | 비고 |
+L1 캐시에 없는 새 에러는 L2에서 LLM이 분석합니다. 회사 정책에 맞춰 둘 중 하나를
+고릅니다(`.env`의 `LLM_PROVIDER`). 문서와 설치 화면에서는 "로컬 모드 / 클라우드 모드"로
+부릅니다.
+
+| | 로컬 모드 (기본값, 보안 우선) | 클라우드 모드 (성능 우선) |
+|---|---|---|
+| 설정 | `LLM_PROVIDER=ollama` (미설정·잘못된 값도 여기로) | `LLM_PROVIDER=groq` + `GROQ_API_KEY` |
+| L2 LLM | 서버 안 Ollama (`qwen2.5:0.5b`) | Groq API (`qwen/qwen3.8-27b`), 실패 시 서버 안 Ollama |
+| LLM 분석용 데이터의 외부 전송 | **없음** | **있음** — [외부로 나가는 데이터](#외부로-나가는-데이터-반드시-확인) |
+| 멀티에이전트 진단 단계 | 없음 (단일 프롬프트) | 있음 (진단→제안→검토) |
+| L2 대상 일치율 | 측정 중 | 측정 중 |
+| `LLM_Inferred` 카테고리 auto 승급 | **허용되지 않음** (코드에서 차단) | 사람이 직접 승급할 때만 가능 |
+| 적합한 곳 | 금융·규제 산업 등 로그가 밖으로 나가면 안 되는 곳 | 외부 API 사용에 제약이 없는 곳 |
+
+**동작 규칙**
+
+- **로컬 모드는 어떤 경우에도 Groq를 호출하지 않습니다** — `GROQ_API_KEY`가 `.env`에 남아
+  있어도, Ollama가 죽어도 마찬가지입니다. 키는 있는데 `LLM_PROVIDER`가 비어 있으면 시작 로그에
+  경고를 남기고 로컬 모드로 동작합니다(클라우드 모드를 자동으로 켜지 않음). 잘못된 값(오타 등)도
+  에러 로그를 남기고 로컬 모드로 동작합니다.
+- **로컬 모드의 폴백 순서**: Ollama → ipex_llm(설치된 서버만, 서버 안에서 도는 로컬 LLM) →
+  Rule 기반 처리 → 사람 승인(에스컬레이션). L1 캐시 히트는 이와 무관하게 먼저 처리됩니다.
+  Ollama에 연결할 수 없으면 `[로컬 모드] Ollama 연결 불가` 경고 로그를 남기고 이 순서대로
+  넘어갑니다 — 어느 단계에서도 외부 LLM으로 넘어가지 않습니다.
+- **클라우드 모드에서 Groq가 실패하면** 서버 안 Ollama → (ipex_llm) → Rule → 사람 승인 순으로
+  넘어갑니다. 외부에서 로컬로 가는 방향이라 추가 전송은 없습니다.
+- **로컬 모드에서는 `LLM_Inferred`(L2 자유형식 명령) 카테고리를 auto로 승급할 수 없습니다** —
+  `scripts/set_autonomy_level.py`가 거부하고, DB에 auto가 남아 있어도(클라우드 모드 때 승급,
+  `DEFAULT_AUTONOMY_LEVEL=auto` 등) 실행 시점에 `approve_then_execute`로 낮춰 처리합니다.
+  로컬 모델 제안은 항상 사람 승인을 거칩니다.
+- 현재 모드는 시작 로그 한 줄(`[LLM] L2 mode=local (ollama/qwen2.5:0.5b) — L2 분석 데이터 외부
+  전송 없음`)과 대시보드 사이드바 배지로 확인합니다.
+
+**모드 고르기 / 바꾸기**
+
+```bash
+# 설치할 때 — 대화형으로 묻거나, 질문 없이 지정
+bash install.sh                  # "1) 로컬 모드(보안 우선) 2) 클라우드 모드(성능 우선)"
+bash install.sh --mode local
+GROQ_API_KEY=gsk_... bash install.sh --mode cloud   # 키는 환경변수 또는 화면 비표시 입력
+
+# 설치 후 로컬 → 클라우드
+#   .env: LLM_PROVIDER=groq, GROQ_API_KEY=<키>, (Ollama 컨테이너가 필요 없으면) COMPOSE_PROFILES 줄 주석 처리
+sudo systemctl restart self-healing-agent
+
+# 설치 후 클라우드 → 로컬
+#   .env: LLM_PROVIDER=ollama, COMPOSE_PROFILES=llm
+docker compose up -d
+docker compose exec ollama ollama pull qwen2.5:0.5b
+sudo systemctl restart self-healing-agent
+
+# 확인 — 시작 로그의 모드 한 줄
+sudo journalctl -u self-healing-agent -n 200 | grep "L2 mode="
+```
+
+`LLM_PROVIDER`는 프로세스 시작 시 한 번 읽으므로 `.env`를 고친 뒤 반드시 재시작해야 합니다.
+
+**로컬 모드 모델별 최소 사양** (CPU 추론, Ollama 실측 로드 크기 기준)
+
+| 모델 | 로드 시 메모리(실측) | 최소 여유 RAM |
+|------|---------------------|--------------|
+| `qwen2.5:0.5b` (기본값) | 484MB | 1GB 이상 |
+| `qwen2.5:3b` | 2.2GB | 3GB 이상 |
+
+**L2 폴백 체인 요구사항**
+
+| 단계 | 요구사항 | 비고 |
 |------|----------|------|
-| **Groq** | `GROQ_API_KEY` 환경변수 | **1순위**, 진단→제안→검토 멀티에이전트 3단계, 평균 응답 0.65초(2026-08-27 전환 전 대비 36배 빠름) |
-| **Ollama** | Ollama 설치 + `qwen2.5:0.5b` pull | CPU/GPU 무관, Groq 미설정/실패 시 2순위 폴백 |
-| **ipex_llm** | Intel Arc / Iris Xe GPU | spawn 멀티프로세싱으로 VRAM 격리, 3순위 폴백 |
+| **Groq** | 클라우드 모드 + `GROQ_API_KEY` | 진단→제안→검토 멀티에이전트 3단계, 평균 응답 0.65초 |
+| **Ollama** | Ollama(컨테이너) + 모델 pull | 로컬 모드의 L2 / 클라우드 모드의 Groq 실패 시 폴백 |
+| **ipex_llm** | Intel Arc / Iris Xe GPU + `ipex-llm` 설치 | 설치된 경우만 시도, spawn 멀티프로세싱으로 VRAM 격리 |
 | **Rule-based** | 없음 | LLM 전부 실패 시 키워드 기반 자동 폴백 |
 
 ### 외부로 나가는 데이터 (반드시 확인)
 
 에이전트 본체와 L1 캐시(ChromaDB)·메트릭 DB는 전부 설치한 서버 안에서 돕니다.
-다만 아래 설정을 켜면 **로그 일부가 외부 서비스로 전송됩니다.**
+**LLM 분석용 데이터 기준으로, 로컬 모드(기본값)에서는 서버 밖으로 나가는 데이터가 없습니다.**
+알림 채널(Telegram/Slack)은 이와 별개로, 설정하면 알림 내용이 해당 서비스로 전송됩니다.
 
 | 설정 | 전송 대상 | 전송 내용 |
 |------|----------|----------|
-| `GROQ_API_KEY` | `api.groq.com` | L2 경로: 에러 로그 원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py` `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps`/`ss`, `src/system_diagnostics.py`). L1 히트 중 명령을 실행하는 경로의 self-reflection 검토도 Groq를 호출할 수 있음 |
+| 클라우드 모드 (`LLM_PROVIDER=groq` + `GROQ_API_KEY`) | `api.groq.com` | L2 경로: 에러 로그 원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py` `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps`/`ss`, `src/system_diagnostics.py` — `ps` 출력엔 서버의 다른 프로세스 이름도 포함됨). L1 히트 중 KILL_PROCESS와 자유형식 명령(Rule/온라인학습 엔트리)의 self-reflection 검토도 Groq를 호출함(L1 구조화 RESTART_SERVICE는 검토 생략) |
 | `TELEGRAM_BOT_TOKEN` / Slack 설정 | Telegram / Slack | 알림 메시지에 포함된 로그 앞부분 |
 
-로그가 외부로 나가면 안 되는 환경(규제 산업 등)이라면 `GROQ_API_KEY`를 비워두고
-Ollama(`--profile llm`)만 쓰세요 — L2 추론이 서버 안에서만 처리됩니다(응답은
-Groq보다 느림). 전송 전 마스킹은 아직 적용되지 않습니다.
+클라우드 모드의 전송 전 마스킹(토큰·비밀번호·IP 등)은 아직 적용되지 않습니다(후속 과제).
 
 ---
 

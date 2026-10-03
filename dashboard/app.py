@@ -294,6 +294,12 @@ def _latest_csv(prefix: str) -> pd.DataFrame | None:
         return None
 
 
+# L2 LLM 모드(읽기 전용 표시) — src/llm_mode.py와 같은 규칙: groq만 클라우드 모드, 나머지
+# (미설정·오타 포함)는 로컬 모드. 대시보드 컨테이너도 env_file: .env로 같은 값을 받는다.
+# metrics에는 provider가 기록되지 않으므로(§6 B2) 과거 인시던트가 아닌 "현재 설정" 기준이다.
+import os as _os
+_IS_LOCAL_MODE = _os.getenv("LLM_PROVIDER", "").strip().lower() != "groq"
+
 # ── 사이드바 (순수 모니터링 뷰어) ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🛡️ MLOps Monitor")
@@ -334,6 +340,12 @@ with st.sidebar:
         st.success("🟢 에이전트 실행 중")
     else:
         st.error("🔴 에이전트 중지됨")
+
+    if _IS_LOCAL_MODE:
+        st.info("🔒 L2 모드: 로컬 (Ollama) — LLM 분석용 데이터 외부 전송 없음")
+    else:
+        st.warning("☁️ L2 모드: 클라우드 (Groq) — 로그 일부가 외부로 전송됨")
+    st.caption("모드 변경은 .env의 LLM_PROVIDER 수정 후 서비스 재시작(README 참고)")
 
     st.caption(f"DB 상태: {'✅ 연결됨' if db_exists else '❌ 없음'}")
     st.caption(f"실험 CSV: {csv_count}개")
@@ -1645,6 +1657,12 @@ with tab5:
             elif src_raw == "L1_CACHE":
                 st.caption("이 필드가 기록되기 이전(2026-09-11 이전)의 인시던트라 값이 없습니다.")
             elif src_raw in ("L2_LLM", "RULE"):
+                if src_raw == "L2_LLM" and _IS_LOCAL_MODE:
+                    st.warning(
+                        "참고용(로컬 모델) — 현재 로컬 모드에서 L2 제안은 에러와 무관한 경우가 "
+                        "많습니다. 승인 전에 반드시 직접 검토하세요. "
+                        "(현재 설정 기준 표시 — 과거 인시던트의 실제 모드는 기록되지 않음)"
+                    )
                 # 2026-09-15 추가: L1이 임계값 미달로 액션 채택은 포기했지만 그래도
                 # 가장 가까웠던 후보 카테고리(참고용, 게이팅에는 안 쓰임)와, Groq
                 # 경로라면 멀티에이전트 1단계 진단 소견도 같이 보여준다.

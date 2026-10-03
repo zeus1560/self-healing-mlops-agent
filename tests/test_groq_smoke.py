@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import src.llm_engine as llm_engine
+import src.llm_mode as llm_mode
 from src.schemas import ActionType
 
 
@@ -34,9 +35,16 @@ class TestGroqAvailability(unittest.TestCase):
         with patch.object(llm_engine, "GROQ_API_KEY", ""):
             self.assertFalse(llm_engine._is_groq_available())
 
-    def test_available_when_key_set(self):
-        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"):
+    def test_available_when_key_set_in_cloud_mode(self):
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_mode, "LLM_PROVIDER", "groq"):
             self.assertTrue(llm_engine._is_groq_available())
+
+    def test_key_alone_does_not_enable_groq(self):
+        """2026-10-04(§6 B2): 키만 있다고 Groq를 쓰지 않는다 — 클라우드 모드를 명시해야 한다."""
+        with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_mode, "LLM_PROVIDER", "ollama"):
+            self.assertFalse(llm_engine._is_groq_available())
 
 
 class TestGroqRequestShape(unittest.TestCase):
@@ -142,6 +150,7 @@ class TestSelfReflectionReadOnlyBypass(unittest.TestCase):
             return _FakeResponse({"choices": [{"message": {"content": "YES: soft signal, safe restart"}}]})
 
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
+             patch.object(llm_mode, "LLM_PROVIDER", "groq"), \
              patch.object(llm_engine.urllib.request, "urlopen", side_effect=fake_urlopen) as mock_urlopen:
             safe, rationale = llm_engine._reflect_on_command(
                 "kill -TERM 4821", "ERROR: timeout", "N/A"
