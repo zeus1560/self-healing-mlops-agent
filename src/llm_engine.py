@@ -33,6 +33,7 @@ import logging
 import multiprocessing as mp
 import os
 import re as _re
+import shlex
 import threading
 import time
 import traceback
@@ -149,15 +150,19 @@ def _get_chroma_client() -> chromadb.PersistentClient:
 
 
 # ── Rule-based Heuristic Fallback ─────────────────────────────────────────────
+# 2026-10-04: OOM → "pkill -f python"은 에이전트 자신(python)까지 죽일 수 있어 화이트리스트가
+# 이제 거부하고(executor.py 보호 목록), "too many open files" → "ulimit -n 65536"은
+# subprocess로 실행하면 셸 내장 명령이라 아무 효과가 없다 — 둘 다 조회 명령으로 바꿨다.
+# 진짜 조치 설계는 RESEARCH_SUMMARY §6 후속 과제.
 _ERROR_RULES: list[tuple[tuple[str, ...], str]] = [
     (("out of memory", "oom killer", "cannot allocate memory",
-      "cuda out of memory", "vram"), "pkill -f python"),
+      "cuda out of memory", "vram"), "free -h"),
     (("no space left on device", "disk full", "disk space"), "df -h"),
     (("address already in use", "bind() failed", "port 80", "port 443"),
      "systemctl restart nginx"),
     (("nginx",),      "systemctl restart nginx"),
     (("postgresql", "postgres"), "systemctl restart postgresql"),
-    (("too many open files",), "ulimit -n 65536"),
+    (("too many open files",), "ss -s"),
     (("connection refused", "connection timeout"), "ss -tuln"),
 ]
 
@@ -181,19 +186,20 @@ def _rule_based_fallback(error_log: str) -> tuple[str, str] | None:
 
 # ── Prompt Helpers ────────────────────────────────────────────────────────────
 def _build_prompt(error_log: str, system_context: str) -> str:
-    """Few-shot 예시 포함 명령어 추론 프롬프트를 생성한다."""
+    """Few-shot 예시 포함 명령어 추론 프롬프트를 생성한다.
+
+    2026-10-04: 예시에서 "pkill -f python"(범위가 넓어 에이전트 자신까지 종료 가능,
+    화이트리스트가 이제 거부)과 "ulimit -n 65536"(subprocess로는 효과 없음)을 뺐다.
+    로컬 모델이 예시 명령을 그대로 베끼는 문제(§6)는 placeholder 전환으로 따로 다룬다.
+    """
     return (
         "You are a Self-Healing MLOps Agent. "
         "Reply with ONE raw Linux command only. "
         "No markdown, no backticks, no explanation, no sudo.\n\n"
         "Error: nginx bind() to 0.0.0.0:80 failed\n"
         "Command: systemctl restart nginx\n\n"
-        "Error: CUDA out of memory\n"
-        "Command: pkill -f python\n\n"
         "Error: no space left on device\n"
         "Command: df -h\n\n"
-        "Error: too many open files\n"
-        "Command: ulimit -n 65536\n\n"
         f"System: {system_context}\n"
         f"Error: {error_log}\n"
         "Command:"
@@ -593,6 +599,19 @@ def _route_from_diagnosis(
 _READ_ONLY_COMMANDS = frozenset({"df", "free", "ps", "ss", "netstat", "uptime", "echo"})
 
 
+def _split_command(command: str) -> list[str]:
+    """executor.py _validate_command와 같은 shlex 규칙으로 토큰을 나눈다.
+
+    2026-10-04: 아래 LLM 판정 생략 함수들은 str.split()을, 화이트리스트는 shlex를
+    써서 따옴표가 섞인 명령에서 두 판정이 어긋날 수 있었다. 파싱 실패 시 빈 목록 —
+    호출부는 "생략 대상 아님"으로 처리해 LLM 판정을 거치게 된다.
+    """
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return []
+
+
 def _is_read_only_command(command: str) -> bool:
     """
     부작용 없는 조회성 명령어인지 판별한다 (systemctl status 포함).
@@ -603,7 +622,7 @@ def _is_read_only_command(command: str) -> bool:
     완전히 무해한 조회 명령을 매번 다른 판정(YES/NO 뒤섞임)으로 거부한 사례가
     있어, 조회성 명령은 LLM 판정 자체를 아예 건너뛰도록 결정론적으로 처리한다.
     """
-    tokens = command.split()
+    tokens = _split_command(command)
     if not tokens:
         return False
     if tokens[0] in _READ_ONLY_COMMANDS:
@@ -620,9 +639,14 @@ def _is_read_only_command(command: str) -> bool:
 # 의미 있는 건 kill/pkill/fuser처럼 대상(PID·패턴)을 잘못 지정할 위험이 남는
 # 명령뿐 — 2026-09-05에 확인된 노이즈('systemctl restart postgresql' 온도=0에도
 # YES/NO 뒤섞임)는 전부 이 부류였다.
+#
+# 2026-10-04: systemctl을 이 목록에서 뺐다. 화이트리스트 점검에서 "systemctl stop sshd"/
+# "systemctl stop <에이전트 자신>"이 통과하는 걸 확인 — 서비스 이름은 문자 형식만
+# 검증되지 대상이 적절한지는 검증되지 않는다. 보호 목록으로 최악의 경우는 막았지만,
+# 서비스 허용 목록(§6 후속 과제)이 생기기 전까지는 restart/start/stop도 LLM 검토를
+# 거치게 한다. nginx는 화이트리스트가 이제 "-s reload"/"-t" 두 형태만 허용한다.
 _BOUNDED_STATE_CHANGE_ARGS: dict[str, frozenset[str] | None] = {
-    "systemctl":  frozenset({"restart", "start", "stop"}),
-    "nginx":      frozenset({"-s", "reload", "test"}),
+    "nginx":      frozenset({"-s", "-t"}),
     "journalctl": None,
     "ulimit":     None,
 }
@@ -633,7 +657,7 @@ def _is_bounded_state_change_command(command: str) -> bool:
     부작용은 있지만 executor.py 화이트리스트가 이미 인자까지 좁혀 검증해서
     "위험한가"에 대한 답이 구조적으로 끝난 명령어인지 판별한다.
     """
-    tokens = command.split()
+    tokens = _split_command(command)
     if not tokens:
         return False
     base = tokens[0]
@@ -662,7 +686,7 @@ def _is_self_destructive_kill(command: str) -> bool:
     "001"/"+1"처럼 실제 kill(1) 유틸리티가 정수로 파싱해 똑같이 PID 1을
     지정하는 변형을 놓친다 — 정수로 파싱해 값을 비교한다.
     """
-    tokens = command.split()
+    tokens = _split_command(command)
     if len(tokens) < 3 or tokens[0] != "kill":
         return False
     for t in tokens[2:]:
@@ -952,16 +976,25 @@ def _reflect_on_l1_hit(response: AgentResponse, error_log: str) -> AgentResponse
     self-reflection을 아예 안 거쳤다 — 벡터 유사도만으로 확신한 오탐이 아무
     독립 검증 없이 승인 게이트/자동실행으로 직행할 수 있었다는 뜻이다.
 
-    RESTART_SERVICE(`systemctl restart`)는 이미 `_is_bounded_state_change_command`
-    화이트리스트에 걸려 LLM 호출 없이 즉시 결정되므로 레이턴시 영향이 사실상
-    없다 — 실제 Groq 호출이 붙는 건 KILL_PROCESS(`pkill`)와, 화이트리스트 밖
-    커맨드일 수 있는 EXECUTE_RULE_COMMAND/EXECUTE_LLM_COMMAND뿐이다.
+    RESTART_SERVICE(구조화, 대상은 플레이북)는 LLM 검토 없이 통과시킨다 — 대상 확인은
+    executor의 보호 목록이 맡는다(2026-10-04). 실제 LLM 호출이 붙는 건
+    KILL_PROCESS(`pkill`)와, 화이트리스트 밖 커맨드일 수 있는
+    EXECUTE_RULE_COMMAND/EXECUTE_LLM_COMMAND뿐이다 — 자유형식 `systemctl`은 2026-10-04부터
+    `_is_bounded_state_change_command`에서 빠져 이 경로에서 검토를 거친다.
 
     L2 자유형식 경로(`_make_llm_response`)와 동일한 원칙 그대로 재사용한다 —
     self-reflection이 "NO"를 내도 강제 차단하지 않고 reasoning에 경고만 남긴다.
     새 차단 로직을 만들면 그 자체가 새 회귀 위험이라, 이미 L2에서 검증된 "경고만,
     승인 여부는 사람/게이트가 최종 판단" 설계를 그대로 따른다.
     """
+    if response.action_type == ActionType.RESTART_SERVICE:
+        # 2026-10-04 결정: L1 구조화 RESTART_SERVICE는 대상이 큐레이션된 플레이북에서 오므로
+        # LLM 검토를 생략한다(10/04 이전과 같은 결과 — 당시엔 systemctl이 검토 생략 목록에
+        # 있어 결정론적으로 통과했다). 대상은 executor._validate_process_name의 보호 목록이
+        # 실행 직전에 확인한다. LLM이 만든 자유형식 systemctl(EXECUTE_LLM_COMMAND, 온라인학습
+        # 엔트리 포함)은 아래 DIRECT_COMMAND 경로로 계속 검토를 거친다.
+        response.self_reflection_safe = True
+        return response
     if response.action_type in _L1_REFLECTABLE_TEMPLATES:
         if not response.target_process:
             return response

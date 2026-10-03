@@ -161,6 +161,17 @@ src/
 | 2. 메타문자 전수 검사 | `\|><;&\`$(){}*?!\\~` | `systemctl restart nginx; rm -rf /` |
 | 3. BANNED_TOKENS | 인터프리터·파괴적 명령 차단 | `python3`, `bash`, `rm`, `curl` |
 | 4. ALLOWED_COMMANDS | 명시적 화이트리스트만 통과 | 목록 외 모든 명령어 |
+| 5. 명령별 인자 형태 검사 (2026-10-04) | 첫 인자뿐 아니라 전체 형태를 고정 — `fuser -k <포트>/tcp\|udp`, `kill -TERM\|-HUP <PID≥2>`, `pkill -x\|-f <이름>`, `nginx -s reload`/`nginx -t`, `journalctl --vacuum-size ≥500M`/`--vacuum-time ≥7d` | `fuser -k -m /`, `kill -TERM -1`, `pkill -f -9 nginx`, `nginx -s stop`, `journalctl --vacuum-size 1` |
+| 6. 보호 대상 검사 (2026-10-04) | 실행 직전 실제 대상 확인 — `kill`은 `/proc/<PID>/comm`, `pkill -f`는 `pgrep -f`(보호 대상·에이전트 자신 포함 또는 5개 초과 시 거부), `fuser`는 그 포트를 쓰는 프로세스, `systemctl`은 서비스 이름 | `pkill -f sshd`, `kill -TERM <sshd PID>`, `systemctl stop sshd`, `systemctl stop <에이전트 자신>` |
+
+**보호 대상**: `systemd`(·`systemd-*`), `init`, `sshd`/`ssh`, `networking`, `NetworkManager`,
+`dbus`, `docker`/`dockerd`/`containerd`, `python*`, 그리고 에이전트 자신의 서비스
+(`AGENT_SERVICE_NAME` 또는 `/proc/self/cgroup` 자동 감지). `PROTECTED_PROCESSES`(쉼표 구분)로
+추가할 수 있습니다. LLM이 만든 자유형식 명령(`_validate_command`)과 L1 구조화 액션
+(`restart_service`/`kill_process`의 대상, `_validate_process_name`)에 똑같이 적용됩니다.
+L1 구조화 `restart_service`는 대상이 플레이북에서 오므로 self-reflection(LLM 검토)을
+생략하고, LLM이 만든 자유형식 `systemctl` 명령만 LLM 검토를 거칩니다(서비스 허용 목록은
+후속 과제 — RESEARCH_SUMMARY §6).
 
 `_validate_process_name()`은 `kill_process` / `restart_service` 액션의 대상 프로세스 이름을 별도로 검증합니다.
 

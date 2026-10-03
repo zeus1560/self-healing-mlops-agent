@@ -340,9 +340,18 @@ class TestExecutorSecurity(unittest.TestCase):
             self.assertIsNotNone(err, f"'{cmd}' 차단 실패")
 
     def test_kill_other_pid_still_passes(self):
-        tokens, err = self.ex._validate_command("kill -TERM 1234")
-        self.assertIsNone(err)
-        self.assertEqual(tokens, ["kill", "-TERM", "1234"])
+        # 2026-10-04: kill은 실행 직전 /proc/<PID>/comm으로 대상을 확인한다 — 존재하지
+        # 않는 PID(예전 테스트의 1234)는 이제 "확인 불가"로 거부되므로 실제 비보호
+        # 프로세스(sleep)를 띄워 검증한다.
+        import subprocess
+        proc = subprocess.Popen(["sleep", "30"])
+        try:
+            tokens, err = self.ex._validate_command(f"kill -TERM {proc.pid}")
+            self.assertIsNone(err)
+            self.assertEqual(tokens, ["kill", "-TERM", str(proc.pid)])
+        finally:
+            proc.kill()
+            proc.wait()
 
 
 # ─────────────────────────────────────────────────────────────

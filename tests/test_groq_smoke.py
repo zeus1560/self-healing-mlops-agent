@@ -195,17 +195,21 @@ class TestSelfReflectionBoundedStateChangeBypass(unittest.TestCase):
     2026-09-07: \'systemctl restart postgresql\' 노이즈(동일 명령 온도=0에도 YES/NO
     뒤섞임, 2026-09-05 발견)의 근본 원인은 executor.py 화이트리스트가 이미 인자/
     서비스 이름까지 좁게 검증하는 상태변경 명령어까지 매번 LLM한테 재판정을
-    맡겼기 때문이다. systemctl(restart/start/stop)/nginx(-s reload·test)/
-    journalctl(--vacuum-*)/ulimit는 LLM 호출 없이 결정론적으로 통과시키고,
-    대상 지정 위험이 남는 kill/pkill/fuser는 계속 LLM 판정을 거치게 한다.
+    맡겼기 때문이다. nginx(-s reload·-t)/journalctl(--vacuum-*)/ulimit는 LLM 호출
+    없이 결정론적으로 통과시키고, 대상 지정 위험이 남는 kill/pkill/fuser는 계속
+    LLM 판정을 거치게 한다.
+
+    2026-10-04: systemctl(restart/start/stop)은 생략 대상에서 뺐다 — 화이트리스트가
+    서비스 이름의 문자 형식만 검증해 "systemctl stop sshd"가 통과하는 걸 확인했기
+    때문. 서비스 허용 목록(RESEARCH_SUMMARY §6)이 생길 때까지 LLM 검토를 거친다.
     """
 
-    def test_systemctl_restart_start_stop_are_bounded(self):
+    def test_systemctl_restart_start_stop_are_not_bounded(self):
         for cmd in ["systemctl restart postgresql", "systemctl start nginx", "systemctl stop worker"]:
-            self.assertTrue(llm_engine._is_bounded_state_change_command(cmd), cmd)
+            self.assertFalse(llm_engine._is_bounded_state_change_command(cmd), cmd)
 
     def test_nginx_reload_and_test_are_bounded(self):
-        for cmd in ["nginx -s reload", "nginx test"]:
+        for cmd in ["nginx -s reload", "nginx -t"]:
             self.assertTrue(llm_engine._is_bounded_state_change_command(cmd), cmd)
 
     def test_journalctl_and_ulimit_are_bounded(self):
@@ -227,7 +231,7 @@ class TestSelfReflectionBoundedStateChangeBypass(unittest.TestCase):
         with patch.object(llm_engine, "GROQ_API_KEY", "gsk_dummy"), \
              patch.object(llm_engine.urllib.request, "urlopen") as mock_urlopen:
             safe, rationale = llm_engine._reflect_on_command(
-                "systemctl restart postgresql", "ERROR: timeout", "N/A"
+                "nginx -s reload", "ERROR: timeout", "N/A"
             )
         self.assertTrue(safe)
         self.assertTrue(rationale)
@@ -292,15 +296,16 @@ class TestReflectOnL1Hit(unittest.TestCase):
             reasoning=reasoning, command=command, resolution_source="L1_CACHE",
         )
 
-    def test_restart_service_goes_through_self_reflection(self):
+    def test_restart_service_skips_llm_review(self):
+        # 2026-10-04 결정: L1 구조화 RESTART_SERVICE는 대상이 플레이북에서 오므로 LLM 검토를
+        # 생략한다(그 전에도 systemctl이 검토 생략 목록에 있어 결과는 항상 통과였다).
+        # 대상 확인은 executor._validate_process_name의 보호 목록이 맡는다.
         with patch("src.llm_engine.gather_system_context", return_value="ctx"), \
-             patch.object(llm_engine, "_reflect_on_command",
-                          return_value=(True, "matches expected restart target")) as mock_reflect:
+             patch.object(llm_engine, "_reflect_on_command") as mock_reflect:
             response = llm_engine._reflect_on_l1_hit(
                 self._response(ActionType.RESTART_SERVICE), "some error log",
             )
-        mock_reflect.assert_called_once()
-        self.assertEqual(mock_reflect.call_args[0][0], "systemctl restart nginx")
+        mock_reflect.assert_not_called()
         self.assertTrue(response.self_reflection_safe)
 
     def test_kill_process_goes_through_self_reflection(self):

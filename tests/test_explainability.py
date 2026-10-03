@@ -332,7 +332,8 @@ class TestL2PathCapturesNearestCategoryGuess(unittest.TestCase):
         result = _rule_based_fallback("CRITICAL: Out of memory - cannot allocate memory")
         self.assertIsNotNone(result)
         command, matched_desc = result
-        self.assertEqual(command, "pkill -f python")
+        # 2026-10-04: "pkill -f python"은 에이전트 자신까지 죽일 수 있어 조회 명령으로 교체됨
+        self.assertEqual(command, "free -h")
         self.assertIn("out of memory", matched_desc)
 
         engine = self._make_engine_with_query_result(self._miss_query_result())

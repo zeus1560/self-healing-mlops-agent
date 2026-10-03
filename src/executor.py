@@ -56,6 +56,112 @@ _SHELL_METACHAR = frozenset('|><;&`$(){}*?!\\~')
 # 영문자·숫자·밑줄·하이픈·점만 허용. 플래그(-로 시작) 및 경로 구분자 차단.
 _PROCESS_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_\-.]*$')
 
+# ── 보호 대상 (2026-10-04 화이트리스트 점검, RESEARCH_SUMMARY §6) ────────────────
+# 종료·중지·재시작하면 원격 접속, 로깅, 컨테이너 런타임, 에이전트 자신이 죽는 대상.
+# pkill/kill/fuser/systemctl 검증과 L1 구조화 액션(restart_service/kill_process —
+# _validate_process_name)이 공통으로 쓴다. rsyslog는 재시작이 정상 조치(L1 시드 플레이북)라
+# 넣지 않는다. 점검 당시 "pkill -f sshd",
+# "systemctl stop sshd", "kill -TERM -1" 등이 전부 화이트리스트를 통과했다.
+# 에이전트 자신의 서비스 이름은 하드코딩하지 않는다 — AGENT_SERVICE_NAME 또는
+# /proc/self/cgroup 자동 감지(_agent_service_name). 추가 보호 대상은
+# PROTECTED_PROCESSES(쉼표 구분)로 받는다.
+_BASE_PROTECTED_NAMES = frozenset({
+    "systemd", "init", "sshd", "ssh", "networking", "NetworkManager",
+    "systemd-networkd", "systemd-resolved", "systemd-journald", "systemd-logind",
+    "dbus", "dbus-daemon", "docker", "dockerd", "containerd",
+    "python", "python3",
+})
+# pkill -f 패턴 하나가 이보다 많은 프로세스에 걸리면 범위가 너무 넓다고 보고 거부한다.
+_PKILL_MAX_MATCHES = 5
+_FUSER_PORT_RE = re.compile(r'^(\d{1,5})/(tcp|udp)$')
+# journalctl vacuum 하한 — 이보다 작게 지우면 감사 기록·장애 로그가 사라진다.
+_JOURNAL_MIN_VACUUM_BYTES = 500 * 1024 ** 2
+_JOURNAL_MIN_VACUUM_SEC   = 7 * 86400
+_SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([KMGTkmgt]?)$')
+_TIME_RE = re.compile(r'^(\d+)([A-Za-z]*)$')
+_TIME_UNIT_SEC = {
+    "": 1, "s": 1, "sec": 1, "second": 1, "seconds": 1,
+    "m": 60, "min": 60, "minute": 60, "minutes": 60,
+    "h": 3600, "hr": 3600, "hour": 3600, "hours": 3600,
+    "d": 86400, "day": 86400, "days": 86400,
+    "w": 604800, "week": 604800, "weeks": 604800,
+    "M": 2629800, "month": 2629800, "months": 2629800,
+    "y": 31557600, "year": 31557600, "years": 31557600,
+}
+
+
+def _agent_service_name() -> str | None:
+    """에이전트 자신의 systemd 서비스 이름 — AGENT_SERVICE_NAME, 없으면 cgroup에서 감지."""
+    env = os.getenv("AGENT_SERVICE_NAME", "").strip()
+    if env:
+        return env.removesuffix(".service")
+    try:
+        with open("/proc/self/cgroup", encoding="utf-8") as f:
+            for line in f:
+                m = re.search(r"/([^/]+)\.service$", line.strip())
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
+def _is_protected_name(name: str) -> bool:
+    """프로세스/서비스 이름이 보호 대상인지 판별한다(.service 접미사 무시)."""
+    name = name.removesuffix(".service")
+    extra = {n.strip() for n in os.getenv("PROTECTED_PROCESSES", "").split(",") if n.strip()}
+    agent = _agent_service_name()
+    return (
+        name in _BASE_PROTECTED_NAMES or name in extra
+        or (agent is not None and name == agent)
+        or name.startswith("systemd-") or name.startswith("python")
+    )
+
+
+def _read_proc_comm(pid: int) -> str | None:
+    """/proc/<pid>/comm(프로세스 이름)을 읽는다. 없거나 못 읽으면 None."""
+    try:
+        with open(f"/proc/{pid}/comm", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def _protected_pid_reason(pid: int) -> str | None:
+    """PID가 종료하면 안 되는 대상이면 그 이유를, 아니면 None을 반환한다."""
+    if pid in (os.getpid(), os.getppid()):
+        return f"PID {pid}는 에이전트 자신(또는 부모 프로세스)"
+    comm = _read_proc_comm(pid)
+    if comm is not None and _is_protected_name(comm):
+        return f"PID {pid}({comm})는 보호 대상 프로세스"
+    return None
+
+
+def _list_pids(cmd: list[str]) -> list[int] | None:
+    """pgrep/fuser 출력에서 PID 목록을 뽑는다. 매칭 없음은 [], 확인 불가는 None."""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, shell=False, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode not in (0, 1):
+        return None
+    return [int(t) for t in re.findall(r"\d+", proc.stdout)]
+
+
+def _parse_journal_size(value: str) -> int | None:
+    m = _SIZE_RE.match(value)
+    if not m:
+        return None
+    power = " KMGT".index(m.group(2).upper() or " ")
+    return int(float(m.group(1)) * 1024 ** power)
+
+
+def _parse_journal_time(value: str) -> int | None:
+    m = _TIME_RE.match(value)
+    if not m or m.group(2) not in _TIME_UNIT_SEC:
+        return None
+    return int(m.group(1)) * _TIME_UNIT_SEC[m.group(2)]
+
 # ── 종료 신호 ─────────────────────────────────────────────────────────────────
 # log_watcher.start_watching()에서 set_shutdown_event()로 주입된다.
 _shutdown_event: Optional[threading.Event] = None
@@ -149,6 +255,12 @@ def _validate_process_name(name: str) -> str | None:
     if not _PROCESS_NAME_RE.match(name):
         logging.error(f"  [Security Block] 프로세스 이름에 비허용 문자 포함: {name!r}")
         return None
+    # 2026-10-04: 자유형식 명령과 같은 보호 목록을 구조화 액션(restart_service/
+    # kill_process, L1 플레이북·L2 진단-라우팅)에도 적용한다 — L1 구조화 액션은
+    # self-reflection을 생략하므로 이 검사가 대상에 대한 마지막 확인이다.
+    if _is_protected_name(name):
+        logging.error(f"  [Security Block] 보호 대상 프로세스/서비스: {name!r}")
+        return None
     return name
 
 
@@ -189,7 +301,7 @@ class ActionExecutor:
             "systemctl":  {"restart", "status", "stop", "start"},
             "echo":       set(),
             "ulimit":     set(),
-            "nginx":      {"-s", "reload", "test"},
+            "nginx":      {"-s", "-t"},                # 실제 허용 형태는 아래 6.6 참고
             "free":       set(),
             "df":         set(),
             "ss":         set(),
@@ -372,13 +484,87 @@ class ActionExecutor:
         #    문자열 "1" 정확 일치만으로는 "001"/"+1"처럼 실제 kill(1) 유틸리티가
         #    똑같이 PID 1로 파싱하는 변형을 놓친다(직접 실측으로 확인) — 정수로
         #    파싱해 값 자체를 비교한다.
+        #
+        #    2026-10-04 화이트리스트 점검: 첫 인자만 보던 탓에 "kill -TERM -1"(모든
+        #    프로세스)/"kill -HUP 0"(자기 프로세스 그룹)/"kill -TERM -- -1"이 통과했다.
+        #    "kill -TERM|-HUP <PID>" 3토큰, PID는 2 이상의 정수만 허용하고, 실행 직전
+        #    /proc/<PID>/comm으로 보호 대상(sshd 등)·에이전트 자신이면 거부한다.
+        #    프로세스를 확인할 수 없으면(이미 없음 등) 보수적으로 거부한다.
         if base_cmd == "kill":
-            for t in tokens[2:]:
-                try:
-                    if int(t) == 1:
-                        return _block("PID 1 대상 kill 차단", f"자기 자신/init 대상 지정: {tokens}")
-                except ValueError:
-                    continue
+            if len(tokens) != 3 or not tokens[2].isdigit():
+                return _block("kill 형식 이상", f"'kill -TERM|-HUP <PID>' 형식만 허용: {tokens}")
+            pid = int(tokens[2])
+            if pid <= 1:
+                return _block("PID 1 이하 대상 kill 차단", f"자기 자신/init 대상 지정: {tokens}")
+            reason = _protected_pid_reason(pid)
+            if reason:
+                return _block("보호 대상 kill 차단", reason)
+            if _read_proc_comm(pid) is None:
+                return _block("kill 대상 확인 불가", f"PID {pid} 프로세스를 확인할 수 없음")
+
+        # 6.4.1 pkill — 2026-10-04 점검: "pkill -f python"(에이전트 자신), "pkill -f ."
+        #    (전체 매칭), "pkill -f -9 nginx"(뒤쪽 SIGKILL 플래그)가 통과했다.
+        #    "pkill -x|-f <이름>" 3토큰만 허용하고 이름은 _PROCESS_NAME_RE + 보호 목록으로
+        #    검사한다. -f는 정규식이 명령줄 전체에 걸리므로 실행 직전 pgrep -f로 실제
+        #    매칭 프로세스를 확인해 보호 대상·에이전트 자신이 끼거나 너무 많으면 거부한다.
+        if base_cmd == "pkill":
+            if len(tokens) != 3:
+                return _block("pkill 형식 이상", f"'pkill -x|-f <이름>' 3토큰만 허용: {tokens}")
+            pattern = tokens[2]
+            if not _PROCESS_NAME_RE.match(pattern):
+                return _block("pkill 대상 검증 실패", f"대상 {pattern!r} 에 비허용 문자 포함")
+            if _is_protected_name(pattern):
+                return _block("보호 대상 pkill 차단", f"{pattern!r}는 보호 대상")
+            if tokens[1] == "-f":
+                pids = _list_pids(["pgrep", "-f", pattern])
+                if pids is None:
+                    return _block("pkill 대상 확인 불가", f"pgrep -f {pattern!r} 실행 실패")
+                if len(pids) > _PKILL_MAX_MATCHES:
+                    return _block(
+                        "pkill 매칭 범위 과다",
+                        f"pgrep -f {pattern!r} 매칭 {len(pids)}개 (최대 {_PKILL_MAX_MATCHES}개)",
+                    )
+                for p in pids:
+                    reason = _protected_pid_reason(p)
+                    if reason:
+                        return _block("보호 대상 pkill 차단", reason)
+
+        # 6.4.2 fuser — 2026-10-04 점검: 인자 제한이 없어 "fuser -k /var/lib/postgresql/data"
+        #    (파일을 연 프로세스 전부), "fuser -k -m /"(루트 파일시스템 사용 프로세스 전부),
+        #    "fuser -k -9 5000/tcp"가 통과했다. "fuser -k <1~65535>/tcp|udp" 3토큰만
+        #    허용하고, 그 포트를 쓰는 프로세스에 보호 대상(예: 22/tcp의 sshd)이 있으면 거부한다.
+        if base_cmd == "fuser":
+            m = _FUSER_PORT_RE.match(tokens[2]) if len(tokens) == 3 else None
+            if tokens[1:2] != ["-k"] or m is None or not 1 <= int(m.group(1)) <= 65535:
+                return _block("fuser 형식 이상", f"'fuser -k <포트>/tcp|udp' 형식만 허용: {tokens}")
+            pids = _list_pids(["fuser", tokens[2]])
+            if pids is None:
+                return _block("fuser 대상 확인 불가", f"fuser {tokens[2]} 실행 실패")
+            for p in pids:
+                reason = _protected_pid_reason(p)
+                if reason:
+                    return _block("보호 대상 fuser 차단", reason)
+
+        # 6.4.3 nginx — 2026-10-04 점검: "nginx -s stop/quit", "nginx -s reload -c <임의 설정>"이
+        #    통과했다. 설정 리로드와 설정 검사 두 형태만 허용한다.
+        if base_cmd == "nginx" and tokens not in (["nginx", "-s", "reload"], ["nginx", "-t"]):
+            return _block("nginx 형식 이상", f"'nginx -s reload' / 'nginx -t'만 허용: {tokens}")
+
+        # 6.4.4 journalctl vacuum — 2026-10-04 점검: "journalctl --vacuum-size 1"이 통과해
+        #    시스템 로그(감사 기록 포함)를 통째로 지울 수 있었다. 인자 없는 조회 또는
+        #    "--vacuum-size <500M 이상>" / "--vacuum-time <7d 이상>" 3토큰만 허용한다
+        #    (--vacuum-files 등 다른 옵션은 6번 첫 인자 검사에서 이미 거부됨).
+        if base_cmd == "journalctl" and len(tokens) > 1:
+            if len(tokens) != 3:
+                return _block("journalctl 형식 이상", f"'journalctl --vacuum-size|--vacuum-time <값>'만 허용: {tokens}")
+            if tokens[1] == "--vacuum-size":
+                size = _parse_journal_size(tokens[2])
+                if size is None or size < _JOURNAL_MIN_VACUUM_BYTES:
+                    return _block("journalctl vacuum 하한 미달", f"--vacuum-size {tokens[2]!r} (최소 500M)")
+            else:
+                sec = _parse_journal_time(tokens[2])
+                if sec is None or sec < _JOURNAL_MIN_VACUUM_SEC:
+                    return _block("journalctl vacuum 하한 미달", f"--vacuum-time {tokens[2]!r} (최소 7d)")
 
         # 6.5. ss -K/--kill 명시적 차단.
         #    2026-09-10 adversarial testing 확장 중 발견: `ss`는 읽기 전용 진단
@@ -412,6 +598,11 @@ class ActionExecutor:
                     "서비스 이름 검증 실패",
                     f"systemctl 서비스 이름 {svc!r} 에 비허용 문자 포함",
                 )
+            # 2026-10-04 점검: "systemctl stop sshd" / "systemctl stop <에이전트 자신>"이
+            # 통과했다. 보호 대상 서비스는 status 외 동작을 거부한다(서비스 허용 목록은
+            # §6 후속 과제).
+            if tokens[1] != "status" and _is_protected_name(svc):
+                return _block("보호 대상 서비스 차단", f"systemctl {tokens[1]} {svc!r} — 보호 대상")
 
         return tokens, None
 
