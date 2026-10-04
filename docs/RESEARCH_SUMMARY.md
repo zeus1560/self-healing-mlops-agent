@@ -902,6 +902,9 @@ B1이 B2·B3 판단의 선행 조건이다.
   — B3). 커밋 `d0e3cc9c`(auto+검토 NO/실패 → 사람 승인) 배포로 승인 요청이 늘면 이 비율이 커질
   수 있다. 검토할 것: 대기 시간(5분)이 운영자 응답 패턴에 맞는지, 타임아웃 시 재알림·
   에스컬레이션 여부. 하루 뒤 VM 확인 때 배포 전후를 기간별 생성 건수와 응답률(결정/만료)로 비교.
+  참고: 텔레그램 `"[Telegram] 관리자에게 승인 요청을 발송했습니다"` 로그는 **전달을 보장하지
+  않는다** — polling 루프가 있으면 발송 코루틴을 루프에 맡기고(`run_coroutine_threadsafe`)
+  결과를 기다리지 않은 채 바로 이 로그를 남긴다. 실제 전달 실패는 루프 쪽에서만 드러난다.
 
 - [ ] **B13. VM 로그 소음 — ops-agent 권한 오류가 journal·syslog 대부분 차지 (2026-10-05 확인)** —
   VM journal 1.3GB가 3일 치뿐이었고(하루 약 430MB), 24시간 55만 줄 중 **86%(47만 줄)가
@@ -915,6 +918,16 @@ B1이 B2·B3 판단의 선행 조건이다.
   반복. 소음을 걷어내면 하루 journal은 약 2만 줄(k3s·ssh 등)로, 줄당 약 0.8KB 기준 하루 약
   16MB 수준으로 추정. 에이전트 자체는 로깅 수정(INFO 활성화) 후에도 대기 시 0줄, 장애 1건당
   약 20줄·2KB(2026-10-05 로컬 실측) — 크기 제한 판단에 영향 없음.
+  - **대응 결정(2026-10-05): ops-agent 비활성화**. IAM 권한 부여(Logs Writer·Monitoring Metric
+    Writer)는 오류는 없애지만 **VM syslog 전체(로깅 수정 후엔 에이전트 INFO 로그·에러 원문 일부
+    포함)가 Cloud Logging으로 전송**되므로 셀프호스팅 원칙(B2·B4)과 충돌해 쓰지 않는다. 콘솔에서
+    이 VM의 Cloud Logging 데이터가 거의 없음을 확인(설치 직후부터 계속 전송 실패). systemd
+    `LogLevelMax=warning`은 collector가 모든 로그를 stderr(=info 등급)로 내보내 진짜 오류까지
+    가리므로 쓰지 않는다. 주의: 콘솔 생성 시 만들어진 OS 정책 할당
+    `goog-ops-agent-v2-template-1-7-0-us-central1-c`(ENFORCEMENT, 패키지 INSTALLED 강제, 라벨
+    `goog-ops-agent-policy`로 이 VM만 대상)이 있어, 서비스만 끄면 패키지 재설치·업그레이드 때
+    다시 켜질 수 있다 — 인스턴스 라벨을 떼 정책 대상에서 뺀 뒤 서비스를 끈다. journald는
+    `SystemMaxUse=500M`(소음 제거 후 약 30일 보관, 화이트리스트 vacuum 하한과 동일).
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
