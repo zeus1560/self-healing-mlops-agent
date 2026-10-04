@@ -183,6 +183,9 @@ def main(argv=None):
     parser.add_argument("--interval", type=float, default=GROQ_CALL_INTERVAL_SEC,
                         help="클라우드 모드 항목 간 대기(초). 2026-10-04 진단-라우팅 검토 추가로 "
                              "항목당 Groq 호출이 최대 4회라 6초면 429가 난다 — 재측정은 9초")
+    parser.add_argument("--max-429", type=int, default=5,
+                        help="회차 중 Groq 429가 이 횟수를 넘으면 결과를 저장하지 않고 중단(2026-10-05 — "
+                             "일일 토큰 한도 소진으로 무효 측정이 나온 사례 방지)")
     args = parser.parse_args(argv)
     interval = args.interval
 
@@ -244,6 +247,11 @@ def main(argv=None):
             response = RAGEngine._l2_slow_track(None, log, {}, best_distance=999.0)
         latency_ms = (time.perf_counter() - t0) * 1000
 
+        if use_groq and events.counts["groq_429"] > args.max_429:
+            raise SystemExit(
+                f"중단: Groq 429가 {events.counts['groq_429']}회(> {args.max_429}) — 레이트리밋/일일 "
+                f"한도 소진 의심, {i + 1}번째 항목에서 멈춤. 결과를 저장하지 않는다(로그: {log_path})."
+            )
         if provider != "groq" and counter.counts["groq"] > 0:
             raise SystemExit(
                 f"중단: 로컬 모드(LLM_PROVIDER={provider})인데 Groq 요청이 "

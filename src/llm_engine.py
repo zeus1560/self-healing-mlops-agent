@@ -287,8 +287,21 @@ def _ollama_warmup() -> None:
     에이전트 시작 시 백그라운드에서 Ollama 모델을 미리 로드한다.
     빈 프롬프트로 generate 요청 → 토큰 생성 없이 모델만 메모리에 올림.
     RAGEngine 생성자에서 1회 호출되며, 싱글톤 구조로 중복 호출되지 않는다.
+
+    2026-10-05: Ollama에 연결할 수 없으면 사전 로딩을 건너뛴다 — 예전엔 Ollama 없는
+    클라우드 모드 서버(VM)가 시작할 때마다 실패 경고와 스택 트레이스를 남겨, 배포 후
+    에러 로그 확인을 매번 헷갈리게 했다. 로컬 모드에선 Ollama가 L2 본체라 경고로 남긴다.
     """
     def _load():
+        if not _is_ollama_available():
+            if llm_mode.is_local_mode():
+                logging.warning(
+                    f"[Ollama Warmup] [로컬 모드] Ollama 연결 불가({OLLAMA_BASE_URL}) — 사전 로딩 "
+                    f"건너뜀. L2는 Rule/사람 승인으로 처리됩니다."
+                )
+            else:
+                logging.info("[Ollama Warmup] Ollama 미실행(클라우드 모드 폴백용) — 사전 로딩 건너뜀.")
+            return
         try:
             payload = json.dumps({
                 "model":      OLLAMA_MODEL,

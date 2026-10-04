@@ -52,3 +52,7 @@ Thumbs.db
 # 런타임 SQLite WAL/SHM 파일 — 계속 바뀌므로 추적 제외
 data/*.db-shm
 data/*.db-wal
+
+# 측정 로그 — Groq 조직 ID·측정 PC 시스템 컨텍스트 포함, 로컬에만 보존 (2026-10-05)
+experiments/results/logs/
+experiments/results/**/logs/

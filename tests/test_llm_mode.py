@@ -184,6 +184,36 @@ class TestCloudModeGroqDownNoOllama(unittest.TestCase):
         self.assertLess(elapsed, 5)
 
 
+class TestOllamaWarmupSkip(unittest.TestCase):
+    """Ollama에 연결할 수 없으면 사전 로딩을 건너뛴다(트레이스 없음). 2026-10-05."""
+
+    class _SyncThread:
+        def __init__(self, target, **kw): self._t = target
+        def start(self): self._t()
+
+    def _warmup(self, provider):
+        net = _RecordingNetwork(ollama_up=False)
+        with patch.object(llm_mode, "LLM_PROVIDER", provider), \
+             patch.object(llm_engine.threading, "Thread", self._SyncThread), \
+             patch.object(llm_engine.urllib.request, "urlopen", side_effect=net), \
+             self.assertLogs(level="INFO") as cm:
+            llm_engine._ollama_warmup()
+        return net, "\n".join(cm.output)
+
+    def test_cloud_mode_skips_quietly(self):
+        net, logs = self._warmup("groq")
+        self.assertFalse(any(u.endswith("/api/generate") for u in net.urls))
+        self.assertIn("사전 로딩 건너뜀", logs)
+        self.assertNotIn("Traceback", logs)
+        self.assertNotIn("WARNING", logs)
+
+    def test_local_mode_warns_without_traceback(self):
+        net, logs = self._warmup("ollama")
+        self.assertFalse(any(u.endswith("/api/generate") for u in net.urls))
+        self.assertIn("[로컬 모드] Ollama 연결 불가", logs)
+        self.assertNotIn("Traceback", logs)
+
+
 class _TempAutonomyDB(unittest.TestCase):
     def setUp(self):
         fd, self.db = tempfile.mkstemp(suffix=".db")
