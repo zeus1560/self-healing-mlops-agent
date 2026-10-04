@@ -430,16 +430,38 @@ def _demo_print(msg: str, color: str = "reset") -> None:
     print(f"{c}{msg}{_COLORS['reset']}", flush=True)
 
 
-if __name__ == "__main__":
+# INFO로 두면 안 되는 서드파티 로거. httpx는 요청마다 URL 전체를 INFO로 남기는데, 텔레그램
+# Bot API URL에는 봇 토큰이 들어 있다(https://api.telegram.org/bot<TOKEN>/getUpdates) —
+# polling마다 토큰이 journal에 찍힌다. httpcore는 그 하위 레벨 로그.
+_QUIET_LOGGERS = {
+    "httpx":              logging.WARNING,
+    "httpcore":           logging.WARNING,
+    "chromadb.telemetry": logging.CRITICAL,   # chromadb 버전 충돌로 발생하는 telemetry 에러 숨김
+}
+
+
+def configure_logging() -> None:
+    """에이전트 프로세스의 로깅을 설정한다.
+
+    2026-10-05 수정: basicConfig에 force=True. 그 전엔 import 단계(src.telegram_bot 모듈 레벨
+    싱글톤 생성 시 logging 호출)에서 파이썬이 루트 로거를 WARNING 기본값으로 자동 설정해,
+    여기의 basicConfig(level=INFO)가 아무 효과가 없었다 — VM journal에 INFO가 9/21 이후 0줄
+    (모드 표시·텔레그램 발송 성공·"GROQ_API_KEY 미설정" 폴백 메시지 전부 누락).
+    """
     if os.getenv("USE_JSON_LOG", "0") == "1":
         setup_json_logging()
     else:
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(message)s",
+            force=True,
         )
-    # chromadb 버전 충돌로 발생하는 telemetry 에러 숨김
-    logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+    for name, level in _QUIET_LOGGERS.items():
+        logging.getLogger(name).setLevel(level)
+
+
+if __name__ == "__main__":
+    configure_logging()
 
     if os.getenv("DEMO_MODE", "0") == "1":
         logging.disable(logging.CRITICAL)
