@@ -613,12 +613,18 @@ class ActionExecutor:
         2026-10-04 결정: auto 레벨인데 self-reflection이 NO(self_reflection_safe=False)면
         자동 실행하지 않고 approve_then_execute로 내린다 — auto엔 승인 화면이 없어 경고가
         아무 역할을 못 하기 때문. 승인 레벨에서는 9/05 결정(NO여도 차단하지 않고 경고만)을
-        그대로 유지한다. 검토를 안 거친 응답(None)은 영향 없음. 자유형식·구조화 경로 공통.
+        그대로 유지한다. 검토를 시도했지만 실패한 경우(self_reflection_error, 2026-10-04)도
+        NO와 똑같이 승인으로 내린다 — 장애가 몰려 레이트리밋이 걸릴 때 검토 없이 auto로
+        실행되던 구멍. 설계상 검토를 생략한 응답(error=False, safe=True/None)은 영향 없음.
+        자유형식·구조화 경로 공통.
         """
         level = autonomy_store.get_level(decision.error_category)
-        if level == AutonomyLevel.AUTO and decision.self_reflection_safe is False:
+        if level == AutonomyLevel.AUTO and (
+            decision.self_reflection_safe is False or decision.self_reflection_error
+        ):
+            reason = "검토 실패" if decision.self_reflection_error else "위험 판정"
             logging.warning(
-                f"[Autonomy] '{decision.error_category}'는 auto지만 자가 반성이 위험 판정 — "
+                f"[Autonomy] '{decision.error_category}'는 auto지만 자가 반성 {reason} — "
                 f"자동 실행하지 않고 사람 승인으로 전환합니다."
             )
             return AutonomyLevel.APPROVE_THEN_EXECUTE

@@ -120,6 +120,11 @@ class AgentResponse:
                              이 필드는 그 값을 계산 시점에 그대로 보존해 다시 파싱할
                              필요를 없앤다. L1_CACHE/RULE/에스컬레이션 경로(검토 자체가
                              없음)에서는 None.
+        self_reflection_error: 검토를 시도했지만 Groq·Ollama 모두 실패해 결과가 없는 경우
+                             True(2026-10-04 추가). 이때 self_reflection_safe는 None이다 —
+                             "설계상 검토 생략"(L1 시드 RESTART_SERVICE, CLEAR_MEMORY 등,
+                             error=False)과 구분하기 위함. executor는 auto 레벨에서도 이
+                             경우를 사람 승인으로 내린다(_effective_level).
     """
 
     error_category:    str
@@ -136,6 +141,7 @@ class AgentResponse:
     l1_nearest_distance: Optional[float] = None
     l2_diagnosis:        Optional[str]   = None
     self_reflection_safe: Optional[bool] = None
+    self_reflection_error: bool = False
 
     def to_json(self) -> str:
         """JSON 직렬화. action_type은 Enum 값(str)으로 변환한다."""

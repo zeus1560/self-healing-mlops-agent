@@ -776,7 +776,8 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> tuple[
     호출 없이 항상 통과시킨다. 나머지(kill/pkill/fuser 등 대상 지정 위험이
     남는 명령)는 Groq(GROQ_API_KEY 설정 시) 우선 사용, 실패/미설정 시
     Ollama로 폴백한다. YES → 실행 허용 / NO 또는 오류 → 에스컬레이션으로 전환.
-    검증 실패(네트워크 오류 등) 시 보수적으로 True 반환한다.
+    Groq·Ollama 모두 검증에 실패하면(네트워크 오류·레이트리밋 등) None을 반환한다
+    (2026-10-04 — 그 전엔 보수적으로 True 반환).
     최종 방어선은 executor.py의 화이트리스트 검증이므로 이중 안전망이 유지된다.
 
     반환값은 (안전 여부, 판정 근거) — 2026-09-12 Explainability 확장으로 튜플이
@@ -863,8 +864,13 @@ def _reflect_on_command(command: str, error_log: str, system_ctx: str) -> tuple[
             )
             return safe, rationale
     except Exception as e:
-        logging.warning(f"[자가 반성] 검증 요청 실패 — 보수적 통과 처리: {e}")
-        return True, f"자가 반성 검증 요청 실패(네트워크 오류 등) — 보수적으로 통과 처리: {e}"
+        # 2026-10-04: 예전엔 여기서 (True, "보수적으로 통과")를 반환해, Groq 레이트리밋 등으로
+        # 검토가 실패하면 auto 레벨에서 검토 없이 실행됐다(장애가 몰릴 때 가장 잘 걸린다).
+        # 이제 None("검토 시도 후 실패")을 반환한다 — 호출부가 self_reflection_error로 표시하고
+        # executor가 auto에서도 사람 승인으로 내린다. "자가 반성 검증 요청 실패" 문구는
+        # run_bias_injection_test.py의 폴백 표식이라 유지한다.
+        logging.warning(f"[자가 반성] 검증 요청 실패(Groq·Ollama 모두) — 검토 결과 없음: {e}")
+        return None, f"자가 반성 검증 요청 실패(Groq·Ollama 모두, 네트워크 오류·레이트리밋 등): {e}"
 
 
 # ── ipex_llm (Intel Arc GPU 환경 전용) ───────────────────────────────────────
@@ -1048,6 +1054,11 @@ def _reflect_on_l1_hit(response: AgentResponse, error_log: str) -> AgentResponse
     return _apply_self_reflection(response, error_log, gather_system_context(error_log), "L1 캐시 제안")
 
 
+def _review_failed_warning(origin: str, rationale: str, command: str) -> str:
+    """검토 시도 후 실패(Groq·Ollama 모두) — 승인 화면용 경고. auto 레벨은 executor가 승인으로 내린다."""
+    return f"⚠️ 자가 반성 검토 실패({origin}) — {rationale} — 검토 결과 없음, 사람이 직접 판단 필요: {command}"
+
+
 def _apply_self_reflection(
     response: AgentResponse, error_log: str, system_ctx: str, origin: str,
 ) -> AgentResponse:
@@ -1072,8 +1083,12 @@ def _apply_self_reflection(
 
     safe, rationale = _reflect_on_command(command, error_log, system_ctx)
     response.self_reflection_safe = safe
-    if not safe:
-        warning = f"⚠️ 자가 반성이 위험 판정({origin}) — {rationale} — 승인 시 주의: {command}"
+    response.self_reflection_error = safe is None
+    if safe is None or not safe:
+        warning = (
+            _review_failed_warning(origin, rationale, command) if safe is None else
+            f"⚠️ 자가 반성이 위험 판정({origin}) — {rationale} — 승인 시 주의: {command}"
+        )
         response.reasoning = f"{response.reasoning}\n\n{warning}" if response.reasoning else warning
     return response
 
@@ -1094,7 +1109,9 @@ def _make_llm_response(
     타게 하고, 거부 사유는 reasoning에 남겨 승인 화면에서 사람이 참고하게 한다.
     """
     safe, rationale = _reflect_on_command(command, error_log, system_context)
-    if safe:
+    if safe is None:
+        reasoning = _review_failed_warning(backend + " 제안", rationale, command)
+    elif safe:
         # 2026-09-12 Explainability 확장: 예전엔 "{backend} 추론 성공"이라는 내용
         # 없는 문구뿐이었음 — 이제 자가 반성이 실제로 판단한 근거를 담는다.
         reasoning = f"{backend} 추론 성공 — {rationale}" if rationale else f"{backend} 추론 성공"
@@ -1114,6 +1131,7 @@ def _make_llm_response(
         l1_nearest_distance=nearest_distance,
         l2_diagnosis=diagnosis,
         self_reflection_safe=safe,
+        self_reflection_error=safe is None,
     )
 
 

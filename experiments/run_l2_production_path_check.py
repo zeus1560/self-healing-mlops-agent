@@ -63,6 +63,7 @@ run_l2_production_path_check.py
 import argparse
 import csv
 import json
+import logging
 import re
 import subprocess
 import time
@@ -91,6 +92,29 @@ _STRUCTURED_ACTION_TYPES = (
 # 지속적으로 걸림(실측 확인 — 재시도 소진으로 생성 성공률까지 같이 떨어짐,
 # 진짜 아키텍처 성능 저하와 구분이 안 됨) — 호출량 증가분만큼 여유 있게 늘림.
 GROQ_CALL_INTERVAL_SEC = 6.0
+
+
+class _EventCounter(logging.Handler):
+    """llm_engine 로그에서 레이트리밋·폴백 이벤트를 센다(2026-10-04 — 측정 PC에 Ollama가 떠
+    있어 Groq 실패분이 조용히 Ollama로 넘어간 걸 건별로 추적 못 했던 문제 보완)."""
+
+    PATTERNS = {
+        "groq_429":               "Rate limit(429)",
+        "diagnosis_groq_failed":  "[진단 에이전트] Groq 호출 실패",
+        "generation_fallback":    "[RAGEngine] Groq 실패",
+        "review_ollama_fallback": "[자가 반성] Groq 검증 실패, Ollama로 폴백",
+        "review_failed_all":      "[자가 반성] 검증 요청 실패",
+    }
+
+    def __init__(self):
+        super().__init__(level=logging.INFO)
+        self.counts = {k: 0 for k in self.PATTERNS}
+
+    def emit(self, record):
+        msg = record.getMessage()
+        for key, pat in self.PATTERNS.items():
+            if pat in msg:
+                self.counts[key] += 1
 
 
 def _self_reflection_passed(response) -> bool:
@@ -156,7 +180,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=int, default=None,
                         help="반복 측정 회차 번호 — 결과 파일명에 _run<N>을 붙인다")
+    parser.add_argument("--interval", type=float, default=GROQ_CALL_INTERVAL_SEC,
+                        help="클라우드 모드 항목 간 대기(초). 2026-10-04 진단-라우팅 검토 추가로 "
+                             "항목당 Groq 호출이 최대 4회라 6초면 429가 난다 — 재측정은 9초")
     args = parser.parse_args(argv)
+    interval = args.interval
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     executor = ActionExecutor()
@@ -165,6 +193,27 @@ def main(argv=None):
     provider = llm_mode.LLM_PROVIDER
     model    = llm_engine.GROQ_MODEL if use_groq else llm_engine.OLLAMA_MODEL
 
+    # 클라우드 모드 기본 실행만 기존 공식 파일명을 쓰고, 그 외(로컬 모드·반복 회차)는
+    # 공식 수치를 덮어쓰지 않도록 provider·모델·회차를 붙인 별도 파일로 저장한다.
+    suffix = ""
+    if not use_groq:
+        suffix += "_" + provider + "-" + re.sub(r"[^A-Za-z0-9.]+", "-", model)
+    if args.run is not None:
+        suffix += f"_run{args.run}"
+
+    # 로그 보존 + 이벤트 집계(레이트리밋·폴백·검토 실패)
+    log_dir = RESULTS_DIR / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"l2_production_path_check{suffix}.log"
+    file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    file_handler.setLevel(logging.INFO)
+    events = _EventCounter()
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(file_handler)
+    root.addHandler(events)
+
     n = len(NOVEL_ERRORS)
     print("=" * 70)
     print("  운영 L2 실제 경로 점검 — 신규 에러 50건")
@@ -172,7 +221,7 @@ def main(argv=None):
     print(f"  LLM_PROVIDER={provider}, Groq 사용={use_groq}, 모델={model}")
     print("=" * 70)
     if use_groq:
-        print(f"  (레이트리밋 회피를 위해 요청 간 {GROQ_CALL_INTERVAL_SEC}초 간격 — 총 약 {GROQ_CALL_INTERVAL_SEC * n:.0f}초 소요 예상)\n")
+        print(f"  (레이트리밋 회피를 위해 요청 간 {interval}초 간격 — 총 약 {interval * n:.0f}초 소요 예상)\n")
 
     print(f"{'#':>3} {'Category':>20} {'생성':>5} {'화이트리스트':>7} {'자가반성':>7} {'ms':>7}")
     print("-" * 70)
@@ -184,7 +233,7 @@ def main(argv=None):
         log = item["log"]
 
         if use_groq and i > 0:
-            time.sleep(GROQ_CALL_INTERVAL_SEC)
+            time.sleep(interval)
 
         t0 = time.perf_counter()
         # best_meta={}: 2026-09-15 l1_nearest_category 추가로 _l2_slow_track()에
@@ -212,7 +261,8 @@ def main(argv=None):
             # 거치므로 실제 판정을 읽는다. CLEAR_MEMORY처럼 검토 대상이 아닌 액션은 None →
             # 통과로 취급(그 전엔 구조화 액션 전부를 True로 간주했다 — 이전 수치와 직접 비교 불가).
             whitelist_ok = _validate_process_name(response.target_process or "") is not None
-            reflection_ok = response.self_reflection_safe is not False
+            reflection_ok = (response.self_reflection_safe is not False
+                             and not response.self_reflection_error)
         elif generated and response.command:
             _, err = executor._validate_command(response.command)
             whitelist_ok = err is None
@@ -240,6 +290,7 @@ def main(argv=None):
             "reflection_ok":     reflection_ok,
             "end_to_end_ok":     end_to_end_ok,
             "self_reflection_safe": response.self_reflection_safe,
+            "self_reflection_error": response.self_reflection_error,
             "reasoning":         response.reasoning,
             "latency_ms":        round(latency_ms, 1),
         })
@@ -279,6 +330,10 @@ def main(argv=None):
         "ollama_http_requests":      counter.counts["ollama"],
         "other_http_requests":       counter.counts["other"],
         "run":                       args.run,
+        "groq_call_interval_sec":    interval if use_groq else None,
+        "events":                    events.counts,
+        "review_failed_items":       sum(bool(r["self_reflection_error"]) for r in records),
+        "log_file":                  str(log_path),
         "git_commit":                _git_commit(),
         "n_samples":                 n,
         "generation_rate":           round(gen_rate, 4),
@@ -287,13 +342,6 @@ def main(argv=None):
         "end_to_end_pass_rate":      round(e2e_rate, 4),
         "avg_latency_ms":            round(avg_lat, 1),
     }
-    # 클라우드 모드 기본 실행만 기존 공식 파일명을 쓰고, 그 외(로컬 모드·반복 회차)는
-    # 공식 수치를 덮어쓰지 않도록 provider·모델·회차를 붙인 별도 파일로 저장한다.
-    suffix = ""
-    if not use_groq:
-        suffix += "_" + provider + "-" + re.sub(r"[^A-Za-z0-9.]+", "-", model)
-    if args.run is not None:
-        suffix += f"_run{args.run}"
     summary_path = RESULTS_DIR / f"l2_production_path_check_summary{suffix}.json"
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
