@@ -749,6 +749,7 @@ class ActionExecutor:
             # SIGTERM 수신 시 승인 대기를 즉시 취소해 깨끗하게 종료한다.
             if _is_shutting_down():
                 logging.warning("  [종료 신호] 승인 대기 중 에이전트 종료 감지. 실행 취소.")
+                approval_store.mark_expired(token, "shutdown")
                 return "shutdown"
             time.sleep(_APPROVAL_POLL_INTERVAL)
             status = approval_store.get_status(token)
@@ -759,6 +760,8 @@ class ActionExecutor:
                 logging.warning("  [거절됨] 거절 확인. 실행 취소.")
                 return "rejected"
         logging.warning(f"  [타임아웃] {_APPROVAL_TIMEOUT_SEC}s 내 응답 없음. 실행 취소.")
+        # 행을 expired로 표시 — 이후 늦게 들어온 승인은 거부된다(토큰 유효 10분 > 대기 5분).
+        approval_store.mark_expired(token, "timeout")
         return "timeout"
 
     # ── LLM 명령어 실행 ─────────────────────────────────────────────────

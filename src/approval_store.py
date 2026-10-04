@@ -147,3 +147,28 @@ def set_decision(token: str, decision: str, decided_by: str | None = None) -> bo
         finally:
             conn.close()
     return cur.rowcount == 1
+
+
+def mark_expired(token: str, reason: str = "timeout") -> bool:
+    """대기가 끝난(타임아웃·종료) 요청을 'expired'로 표시한다. 'pending'일 때만 바꾸고 성공 여부를 반환.
+
+    2026-10-05 추가: 예전엔 실행기가 타임아웃으로 대기를 끝내도 행은 status='pending'으로
+    영원히 남았다(get_status가 조회 시점에 'expired'를 계산해 돌려줄 뿐). VM에 그런 행이
+    19건(가장 오래된 것 2026-05-09) 쌓여 "pending 건수"가 실제 대기 건수를 뜻하지 않았고,
+    실행기 대기(APPROVAL_TIMEOUT_SEC, 기본 300초)가 토큰 유효시간(EXPIRY_MINUTES=10분)보다
+    짧아 그 사이에 들어온 승인은 기록만 되고 실행되지 않았다 — 이제 그 승인은 거부된다.
+    삭제하지 않고 상태만 바꿔 감사 기록을 보존한다. decided_by에는 "system:<reason>".
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with _lock:
+        conn = _conn()
+        try:
+            cur = conn.execute(
+                "UPDATE pending_approvals SET status = 'expired', decided_at = ?, decided_by = ? "
+                "WHERE token = ? AND status = 'pending'",
+                (now, f"system:{reason}", token),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return cur.rowcount == 1
