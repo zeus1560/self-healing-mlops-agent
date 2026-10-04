@@ -570,7 +570,7 @@ def _route_from_diagnosis(
 ) -> AgentResponse | None:
     """
     진단 에이전트가 구조화된 조치를 확신 있게 제안하면, 자유형식 명령 생성
-    (_run_groq)과 self-reflection 검토를 건너뛰고 L1과 동일한 구조화 액션
+    (_run_groq)을 건너뛰고 L1과 동일한 구조화 액션
     경로로 바로 연결한다(2026-09-17 — 이전엔 diagnosis가 action_type/target을
     뽑아도 _run_groq 프롬프트를 보강하는 텍스트 힌트로만 쓰이고
     AgentResponse.action_type 결정엔 전혀 반영되지 않았다).
@@ -604,12 +604,12 @@ def _route_from_diagnosis(
     공백이나 `/`가 하나라도 있으면 깔끔한 식별자가 아니라고 보고 구조화
     라우팅을 포기한다.
 
-    **self-reflection을 건너뛰는 게 새 위험은 아니다**: L1이 이미 이 세
-    ActionType을 self-reflection 없이 실행해왔고, 여기서도 동일한
-    `_validate_process_name()` 검증 + autonomy 게이트(approve_then_execute
-    승인 또는 auto 즉시실행)를 그대로 탄다. self-reflection이 지키는 "타겟이
-    실제 에러와 맞는가"는 대상이 PID/패턴처럼 애매한 자유형식 경로에서 더
-    필요한 검증이라, 그 경로는 그대로 유지한다.
+    **self-reflection (2026-10-04 변경)**: 원래는 L1과 같은 구조화 액션이라는 이유로
+    검토를 건너뛰었지만, 진단-라우팅의 대상은 플레이북이 아니라 LLM이 고른 것이다.
+    이제 호출부(_l2_slow_track)가 RESTART_SERVICE/KILL_PROCESS를 템플릿 명령으로
+    self-reflection에 넘긴다(_apply_self_reflection). 검토 NO는 승인 레벨에선 경고만,
+    auto 레벨에선 사람 승인으로 내린다(executor._effective_level). 대상 이름은
+    `_validate_process_name()`의 보호 목록으로도 확인한다.
     """
     action_type = diagnosis["action_type"]
     if action_type not in _STRUCTURED_ACTION_TYPES:
@@ -1045,6 +1045,18 @@ def _reflect_on_l1_hit(response: AgentResponse, error_log: str) -> AgentResponse
         # 엔트리 포함)은 아래 DIRECT_COMMAND 경로로 계속 검토를 거친다.
         response.self_reflection_safe = True
         return response
+    return _apply_self_reflection(response, error_log, gather_system_context(error_log), "L1 캐시 제안")
+
+
+def _apply_self_reflection(
+    response: AgentResponse, error_log: str, system_ctx: str, origin: str,
+) -> AgentResponse:
+    """구조화 액션(RESTART_SERVICE/KILL_PROCESS → 템플릿 명령)이나 직접 명령에 self-reflection을
+    적용해 self_reflection_safe와 경고를 채운다. CLEAR_MEMORY 등 외부 명령이 없는 액션은 그대로.
+
+    L1 히트(_reflect_on_l1_hit)와 L2 진단-라우팅(_l2_slow_track)이 공유한다 — 2026-10-04부터
+    검토 생략 기준은 "구조화 액션"이 아니라 "L1 히트(시드 플레이북) RESTART_SERVICE"다.
+    """
     if response.action_type in _L1_REFLECTABLE_TEMPLATES:
         if not response.target_process:
             return response
@@ -1058,11 +1070,10 @@ def _reflect_on_l1_hit(response: AgentResponse, error_log: str) -> AgentResponse
     else:
         return response
 
-    system_ctx = gather_system_context(error_log)
     safe, rationale = _reflect_on_command(command, error_log, system_ctx)
     response.self_reflection_safe = safe
     if not safe:
-        warning = f"⚠️ 자가 반성이 위험 판정(L1 캐시 제안) — {rationale} — 승인 시 주의: {command}"
+        warning = f"⚠️ 자가 반성이 위험 판정({origin}) — {rationale} — 승인 시 주의: {command}"
         response.reasoning = f"{response.reasoning}\n\n{warning}" if response.reasoning else warning
     return response
 
@@ -1315,7 +1326,12 @@ class RAGEngine:
                     diagnosis, diagnosis_summary, nearest_category, best_distance,
                 )
                 if structured is not None:
-                    return structured
+                    # 2026-10-04: 진단-라우팅의 대상은 플레이북이 아니라 LLM이 고른 것이라
+                    # RESTART_SERVICE/KILL_PROCESS도 self-reflection을 거친다. 제안·검토
+                    # 독립성 원칙대로 진단 소견이 없는 원본 system_context만 넘긴다.
+                    return _apply_self_reflection(
+                        structured, error_log, system_context, "진단 에이전트 구조화 라우팅",
+                    )
 
             logging.info(f"[RAGEngine] Groq({GROQ_MODEL}) 추론 시작...")
             groq_result = _run_groq(error_log, enriched_context)

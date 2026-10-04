@@ -344,7 +344,7 @@ class ActionExecutor:
         """
         _ungated = (ActionType.ESCALATE_TO_HUMAN, ActionType.ALERT_ONLY)
         if decision.action_type not in _ungated:
-            level = autonomy_store.get_level(decision.error_category)
+            level = self._effective_level(decision)
 
             if level == AutonomyLevel.READ_ONLY:
                 return self._observed_only(decision)
@@ -607,6 +607,24 @@ class ActionExecutor:
         return tokens, None
 
     # ── Progressive Autonomy 헬퍼 ────────────────────────────────────────
+    def _effective_level(self, decision: AgentResponse) -> AutonomyLevel:
+        """카테고리 레벨에 self-reflection 결과를 반영한 실제 적용 레벨.
+
+        2026-10-04 결정: auto 레벨인데 self-reflection이 NO(self_reflection_safe=False)면
+        자동 실행하지 않고 approve_then_execute로 내린다 — auto엔 승인 화면이 없어 경고가
+        아무 역할을 못 하기 때문. 승인 레벨에서는 9/05 결정(NO여도 차단하지 않고 경고만)을
+        그대로 유지한다. 검토를 안 거친 응답(None)은 영향 없음. 자유형식·구조화 경로 공통.
+        """
+        level = autonomy_store.get_level(decision.error_category)
+        if level == AutonomyLevel.AUTO and decision.self_reflection_safe is False:
+            logging.warning(
+                f"[Autonomy] '{decision.error_category}'는 auto지만 자가 반성이 위험 판정 — "
+                f"자동 실행하지 않고 사람 승인으로 전환합니다."
+            )
+            return AutonomyLevel.APPROVE_THEN_EXECUTE
+        return level
+
+
     def _observed_only(self, decision: AgentResponse) -> dict:
         """READ_ONLY 레벨: 조치를 실행하지 않고 관찰 기록만 남긴다."""
         logging.info(
@@ -756,7 +774,7 @@ class ActionExecutor:
         if err:
             return err
 
-        level = autonomy_store.get_level(decision.error_category)
+        level = self._effective_level(decision)
         if level != AutonomyLevel.AUTO:
             # reasoning(자가 반성 판정 등)은 이제 description(명령어)에 억지로 끼워
             # 넣지 않고 explanation으로 따로 전달한다 — "설명" 섹션에 제대로 보임

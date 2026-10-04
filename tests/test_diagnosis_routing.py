@@ -120,10 +120,11 @@ class TestRouteFromDiagnosis(unittest.TestCase):
 
 
 class TestL2SlowTrackStructuredRoutingWiring(unittest.TestCase):
-    """_l2_slow_track이 구조화 라우팅을 실제로 타면 제안(_run_groq)/검토
-    (_reflect_on_command)를 아예 호출하지 않아야 한다 — L1과 동일하게 두
-    단계를 건너뛰는 게 이 기능의 핵심이므로, 헬퍼 함수 단위 테스트만으론
-    부족하고 실제 배선까지 확인해야 한다."""
+    """_l2_slow_track이 구조화 라우팅을 실제로 타면 제안(_run_groq)은 호출하지 않아야 한다.
+
+    2026-10-04 변경: 검토(self-reflection)는 이제 거친다 — 진단-라우팅의 대상은 플레이북이
+    아니라 LLM이 고른 것이기 때문. 검토에는 진단 소견이 없는 원본 컨텍스트만 넘긴다.
+    헬퍼 단위 테스트만으론 부족해 실제 배선까지 확인한다."""
 
     def _make_engine(self):
         patcher_client = patch("src.llm_engine._get_chroma_client")
@@ -137,24 +138,48 @@ class TestL2SlowTrackStructuredRoutingWiring(unittest.TestCase):
         from src.llm_engine import RAGEngine
         return RAGEngine()
 
-    def test_confident_structured_diagnosis_skips_propose_and_review(self):
+    def _route(self, diagnosis, reflect_return=(True, "안전함")):
         engine = self._make_engine()
-        best_meta = {"error_category": "Process_Crash"}
-
         with patch("src.llm_engine._is_groq_available", return_value=True), \
-             patch("src.llm_engine._diagnose_error", return_value={
-                 "root_cause": "payment-worker hung", "action_type": "kill_process",
-                 "target": "payment-worker",
-             }), \
+             patch("src.llm_engine.gather_system_context", return_value="ORIGINAL_CTX"), \
+             patch("src.llm_engine._diagnose_error", return_value=diagnosis), \
              patch("src.llm_engine._run_groq") as mock_run_groq, \
-             patch("src.llm_engine._reflect_on_command") as mock_reflect:
-            resp = engine._l2_slow_track("some novel error", best_meta, 3.5)
+             patch("src.llm_engine._reflect_on_command", return_value=reflect_return) as mock_reflect:
+            resp = engine._l2_slow_track("some novel error", {"error_category": "Process_Crash"}, 3.5)
+        return resp, mock_run_groq, mock_reflect
 
+    def test_confident_structured_diagnosis_skips_propose_but_is_reviewed(self):
+        resp, mock_run_groq, mock_reflect = self._route({
+            "root_cause": "payment-worker hung", "action_type": "kill_process",
+            "target": "payment-worker",
+        })
         mock_run_groq.assert_not_called()
-        mock_reflect.assert_not_called()
+        mock_reflect.assert_called_once()
+        command, _, system_ctx = mock_reflect.call_args[0]
+        self.assertEqual(command, "pkill -x payment-worker")
+        self.assertEqual(system_ctx, "ORIGINAL_CTX")   # 진단 소견이 섞이지 않은 원본
         self.assertEqual(resp.action_type, ActionType.KILL_PROCESS)
         self.assertEqual(resp.target_process, "payment-worker")
         self.assertEqual(resp.resolution_source, "L2_LLM")
+        self.assertTrue(resp.self_reflection_safe)
+
+    def test_routed_restart_rejected_by_review_is_flagged(self):
+        resp, _, mock_reflect = self._route(
+            {"root_cause": "x", "action_type": "restart_service", "target": "inference-server"},
+            reflect_return=(False, "unrelated service"),
+        )
+        self.assertEqual(mock_reflect.call_args[0][0], "systemctl restart inference-server")
+        self.assertEqual(resp.action_type, ActionType.RESTART_SERVICE)
+        self.assertFalse(resp.self_reflection_safe)
+        self.assertIn("진단 에이전트 구조화 라우팅", resp.reasoning)
+
+    def test_routed_clear_memory_is_not_reviewed(self):
+        resp, _, mock_reflect = self._route(
+            {"root_cause": "x", "action_type": "clear_memory", "target": "none"},
+        )
+        mock_reflect.assert_not_called()
+        self.assertEqual(resp.action_type, ActionType.CLEAR_MEMORY)
+        self.assertIsNone(resp.self_reflection_safe)
 
     def test_pid_target_diagnosis_still_goes_through_propose_and_review(self):
         """PID 대상은 기존 동작 그대로 — 라우팅 신설이 이 경로를 건드리면 안 된다."""

@@ -207,10 +207,12 @@ def main(argv=None):
         whitelist_ok = False
         reflection_ok = False
         if is_structured:
-            # 구조화 액션(L1과 동일 경로) — 대상 이름만 검증, self-reflection은
-            # 설계상 건너뛴다(_route_from_diagnosis 참고, 새 실패 모드 아님).
+            # 구조화 액션 — 대상 이름은 _validate_process_name(보호 목록 포함)으로 검증.
+            # 2026-10-04부터 진단-라우팅의 RESTART_SERVICE/KILL_PROCESS도 self-reflection을
+            # 거치므로 실제 판정을 읽는다. CLEAR_MEMORY처럼 검토 대상이 아닌 액션은 None →
+            # 통과로 취급(그 전엔 구조화 액션 전부를 True로 간주했다 — 이전 수치와 직접 비교 불가).
             whitelist_ok = _validate_process_name(response.target_process or "") is not None
-            reflection_ok = True
+            reflection_ok = response.self_reflection_safe is not False
         elif generated and response.command:
             _, err = executor._validate_command(response.command)
             whitelist_ok = err is None
