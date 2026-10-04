@@ -796,7 +796,11 @@ B1이 B2·B3 판단의 선행 조건이다.
     fail-closed(Groq·Ollama 모두 실패하면 "보수적 통과" 대신 auto에서도 사람 승인) `d0e3cc9c`.
   - **VM 확인 결과(2026-10-04, 위 3단계 절차)**: (1) `.env`에 키 있음, `LLM_PROVIDER` 없음
     (2) 폴백 메시지 0건 (3) 컷오프 이후 L2_LLM **3건**(마지막 2026-10-03) → **VM은 실제로
-    Groq로 전송 중**이었다. VM은 데모 서버라 커밋 2 배포 시 `LLM_PROVIDER=groq`를 명시해
+    Groq로 전송 중**이었다. **정정(2026-10-05)**: 2단계는 원래부터 무효인 확인이었다 — "GROQ_API_KEY
+    미설정" 메시지는 INFO인데, 로깅 버그(`src.telegram_bot` import 때 루트 로거가 WARNING으로
+    자동 설정돼 log_watcher의 INFO 설정이 무시됨, 9/21 이후 VM journal INFO 0줄)로 journal에
+    남을 수 없었다. 위 판단은 3단계(L2_LLM 3건)에만 근거한다. 로깅 버그는 `configure_logging()`
+    (`force=True`, httpx 로거는 봇 토큰 URL 때문에 WARNING 고정)으로 수정. VM은 데모 서버라 커밋 2 배포 시 `LLM_PROVIDER=groq`를 명시해
     클라우드 모드를 유지한다(pull 전에 `.env`에 먼저 넣어야 함 — 안 넣으면 Ollama 없는
     로컬 모드가 돼 L2가 Rule/사람 승인으로만 동작). 같은 확인에서 L1 카테고리 6개
     (Configuration_Error, Disk_Full, Out_Of_Memory, Path_Not_Found, Permission_Denied,
@@ -818,6 +822,14 @@ B1이 B2·B3 판단의 선행 조건이다.
     둘지 채널 종류만 남길지. `DATA_ACCUMULATION_DESIGN.md` §6.1은 외부
     공유 번들에서는 채널 종류만 남기도록 이미 정했다. 로컬 보관 정책은 이
     항목에서 정한다.
+  - **만료 요청이 status=pending으로 남는 문제(2026-10-05 확인·수정)**: 실행기가 타임아웃으로
+    대기를 끝내도 행은 `pending`으로 남았다(`get_status`가 조회 시점에 `expired`를 계산해 돌려줄
+    뿐). VM에 그런 행이 **19건**(가장 오래된 것 2026-05-09, 전부 만료 시각 경과) 쌓여 "pending
+    건수"가 실제 대기 건수를 뜻하지 않았다. 또 실행기 대기(`APPROVAL_TIMEOUT_SEC` 300초)가 토큰
+    유효시간(`EXPIRY_MINUTES` 10분)보다 짧아, 5~10분 사이에 들어온 승인은 기록만 되고 실행되지
+    않았다. 수정: 타임아웃·종료 시 `approval_store.mark_expired()`로 `expired` 표시
+    (`decided_by=system:timeout|shutdown`, 행 삭제 없음) → 늦은 승인은 거부된다. 기존 19건은
+    백업 후 같은 방식으로 정리.
 
 - [ ] **B4. 클라우드 모드 전송 전 마스킹 (다음 우선순위)** — 클라우드 모드에서 Groq로
   나가는 진단 명령 출력에 서버 정보가 마스킹 없이 들어간다. 2026-10-04 측정 준비 중
@@ -883,6 +895,26 @@ B1이 B2·B3 판단의 선행 조건이다.
   - 근본 대책: 운영에는 유료 tier 또는 운영 전용 계정.
   - 커밋 `d0e3cc9c`(fail-closed) 이후에는 한도가 소진돼 검토가 실패해도 auto 카테고리에서
     자동 실행되지 않고 사람 승인으로 실패한다(그 전엔 "보수적 통과"로 auto 실행).
+
+- [ ] **B12. 승인 타임아웃 비율과 대기 시간** — VM 승인 요청 중 결정 50건 + 만료 19건 =
+  69건 중 **19건(약 28%)**이 시간 안에 응답을 받지 못했다(2026-10-05 기준). 실제 대기 시간은
+  "10분"이 아니라 실행기 기준 **5분**(`APPROVAL_TIMEOUT_SEC=300`, 토큰 유효 10분과 어긋나 있었음
+  — B3). 커밋 `d0e3cc9c`(auto+검토 NO/실패 → 사람 승인) 배포로 승인 요청이 늘면 이 비율이 커질
+  수 있다. 검토할 것: 대기 시간(5분)이 운영자 응답 패턴에 맞는지, 타임아웃 시 재알림·
+  에스컬레이션 여부. 하루 뒤 VM 확인 때 배포 전후를 기간별 생성 건수와 응답률(결정/만료)로 비교.
+
+- [ ] **B13. VM 로그 소음 — ops-agent 권한 오류가 journal·syslog 대부분 차지 (2026-10-05 확인)** —
+  VM journal 1.3GB가 3일 치뿐이었고(하루 약 430MB), 24시간 55만 줄 중 **86%(47만 줄)가
+  `google-cloud-ops-agent-opentelemetry-collector`**, 에이전트(`self-healing-agent`)는 **0.05%
+  (291줄)**였다. 원인: ops-agent(2026-08-26 설치)가 Cloud Logging·Monitoring으로 보낼 IAM 권한이
+  없음 — `PermissionDenied: logging.logEntries.create` / `monitoring.timeSeries.create`(VM
+  서비스 계정의 OAuth scope는 있지만 IAM 역할이 없음). 실패마다 Go 스택 트레이스를 여러 줄 남겨
+  주당 약 46만 건, rotate된 syslog 기준 **최소 2026-09-06부터** 계속됐다(`/var/log`도 4.0GB,
+  `syslog.1` 1.6GB) — 2026-09-09 디스크 90%(당시 journal 3GB) 사건의 주된 원인이었을 가능성이
+  높다. rsyslog도 `/dev/console` 쓰기 권한 문제로 omfile 동작이 하루 약 2.7만 번 중단·재개를
+  반복. 소음을 걷어내면 하루 journal은 약 2만 줄(k3s·ssh 등)로, 줄당 약 0.8KB 기준 하루 약
+  16MB 수준으로 추정. 에이전트 자체는 로깅 수정(INFO 활성화) 후에도 대기 시 0줄, 장애 1건당
+  약 20줄·2KB(2026-10-05 로컬 실측) — 크기 제한 판단에 영향 없음.
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
