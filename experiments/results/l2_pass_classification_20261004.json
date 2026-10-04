@@ -1,0 +1,718 @@
+{
+  "date": "2026-10-04",
+  "n_per_run": 50,
+  "criteria": {
+    "order": "fewshot_echo → read_only → remediation/unrelated 순으로 판정",
+    "fewshot_echo": "_build_prompt few-shot 예시 명령(systemctl restart nginx / pkill -f python / df -h / ulimit -n 65536)과 완전히 같고, 에러 로그에 그 예시가 겨냥한 키워드가 없음",
+    "read_only": "상태를 바꾸지 않는 조회 명령(free/df 등)",
+    "remediation": "에러 로그가 지목한 서비스·포트·프로세스를 대상으로 한 상태 변경 조치 — 실제로 고쳐지는지는 검증하지 않음(대상 일치까지만)",
+    "unrelated": "그 밖의 상태 변경 명령(에러와 무관한 대상)",
+    "note_post": "post_hardening의 df -h 예시 복사 판정도 같은 규칙(에러 로그에 space/disk 없음)을 기계적으로 적용. 수동 판정은 서비스 이름 지목 2건(restart cassandra/celery → remediation)과 경로 지정 df 1건(read_only).",
+    "disputed": "판단이 갈리는 건은 labels 항목에 disputed=true와 dispute_note로 표시(분류 자체는 기준대로 유지)."
+  },
+  "labels": [
+    {
+      "idx": 1,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 1,
+      "command": "fuser -k /usr/local/cuda/11.1.0/gpu /dev",
+      "class": "unrelated"
+    },
+    {
+      "idx": 1,
+      "command": "pkill -f llama-server",
+      "class": "unrelated"
+    },
+    {
+      "idx": 2,
+      "command": "[restart_service] spark-executor",
+      "class": "remediation"
+    },
+    {
+      "idx": 3,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 3,
+      "command": "free -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 3,
+      "command": "free -m",
+      "class": "read_only"
+    },
+    {
+      "idx": 4,
+      "command": "[restart_service] gunicorn",
+      "class": "remediation"
+    },
+    {
+      "idx": 4,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 5,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 6,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 6,
+      "command": "free -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 6,
+      "command": "free -m",
+      "class": "read_only"
+    },
+    {
+      "idx": 6,
+      "command": "fuser -k /usr/local/cuda/bin/cuda",
+      "class": "unrelated"
+    },
+    {
+      "idx": 6,
+      "command": "fuser -k /var/run/nginx.pid /var/run/python.pid",
+      "class": "unrelated"
+    },
+    {
+      "idx": 7,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 7,
+      "command": "free -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 7,
+      "command": "ulimit -n 65536",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 8,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 9,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 9,
+      "command": "ulimit -n 65536",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 10,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 10,
+      "command": "free -m",
+      "class": "read_only"
+    },
+    {
+      "idx": 10,
+      "command": "systemctl restart mlflow",
+      "class": "remediation"
+    },
+    {
+      "idx": 11,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 12,
+      "command": "[restart_service] inference-server",
+      "class": "remediation"
+    },
+    {
+      "idx": 13,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 14,
+      "command": "[restart_service] kafka",
+      "class": "remediation"
+    },
+    {
+      "idx": 15,
+      "command": "[restart_service] feature-store",
+      "class": "remediation"
+    },
+    {
+      "idx": 15,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 15,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 16,
+      "command": "[restart_service] pgbouncer",
+      "class": "remediation"
+    },
+    {
+      "idx": 16,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 17,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 18,
+      "command": "[restart_service] mongo-primary",
+      "class": "remediation"
+    },
+    {
+      "idx": 18,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 20,
+      "command": "[restart_service] cassandra",
+      "class": "remediation"
+    },
+    {
+      "idx": 20,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 20,
+      "command": "systemctl restart cassandra",
+      "class": "remediation"
+    },
+    {
+      "idx": 21,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 21,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 23,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 23,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 24,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 25,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 27,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 27,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 29,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 31,
+      "command": "df -h /data/mlflow/artifacts/run_a3f9b2/checkpoints/",
+      "class": "read_only"
+    },
+    {
+      "idx": 32,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 33,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 34,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 35,
+      "command": "df -h",
+      "class": "read_only"
+    },
+    {
+      "idx": 36,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 36,
+      "command": "systemctl restart training-worker",
+      "class": "remediation"
+    },
+    {
+      "idx": 36,
+      "command": "ulimit -n 65536",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 37,
+      "command": "[restart_service] celery_worker",
+      "class": "remediation"
+    },
+    {
+      "idx": 37,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 37,
+      "command": "systemctl restart celery",
+      "class": "remediation"
+    },
+    {
+      "idx": 38,
+      "command": "systemctl restart model-serving",
+      "class": "remediation"
+    },
+    {
+      "idx": 39,
+      "command": "[restart_service] gunicorn",
+      "class": "remediation",
+      "disputed": true,
+      "dispute_note": "논란: gunicorn worker segfault에 gunicorn 서비스 재시작 — 수정 전 공식 측정에선 대상 일치로 집계됐지만, 2026-10-04 진단-라우팅 검토(Groq)는 'service manager, not crashed worker PID'로 NO 판정. 대상 일치 기준(에러가 지목한 대상)으론 일치, 조치의 적절성은 판단이 갈림."
+    },
+    {
+      "idx": 39,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 39,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 40,
+      "command": "[restart_service] model-server",
+      "class": "remediation"
+    },
+    {
+      "idx": 40,
+      "command": "systemctl restart model-server",
+      "class": "remediation"
+    },
+    {
+      "idx": 40,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 42,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 42,
+      "command": "fuser -k 5000/tcp",
+      "class": "remediation"
+    },
+    {
+      "idx": 42,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 43,
+      "command": "fuser -k 8080/tcp",
+      "class": "remediation"
+    },
+    {
+      "idx": 44,
+      "command": "[kill_process] redis",
+      "class": "remediation"
+    },
+    {
+      "idx": 46,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 47,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 48,
+      "command": "df -h",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 49,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    },
+    {
+      "idx": 50,
+      "command": "systemctl restart nginx",
+      "class": "fewshot_echo"
+    }
+  ],
+  "results": {
+    "pre_hardening (화이트리스트 강화·프롬프트 예시 축소 이전 코드)": {
+      "groq/qwen3.8-27b (공식 50290d30)": {
+        "runs": [
+          {
+            "remediation": 0.32,
+            "read_only": 0.02,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.0,
+            "pipeline_pass": 0.34,
+            "file": "l2_production_path_check_results.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.32,
+            "min": 0.32,
+            "max": 0.32
+          },
+          "read_only": {
+            "mean": 0.02,
+            "min": 0.02,
+            "max": 0.02
+          },
+          "unrelated": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "fewshot_echo": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "pipeline_pass": {
+            "mean": 0.34,
+            "min": 0.34,
+            "max": 0.34
+          }
+        }
+      },
+      "ollama/qwen2.5:0.5b": {
+        "runs": [
+          {
+            "remediation": 0.0,
+            "read_only": 0.0,
+            "unrelated": 0.02,
+            "fewshot_echo": 0.24,
+            "pipeline_pass": 0.26,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-0.5b_run1.csv"
+          },
+          {
+            "remediation": 0.0,
+            "read_only": 0.0,
+            "unrelated": 0.02,
+            "fewshot_echo": 0.18,
+            "pipeline_pass": 0.2,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-0.5b_run2.csv"
+          },
+          {
+            "remediation": 0.0,
+            "read_only": 0.0,
+            "unrelated": 0.04,
+            "fewshot_echo": 0.2,
+            "pipeline_pass": 0.24,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-0.5b_run3.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "read_only": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "unrelated": {
+            "mean": 0.0267,
+            "min": 0.02,
+            "max": 0.04
+          },
+          "fewshot_echo": {
+            "mean": 0.2067,
+            "min": 0.18,
+            "max": 0.24
+          },
+          "pipeline_pass": {
+            "mean": 0.2333,
+            "min": 0.2,
+            "max": 0.26
+          }
+        }
+      },
+      "ollama/qwen2.5:3b": {
+        "runs": [
+          {
+            "remediation": 0.02,
+            "read_only": 0.06,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.04,
+            "pipeline_pass": 0.12,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-3b_run1.csv"
+          },
+          {
+            "remediation": 0.02,
+            "read_only": 0.04,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.02,
+            "pipeline_pass": 0.08,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-3b_run2.csv"
+          },
+          {
+            "remediation": 0.02,
+            "read_only": 0.04,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.02,
+            "pipeline_pass": 0.08,
+            "file": "pre_hardening_20261004/l2_production_path_check_results_ollama-qwen2.5-3b_run3.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.02,
+            "min": 0.02,
+            "max": 0.02
+          },
+          "read_only": {
+            "mean": 0.0467,
+            "min": 0.04,
+            "max": 0.06
+          },
+          "unrelated": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "fewshot_echo": {
+            "mean": 0.0267,
+            "min": 0.02,
+            "max": 0.04
+          },
+          "pipeline_pass": {
+            "mean": 0.0933,
+            "min": 0.08,
+            "max": 0.12
+          }
+        }
+      }
+    },
+    "post_hardening (6e2104ed)": {
+      "ollama/qwen2.5:0.5b": {
+        "runs": [
+          {
+            "remediation": 0.02,
+            "read_only": 0.04,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.08,
+            "pipeline_pass": 0.14,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-0.5b_run1.csv"
+          },
+          {
+            "remediation": 0.04,
+            "read_only": 0.04,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.1,
+            "pipeline_pass": 0.18,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-0.5b_run2.csv"
+          },
+          {
+            "remediation": 0.04,
+            "read_only": 0.04,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.08,
+            "pipeline_pass": 0.16,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-0.5b_run3.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.0333,
+            "min": 0.02,
+            "max": 0.04
+          },
+          "read_only": {
+            "mean": 0.04,
+            "min": 0.04,
+            "max": 0.04
+          },
+          "unrelated": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "fewshot_echo": {
+            "mean": 0.0867,
+            "min": 0.08,
+            "max": 0.1
+          },
+          "pipeline_pass": {
+            "mean": 0.16,
+            "min": 0.14,
+            "max": 0.18
+          }
+        }
+      },
+      "ollama/qwen2.5:3b": {
+        "runs": [
+          {
+            "remediation": 0.0,
+            "read_only": 0.1,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.46,
+            "pipeline_pass": 0.56,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-3b_run1.csv"
+          },
+          {
+            "remediation": 0.02,
+            "read_only": 0.12,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.4,
+            "pipeline_pass": 0.54,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-3b_run2.csv"
+          },
+          {
+            "remediation": 0.02,
+            "read_only": 0.14,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.38,
+            "pipeline_pass": 0.54,
+            "file": "l2_production_path_check_results_ollama-qwen2.5-3b_run3.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.0133,
+            "min": 0.0,
+            "max": 0.02
+          },
+          "read_only": {
+            "mean": 0.12,
+            "min": 0.1,
+            "max": 0.14
+          },
+          "unrelated": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "fewshot_echo": {
+            "mean": 0.4133,
+            "min": 0.38,
+            "max": 0.46
+          },
+          "pipeline_pass": {
+            "mean": 0.5467,
+            "min": 0.54,
+            "max": 0.56
+          }
+        }
+      },
+      "groq/qwen/qwen3.8-27b (e6352294, 진단-라우팅 검토 포함)": {
+        "runs": [
+          {
+            "remediation": 0.28,
+            "read_only": 0.02,
+            "unrelated": 0.0,
+            "fewshot_echo": 0.0,
+            "pipeline_pass": 0.3,
+            "file": "l2_production_path_check_results_run1.csv"
+          },
+          {
+            "remediation": 0.26,
+            "read_only": 0.0,
+            "unrelated": 0.02,
+            "fewshot_echo": 0.0,
+            "pipeline_pass": 0.28,
+            "file": "l2_production_path_check_results_run2.csv"
+          },
+          {
+            "remediation": 0.24,
+            "read_only": 0.02,
+            "unrelated": 0.02,
+            "fewshot_echo": 0.0,
+            "pipeline_pass": 0.28,
+            "file": "l2_production_path_check_results_run3.csv"
+          }
+        ],
+        "aggregate": {
+          "remediation": {
+            "mean": 0.26,
+            "min": 0.24,
+            "max": 0.28
+          },
+          "read_only": {
+            "mean": 0.0133,
+            "min": 0.0,
+            "max": 0.02
+          },
+          "unrelated": {
+            "mean": 0.0133,
+            "min": 0.0,
+            "max": 0.02
+          },
+          "fewshot_echo": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0
+          },
+          "pipeline_pass": {
+            "mean": 0.2867,
+            "min": 0.28,
+            "max": 0.3
+          }
+        },
+        "note": "측정 PC에 로컬 Ollama가 떠 있어 Groq 실패 시 폴백이 일어남 — 생성 폴백 2건(run2 #37 통과, run3 1건 거부), 나머지 Ollama 요청은 검토 폴백으로 추정(로그 미보존). #01 'pkill -f llama-server'는 Groq가 측정 PC ps의 메모리 1위(로컬 Ollama 러너)를 대상으로 고른 것 — 측정 환경 혼입, unrelated로 분류."
+      }
+    }
+  }
+}

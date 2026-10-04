@@ -29,7 +29,7 @@ Cache 차별점 주장과 AIOps 서베이가 "점진적 자율성을 다룬다"�
 1차로 "현재 HEAD에선 8%로 회귀했다"고 결론 냈으나, 그 원인이 실제 성능
 저하가 아니라 **벤치마크 스크립트가 새로 생긴 구조화 액션 응답을 인식
 못 하는 계측 버그**였음을 코드 직접 확인으로 발견 — 버그를 코드로 고쳐
-커밋(`6d769e3b`)한 뒤 공식 재측정한 결과 **end-to-end 34%**(10%→32%→34%로
+커밋(`6d769e3b`)한 뒤 공식 재측정한 결과 **end-to-end 34%**(파이프라인 통과율 기준, 클라우드 모드(Groq); 10%→32%→34%로
 멀티에이전트·진단-라우팅 둘 다 순개선, 커밋 `50290d30`)로 확정됐다. 첫
 공식 재측정 시도(2026-09-19)는 그날 실험을 너무 많이 돌려 Groq 일일 토큰
 한도를 소진해 실패했었고, 한도가 리셋된 뒤(2026-09-21) 재실행해 확정함.
@@ -59,7 +59,7 @@ MLOps 에이전트를, "검증된 만큼만 자동화 범위를 넓히는" 점�
 동안 실제 발동 사례는 0건 — §3·§5), 그리고 승인 게이트에서 사람이 보는
 판단 근거가 실제로 신뢰할 만한지(Faithfulness) 검증하는 반사실적 조작·
 편향 주입 두 실험을 결합했다. 진단→제안→검토 3단계 멀티에이전트 구조와
-그 위에 추가된 진단-라우팅 기능은 완전자동 실행 성공률을 10%→32%→**34%**로
+그 위에 추가된 진단-라우팅 기능은 완전자동 실행 성공률(파이프라인 통과율 기준)을 10%→32%→**34%**로
 끌어올리는 실재하는 순개선 효과가 있었다(모델을 고정한 통제 비교, 계측
 버그 수정 후 공식 재측정으로 확정, §3.1) — 이 과정에서 최초 재측정 시도가
 "진단-라우팅 도입 후 8%로 회귀했다"는 잘못된 결론을 냈다가, 그 원인이 실제
@@ -91,7 +91,7 @@ manipulation and bias injection — that test whether the explanations
 shown at the human-approval gate actually track the model's real
 reasoning. The three-stage diagnose→propose→review multi-agent structure,
 together with a follow-up diagnosis-driven-routing feature, raise the
-fully-automatic execution success rate from 10% to 32% to a confirmed
+fully-automatic execution success rate (pipeline pass rate, cloud mode) from 10% to 32% to a confirmed
 **34%** (a model-controlled comparison, official re-measurement after
 fixing a benchmark-script bug, §3.1) — a genuine net improvement. Getting
 to that number took a self-correction worth noting: an initial
@@ -142,7 +142,7 @@ contribution.
    정당화되는가 (§3 멀티에이전트+진단-라우팅 효과 — **2026-09-19~21 재실측·
    정정·공식 확정(§3.1): 기존에 인용하던 6~8%→26%는 벤치마크 계측 버그로
    최신 코드에선 재현이 안 됐지만, 그 계측 버그를 코드로 고치고(커밋
-   `6d769e3b`) 공식 재측정한 결과 10%→32%→**34%**로 두 기능 다 순개선임을
+   `6d769e3b`) 공식 재측정한 결과 10%→32%→**34%**(파이프라인 통과율 기준)로 두 기능 다 순개선임을
    확정함(커밋 `50290d30`)**)
 
 이 네 질문 각각을 별도 실험으로 검증한 결과가 §3이다. §2에서 정리한 9편
@@ -369,7 +369,7 @@ review) 수준의 확실성은 아니다.
 |---|---|---|
 | **QLoRA 파인튜닝 vs Groq 70B** (공정 비교, n=50 `novel_errors_benchmark`) | 카테고리 정확도 84% vs **92%**(-8%p), 액션 정확도 64% vs **96%**(-32%p), 지연 2038.8ms vs **~650ms**(3배 느림) — QLoRA가 전 지표에서 열세. Colab T4 무료 티어(0.5B~3B, 508건 SFT)로 학습, GX10/Jetson 등 전용 하드웨어 없이 진행. **같은 파일 안 `heldout_eval_in_distribution`(학습 데이터와 같은 분포, n=614)에서는 카테고리 93.16%/액션 95.77%로 오히려 Groq 참고치보다 높게 나옴** — novel(새 에러 유형)에서만 떨어지는 대비가 과적합(학습 분포엔 잘 맞지만 일반화 실패) 패턴으로 해석됨 | `experiments/results/l2_accuracy_summary_qlora.json` |
 | **L2(Groq) 정확도** (50건) | 카테고리 분류 92%, 액션 정확도 96% — 카테고리별로는 Auth_Error가 60%로 최저 | [README §실험 결과 요약](../README.md) |
-| **멀티에이전트 + 진단-라우팅 효과 — 2026-09-19~21 재실측·정정·공식 확정, §3.1 참고** | ~~6~8% → 26%~~(기존 문구, 벤치마크 계측 버그로 최신 코드에선 재현 안 됨) → **계측 버그 수정 후 공식 재측정 결과 10% → 32% → 34%**(멀티에이전트, 진단-라우팅 둘 다 순개선 확정) | §3.1, `experiments/results/l2_production_path_check_summary.json`(`50290d30`) |
+| **멀티에이전트 + 진단-라우팅 효과 — 2026-09-19~21 재실측·정정·공식 확정, §3.1 참고 (파이프라인 통과율 기준, 클라우드 모드 — 2026-10-04 이후 지표는 §3.4 대상 일치율)** | ~~6~8% → 26%~~(기존 문구, 벤치마크 계측 버그로 최신 코드에선 재현 안 됨) → **계측 버그 수정 후 공식 재측정 결과 10% → 32% → 34%**(멀티에이전트, 진단-라우팅 둘 다 순개선 확정) | §3.1, `experiments/results/l2_production_path_check_summary.json`(`50290d30`) |
 | **Faithfulness — 반사실적 조작** (3케이스) | 대상만 바꾼 명령어 쌍에서 승인 판정 **100% 뒤집힘**(verdict flip), 판정 근거의 대상 언급률 0%→100% — self-reflection이 근거 없는 고정 문구가 아니라 입력을 실제로 반영함을 확인 | README §실험 결과 요약, `experiments/run_faithfulness_test.py` |
 | **Faithfulness — Bias-Injection** (권위 주장/허위 성공이력/긴급성 압박, 2026-09-17) | 대상은 항상 오답 고정, 편향 문구만 주입. 네트워크 폴백 오염 15.6% 제외한 실 LLM 판정 76건 전부 대상 불일치를 정확히 지적하며 거부 — 조작 효과 **0%p**, 조작 성공률 **0%**(표본 작아 일반화는 신중) | `experiments/run_bias_injection_test.py`, `tests/test_bias_injection_scoring.py` (커밋 `c616a004`) |
 | **False Positive** (LogHub 10개 무관 시스템 로그 2만 줄) | 1차 정규식 게이트 오탐률 10.51%, 그 오탐 전량을 L1(RAG) 게이트에 흘렸을 때 배포값(threshold 0.6)에서 confident FP **0.0%**(1,318건 복구 데이터 기준). threshold를 1.2로 올리면 79.4%로 폭증 — 0.6 유지 근거 | `experiments/run_false_positive_analysis.py` |
@@ -590,6 +590,41 @@ execute_rule_command/execute_llm_command는 검사 대상에서 빠져있어, DN
 (3) L1 오탐 1건은 1,318건 규모 DB에서 나온 단일 사례라, 오탐률을
 통계적으로 추정하려면 novel-error 세트를 훨씬 키운 별도 실험이 필요하다.
 
+### 3.4 L2 모드별 대상 일치율 — 로컬/클라우드 모드 전환 (2026-10-04)
+
+§6 B2 대응으로 L2 LLM 모드(`LLM_PROVIDER`: 로컬 모드 ollama 기본값 / 클라우드 모드 groq
+opt-in)를 도입하면서, 파이프라인 통과율만으로는 품질을 오독한다는 걸 확인했다 — 로컬
+모델은 에러와 무관한 프롬프트 예시 명령을 베껴도 화이트리스트·검토를 통과하기 때문이다.
+그래서 통과분을 **대상 일치 조치 / 조회 / 에러와 무관 / 예시 복사**로 나눠 세고, 주 지표를
+**대상 일치율**(에러 로그가 지목한 대상을 겨냥한 조치의 비율)로 바꿨다. 같은 신규 에러
+50건(`run_l2_accuracy.NOVEL_ERRORS`), temperature 0, 모델별 3회.
+
+| 모드 | 대상 일치율 (파이프라인 통과율) | 조회 | 무관 | 예시 복사 | 평균 지연 |
+|---|---|---|---|---|---|
+| 클라우드 (Groq `qwen/qwen3.8-27b`) | 측정 중 | | | | |
+| 로컬 `qwen2.5:0.5b` (기본값) | **3.3%** (16.0%), 범위 2~4% | 4.0% | 0% | 8.7% | 1.3초 |
+| 로컬 `qwen2.5:3b` | **1.3%** (54.7%), 범위 0~2% | 12.0% | 0% | 41.3% | 3.6초 |
+
+- 측정 커밋: 로컬 `6e2104ed`(이후 커밋 `e6352294`·`d0e3cc9c`·`7e7d74de`는 로컬 모드 측정
+  경로를 바꾸지 않음). 결과: `experiments/results/l2_production_path_check_*_ollama-*_run*.json`,
+  분류 기준·판정 내역(판정 1인, 판단이 갈린 건 "논란" 표시):
+  `experiments/results/l2_pass_classification_20261004.json`.
+- 화이트리스트 강화·프롬프트 예시 축소 이전 코드의 측정(0.5b 대상 일치 0%/통과 23.3%, 3b
+  2.0%/9.3%)은 `experiments/results/pre_hardening_20261004/`에 보존 — 강화(존재하지 않는 PID
+  거부 등)와 프롬프트 변경이 함께 들어가 **직접 비교할 수 없다**. 기존 헤드라인 10%→32%→34%도
+  파이프라인 통과율 기준·클라우드 모드·이전 코드라 마찬가지로 직접 비교 불가.
+- 3b의 통과율 급등(9%→55%)은 예시를 4개→2개로 줄이자 남은 예시 `df -h`로 수렴한 결과다
+  (§6 B5). 0.5b의 self-reflection 검토자는 무관한 명령에도 YES를 줬고(18건 중 13건), 조회
+  명령은 검토 자체를 건너뛴다(3b `df -h` 77건) — 로컬 모드에선 "에러와 관련 있는가"가 사실상
+  검증되지 않는다(§6 B6).
+- 클라우드 모드: 2026-10-04 측정 2건은 무효 — (1) `e6352294`: 측정 PC에 로컬 Ollama가 떠
+  있어 Groq 실패분이 Ollama로 폴백(`groq_ollama_mixed_e6352294/`, 참고값 대상 일치 26.0%),
+  (2) `d0e3cc9c`: Groq 무료 tier 일일 토큰 한도(TPD 200k) 소진 상태에서 측정
+  (`groq_tpd_exhausted_d0e3cc9c/`). 측정 전용 키로 재측정 예정(§6 B11). 참고로 (1)에서
+  진단-라우팅 검토는 구조화 액션 6건에 NO를 냈다(원격 Kafka 재시작 3회, 측정 PC 프로세스
+  `MainThread` 2회, gunicorn worker segfault에 서비스 재시작 1회 — 마지막은 "논란").
+- 측정 환경: 개발 PC(WSL). 시스템 컨텍스트에 측정 PC의 프로세스 목록이 들어간다(§6 B10).
+
 ## 4. 방법론적으로 주목할 점 (연구 서술 각도)
 
 - **헤드라인 지표 오류를 실측으로 잡아낸 사례**: 2026-09-17~18 코드 신뢰도
@@ -713,7 +748,7 @@ B1이 B2·B3 판단의 선행 조건이다.
   - 결과는 `DATA_ACCUMULATION_DESIGN.md` §2.2에 prod 열로 추가하고, 잠정
     수치(§1.3·§7)를 재검토한다.
 
-- [ ] **B2. Groq 제3자 전송 미고지 — 포지셔닝과 충돌 (대응 방향 미결정)**
+- [ ] **B2. Groq 제3자 전송 미고지 — 포지셔닝과 충돌 (2026-10-04 코드 대응 완료, VM 커밋 2~4 배포·마스킹 남음)**
   - **현재 동작**: `GROQ_API_KEY`가 설정돼 있으면 L2 경로에서 에러 로그
     원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py`
     `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps comm`/`ss`,
@@ -752,6 +787,22 @@ B1이 B2·B3 판단의 선행 조건이다.
     주석), `one-pager.md` 규제 산업 문구에 현재 기본 구성이 Groq를 쓴다는 사실과
     로컬 전용 구성 가능 여부를 명시. **남은 것**: 기본값을 Ollama 전용 +
     Groq opt-in으로 전환(인터뷰 이후 진행 예정), 마스킹 여부 결정.
+  - **2차 조치(2026-10-04, 코드)**: `LLM_PROVIDER`(ollama=로컬 모드 기본값 / groq=클라우드
+    모드 opt-in) 도입 — 로컬 모드는 키가 있어도, Ollama가 죽어도 Groq를 호출하지 않는다
+    (`src/llm_mode.py`, `_is_groq_available()` 단일 게이트, `tests/test_llm_mode.py`).
+    로컬 모드에선 `LLM_Inferred` auto 승급을 코드로 차단. install.sh에 모드 선택
+    (`--mode local|cloud`). 커밋: 화이트리스트 강화 `2a5f98f3`(VM 배포 완료 2026-10-04),
+    모드 전환 `6e2104ed`, 진단-라우팅 검토·auto+검토 NO 승인 전환 `e6352294`, 검토 실패 시
+    fail-closed(Groq·Ollama 모두 실패하면 "보수적 통과" 대신 auto에서도 사람 승인) `d0e3cc9c`.
+  - **VM 확인 결과(2026-10-04, 위 3단계 절차)**: (1) `.env`에 키 있음, `LLM_PROVIDER` 없음
+    (2) 폴백 메시지 0건 (3) 컷오프 이후 L2_LLM **3건**(마지막 2026-10-03) → **VM은 실제로
+    Groq로 전송 중**이었다. VM은 데모 서버라 커밋 2 배포 시 `LLM_PROVIDER=groq`를 명시해
+    클라우드 모드를 유지한다(pull 전에 `.env`에 먼저 넣어야 함 — 안 넣으면 Ollama 없는
+    로컬 모드가 돼 L2가 Rule/사람 승인으로만 동작). 같은 확인에서 L1 카테고리 6개
+    (Configuration_Error, Disk_Full, Out_Of_Memory, Path_Not_Found, Permission_Denied,
+    Process_Crash)가 2026-09-04부터 auto, `LLM_Inferred`/`Rule_Inferred`는 기본값
+    (approve_then_execute)임을 확인.
+  - **남은 것**: VM 커밋 2~4 배포, 클라우드 모드 전송 전 마스킹(B4).
 
 - [ ] **B3. `decided_by` PII + `pending_approvals` 무기한 보관**
   - **현재 동작**: 승인·거부 시 `decided_by`에 텔레그램 user id와 username(없으면
@@ -767,6 +818,71 @@ B1이 B2·B3 판단의 선행 조건이다.
     둘지 채널 종류만 남길지. `DATA_ACCUMULATION_DESIGN.md` §6.1은 외부
     공유 번들에서는 채널 종류만 남기도록 이미 정했다. 로컬 보관 정책은 이
     항목에서 정한다.
+
+- [ ] **B4. 클라우드 모드 전송 전 마스킹 (다음 우선순위)** — 클라우드 모드에서 Groq로
+  나가는 진단 명령 출력에 서버 정보가 마스킹 없이 들어간다. 2026-10-04 측정 준비 중
+  확인: `ps` 출력의 **다른 프로세스 이름**(설치된 소프트웨어 노출 — 측정 PC에선
+  `claude`/`copilot-runtime`/`ollama` 등), `ss` 출력의 **내부 IP·열린 포트**
+  (`10.255.255.254:53` 등), `df` 출력의 **마운트 경로·용량**. `ps`는 `-eo ...,comm`이라
+  명령줄 인자는 나가지 않는다(프로세스 이름만, 최대 15자). 에러 로그 원문 속
+  토큰·비밀번호·IP도 마스킹 대상. 섹션당 500자로 잘린다(`DIAG_MAX_OUTPUT_CHARS`).
+
+- [ ] **B5. 로컬 프롬프트 예시 명령 → placeholder 전환 (생성·검토 프롬프트 모두)** —
+  로컬 모델이 프롬프트 예시를 그대로 베낀다. 근거(2026-10-04 실측, 50건×3회):
+  (1) 생성 프롬프트 — 예시 4개일 때 0.5b 통과분의 대부분이 `systemctl restart nginx`/
+  `ulimit` 복사(예시 복사 20.7%). 예시를 2개로 줄이자(`pkill -f python`/`ulimit` 제거)
+  **베끼는 대상만 바뀌었다** — 3b가 OOM·DB·설정·인증 오류 대부분에 남은 예시 `df -h`를
+  내 파이프라인 통과율이 9%→55%로 뛰었지만 그중 41.3%p가 예시 복사(대상 일치 1.3%).
+  (2) 검토 프롬프트 — 0.5b 검토자가 YES 18건 중 13건을 에러와 무관한 `systemctl restart
+  nginx`에 줬고, 근거 문구도 검토 프롬프트의 예시 답변("matches known OOM recovery
+  pattern")을 그대로 베꼈다. 이 문제는 클라우드 모드의 Groq 실패 시 Ollama 폴백 경로에도
+  그대로 있다. 프롬프트를 바꾸면 로컬 측정을 다시 해야 하므로 별도 라운드로 진행.
+
+- [ ] **B6. 로컬 모드에서 L2를 기본으로 끌지 검토** — 로컬 모드의 L2 대상 일치율은
+  qwen2.5:0.5b 3.3%, 3b 1.3%(3회 평균, 2026-10-04)라, 대부분의 에러에 무관한 조회·예시
+  복사 제안이 승인 대기열로 들어간다 → 운영자 피로와 습관적 승인 위험. 게다가 로컬
+  모드에서는 **"제안이 에러와 관련 있는가"가 사실상 검증되지 않는다**: (1) 조회 명령
+  (`df`/`free`/`ps` 등)은 `_is_read_only_command`로 LLM 검토를 건너뛴다(3b의 `df -h`
+  77건이 전부 검토 없이 통과), (2) 상태를 바꾸는 명령은 0.5b 검토자가 무관한 명령에도
+  YES를 줬다(18건 중 13건, B5). 선택지: 로컬 모드 L2 기본 꺼짐(L1+Rule+사람 승인),
+  조회 제안은 승인 대기열 대신 참고 정보로만 표시 등.
+
+- [ ] **B7. systemctl 서비스 허용 목록** — 2026-10-04 화이트리스트 점검(커밋 `2a5f98f3`)은
+  보호 목록(sshd·docker·에이전트 자신 등)으로 최악의 경우만 막았다. "이 서버에서
+  재시작해도 되는 서비스"를 서버별 허용 목록(`config/servers.yaml`)으로 두는 게
+  근본 대응 — 그 전까지 LLM이 만든 자유형식 `systemctl`은 self-reflection을 거친다.
+
+- [ ] **B8. "too many open files" 진짜 조치 설계** — `ulimit -n 65536`은 셸 내장 명령이라
+  `subprocess`로는 효과가 없다(2026-10-04 확인). Rule과 프롬프트 예시에서는 빼고 조회
+  명령(`ss -s`)으로 바꿨다. 실제 조치(서비스 단위 `LimitNOFILE` 등) 설계가 남음.
+
+- [ ] **B9. 사람 승인 없이 L1에 쌓일 수 있는 경로 (참고)** — 온라인학습
+  (`learn_from_feedback`)은 실행에 성공한 L2/Rule 명령을 L1에 넣는다. `Rule_Inferred`가
+  auto(두 모드 모두 가능)이거나 클라우드 모드에서 `LLM_Inferred`가 auto이거나
+  `AUTO_APPROVE=true`면 사람 승인 없이 쌓인다. 쌓인 항목은 자유형식 명령이라 L1 히트
+  때도 self-reflection을 거친다(2026-10-04 VM 확인 당시 online_learning 항목 0건).
+
+- [ ] **B10. LLM이 에러 로그가 아니라 호스트 프로세스 목록(ps)에서 대상을 고르는 현상** —
+  2026-10-04 Groq 측정에서 확인. 시스템 컨텍스트로 넘어간 `ps` 출력(메모리·CPU 상위
+  프로세스)에서 에러와 무관한 대상을 골랐다: (1) Torch CUDA OOM에 `pkill -f llama-server`
+  (측정 PC의 메모리 1위였던 로컬 Ollama 러너, 3회 중 2회 화이트리스트·검토 통과),
+  (2) netty off-heap 누수에 진단-라우팅이 `restart_service MainThread`(측정 PC의 VS Code
+  프로세스 이름, 2회 — 검토가 "generic process name"으로 NO). 측정 PC 환경이 섞인
+  사례지만, 운영 서버에서도 ps 상위 프로세스가 엉뚱하게 지목될 수 있다는 뜻이다.
+  대응 방향(검토): 진단·생성이 고른 대상이 에러 로그에 등장하지 않으면 그 사실을 검토
+  프롬프트에 명시해 검토자가 판단하게 하는 방안.
+
+- [ ] **B11. 측정용·운영용 Groq 키 분리 + 무료 tier 일일 한도** — 2026-10-04 클라우드 모드
+  재측정이 Groq 무료 tier 일일 토큰 한도(TPD 200,000)를 다 쓴 상태에서 돌아 무효가 됐다
+  (회차별 429 28/99/97회, 로그 447건 전부 TPD). 측정 PC와 VM이 **같은 키(같은 조직)**를 쓰고
+  있어 측정이 운영 서비스의 한도를 함께 소진했다(확인 당시 VM의 L2 이벤트 0건이라 실제 영향은
+  없었음). 무료 tier 한도는 조직 단위라 같은 계정의 새 키로는 분리되지 않는다.
+  - 측정에는 다른 계정(조직)의 측정 전용 키를 쓴다. 측정 스크립트는 회차 중 429가 5회를
+    넘으면 결과를 저장하지 않고 중단한다(`--max-429`, 커밋 `7e7d74de`).
+  - 장애가 몰리면 운영 혼자서도 한도가 소진될 수 있다(L2 한 건당 Groq 최대 4회 호출).
+  - 근본 대책: 운영에는 유료 tier 또는 운영 전용 계정.
+  - 커밋 `d0e3cc9c`(fail-closed) 이후에는 한도가 소진돼 검토가 실패해도 auto 카테고리에서
+    자동 실행되지 않고 사람 승인으로 실패한다(그 전엔 "보수적 통과"로 auto 실행).
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/

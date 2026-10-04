@@ -1,0 +1,51 @@
+idx,true_cat,resolution_source,error_category,action_type,is_structured,target_process,command,generated,whitelist_ok,reflection_ok,end_to_end_ok,self_reflection_safe,reasoning,latency_ms
+1,Out_Of_Memory,RULE,Rule_Inferred,execute_rule_command,False,,free -h,False,False,False,False,,"규칙 기반 매칭 — 키워드 감지: 'out of memory', 'cuda out of memory'",1919.8
+2,Out_Of_Memory,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",1018.5
+3,Out_Of_Memory,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",1388.0
+4,Out_Of_Memory,RULE,Rule_Inferred,execute_rule_command,False,,free -h,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'out of memory',1751.3
+5,Out_Of_Memory,RULE,Rule_Inferred,execute_rule_command,False,,free -h,False,False,False,False,,"규칙 기반 매칭 — 키워드 감지: 'out of memory', 'cuda out of memory'",1742.9
+6,Memory_Leak,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",1724.9
+7,Memory_Leak,L2_LLM,LLM_Inferred,execute_llm_command,False,,"df -h | grep -i ""Mem:"" | awk '{print $5}' | xargs",True,False,True,False,True,"Ollama 추론 성공 — 조회성 명령어(상태 변경 없음) — 위험 없음, LLM 판정 생략",1841.8
+8,Memory_Leak,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart nginx,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,1010.2
+9,Memory_Leak,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",1854.0
+10,Memory_Leak,L2_LLM,LLM_Inferred,execute_llm_command,False,,fallocate -l 50M /tmp/mlflow,True,False,True,False,True,Ollama 추론 성공 — matches known OOM recovery pattern,3405.5
+11,Network_Timeout,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",500.4
+12,Network_Timeout,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",496.9
+13,Network_Timeout,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",507.9
+14,Network_Timeout,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",523.1
+15,Network_Timeout,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart nginx,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,1482.2
+16,DB_Connection,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",500.2
+17,DB_Connection,RULE,Rule_Inferred,execute_rule_command,False,,systemctl restart postgresql,False,False,False,False,,"규칙 기반 매칭 — 키워드 감지: 'postgresql', 'postgres'",498.1
+18,DB_Connection,RULE,Rule_Inferred,execute_rule_command,False,,ss -tuln,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'connection refused',515.3
+19,DB_Connection,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",475.8
+20,DB_Connection,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart cassandra,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,3235.0
+21,Configuration_Error,L2_LLM,LLM_Inferred,execute_llm_command,False,,yum update -y,True,False,False,False,False,⚠️ 자가 반성이 위험 판정(Ollama 제안) — targets unrelated service — 승인 시 주의: yum update -y,1219.3
+22,Configuration_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",534.2
+23,Configuration_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",438.4
+24,Configuration_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",615.6
+25,Configuration_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",407.8
+26,Permission_Denied,L2_LLM,LLM_Inferred,execute_llm_command,False,,chown -R mlops-svc:root /mnt/nfs,True,False,True,False,True,Ollama 추론 성공 — matches known OOM recovery pattern,1277.3
+27,Permission_Denied,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart nginx,True,True,False,False,False,⚠️ 자가 반성이 위험 판정(Ollama 제안) — targets unrelated service — 승인 시 주의: systemctl restart nginx,962.5
+28,Permission_Denied,L2_LLM,LLM_Inferred,execute_llm_command,False,,chown -R 1002:1002 /var/log/mlflow/tracking.log,True,False,True,False,True,Ollama 추론 성공 — matches known OOM recovery pattern,1243.9
+29,Permission_Denied,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",507.9
+30,Permission_Denied,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",576.9
+31,Disk_Full,L2_LLM,LLM_Inferred,execute_llm_command,False,,df -h /data/mlflow/artifacts/run_a3f9b2/checkpoints/,True,True,True,True,True,"Ollama 추론 성공 — 조회성 명령어(상태 변경 없음) — 위험 없음, LLM 판정 생략",588.4
+32,Disk_Full,RULE,Rule_Inferred,execute_rule_command,False,,df -h,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'no space left on device',504.8
+33,Disk_Full,RULE,Rule_Inferred,execute_rule_command,False,,df -h,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'no space left on device',516.5
+34,Disk_Full,L2_LLM,LLM_Inferred,execute_llm_command,False,,df -h,True,True,True,True,True,"Ollama 추론 성공 — 조회성 명령어(상태 변경 없음) — 위험 없음, LLM 판정 생략",303.0
+35,Disk_Full,L2_LLM,LLM_Inferred,execute_llm_command,False,,fallocate -l 500G /local/disk1/spark-shuffle,True,False,True,False,True,Ollama 추론 성공 — matches known OOM recovery pattern,1864.8
+36,Process_Crash,L2_LLM,LLM_Inferred,execute_llm_command,False,,fuser -k 80 nginx,True,False,True,False,True,Ollama 추론 성공 — matches known OOM recovery pattern,2866.3
+37,Process_Crash,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart celery,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,5479.7
+38,Process_Crash,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",1479.2
+39,Process_Crash,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart nginx,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,2600.7
+40,Process_Crash,L2_LLM,LLM_Inferred,execute_llm_command,False,,systemctl restart nginx,True,True,True,True,True,Ollama 추론 성공 — matches known OOM recovery pattern,1257.7
+41,Port_Conflict,RULE,Rule_Inferred,execute_rule_command,False,,systemctl restart nginx,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'address already in use',558.5
+42,Port_Conflict,RULE,Rule_Inferred,execute_rule_command,False,,systemctl restart nginx,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'address already in use',523.6
+43,Port_Conflict,L2_LLM,LLM_Inferred,execute_llm_command,False,,ufw reload,True,False,False,False,False,⚠️ 자가 반성이 위험 판정(Ollama 제안) — targets unrelated service — 승인 시 주의: ufw reload,927.1
+44,Port_Conflict,RULE,Rule_Inferred,execute_rule_command,False,,systemctl restart nginx,False,False,False,False,,규칙 기반 매칭 — 키워드 감지: 'address already in use',491.8
+45,Port_Conflict,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",503.7
+46,Auth_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",577.2
+47,Auth_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",442.3
+48,Auth_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",481.0
+49,Auth_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",812.3
+50,Auth_Error,L2_LLM,Unknown,escalate_to_human,False,,,False,False,False,False,,"모든 Fallback 실패 (Groq: None, Ollama: ERROR: Ollama returned unparseable response, ipex: ERROR: ipex_llm not installed)",602.7
