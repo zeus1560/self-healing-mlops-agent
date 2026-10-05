@@ -22,7 +22,9 @@ from src.log_watcher import configure_logging  # noqa: E402
 FAKE_TOKEN = "123456:FAKE-bot-token-for-test"
 
 
-class TestConfigureLogging(unittest.TestCase):
+class _LoggingCase(unittest.TestCase):
+    """VM 상태 재현(설정 전 logging 호출 → WARNING 기본값) + stderr 캡처 공통 준비."""
+
     def setUp(self):
         root = logging.getLogger()
         self._saved = (root.level, root.handlers[:],
@@ -45,6 +47,9 @@ class TestConfigureLogging(unittest.TestCase):
     def _configure(self):
         with patch.dict(os.environ, {"USE_JSON_LOG": "0"}), patch.object(sys, "stderr", self.stderr):
             configure_logging()
+
+
+class TestConfigureLogging(_LoggingCase):
 
     def test_info_reaches_output_after_implicit_warning_config(self):
         self._configure()
@@ -110,6 +115,33 @@ class TestConfigureLogging(unittest.TestCase):
 
         asyncio.run(call())
         self.assertNotIn(FAKE_TOKEN, self.stderr.getvalue())
+
+
+class TestChatOpsStatusLine(_LoggingCase):
+    """configure_logging() 뒤에 텔레그램 상태를 한 줄 남긴다 — 값(토큰·chat ID)은 출력하지 않는다."""
+
+    def _status(self, token, chat_id, enabled, app):
+        from src import telegram_bot
+        from src.log_watcher import log_chatops_status
+        self._configure()
+        fake = type("T", (), {"token": token, "chat_id": chat_id, "enabled": enabled, "app": app})()
+        with patch.object(telegram_bot, "tg_chatops", fake):
+            log_chatops_status()
+        return self.stderr.getvalue()
+
+    def test_enabled_reports_settings_without_values(self):
+        out = self._status(FAKE_TOKEN, "987654321", True, object())
+        self.assertIn("[Telegram] 상태: 활성", out)
+        self.assertIn("승인 알림 대상(chat) 설정: 예", out)
+        self.assertIn("polling: 예", out)
+        self.assertNotIn(FAKE_TOKEN, out)
+        self.assertNotIn("987654321", out)
+
+    def test_disabled_reports_missing_chat(self):
+        out = self._status(FAKE_TOKEN, "", False, None)
+        self.assertIn("[Telegram] 상태: 비활성", out)
+        self.assertIn("승인 알림 대상(chat) 설정: 아니오", out)
+        self.assertIn("polling: 아니오", out)
 
 
 if __name__ == "__main__":

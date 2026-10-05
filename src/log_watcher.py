@@ -460,8 +460,25 @@ def configure_logging() -> None:
         logging.getLogger(name).setLevel(level)
 
 
+def log_chatops_status() -> None:
+    """텔레그램 ChatOps 상태를 로깅 설정 이후 한 줄로 남긴다(2026-10-05).
+
+    src.telegram_bot은 import 단계에서 싱글톤을 만들며 "polling 스레드 시작" 같은 INFO를 남기는데,
+    그 시점엔 configure_logging() 전이라 기록되지 않는다 — 그래서 설정 후에 상태를 다시 남긴다.
+    토큰·chat ID 값은 출력하지 않고 설정 여부만 남긴다.
+    """
+    from src.telegram_bot import tg_chatops
+    yn = lambda v: "예" if v else "아니오"
+    logging.info(
+        f"[Telegram] 상태: {'활성' if tg_chatops.enabled else '비활성'} | "
+        f"봇 토큰 설정: {yn(tg_chatops.token)} | 승인 알림 대상(chat) 설정: {yn(tg_chatops.chat_id)} | "
+        f"polling: {yn(tg_chatops.enabled and tg_chatops.app is not None)}"
+    )
+
+
 if __name__ == "__main__":
     configure_logging()
+    log_chatops_status()
 
     if os.getenv("DEMO_MODE", "0") == "1":
         logging.disable(logging.CRITICAL)
