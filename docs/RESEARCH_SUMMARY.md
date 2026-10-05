@@ -928,6 +928,25 @@ B1이 B2·B3 판단의 선행 조건이다.
     `goog-ops-agent-policy`로 이 VM만 대상)이 있어, 서비스만 끄면 패키지 재설치·업그레이드 때
     다시 켜질 수 있다 — 인스턴스 라벨을 떼 정책 대상에서 뺀 뒤 서비스를 끈다. journald는
     `SystemMaxUse=500M`(소음 제거 후 약 30일 보관, 화이트리스트 vacuum 하한과 동일).
+  - **실행(2026-10-05)**: 인스턴스 라벨 `goog-ops-agent-policy` 제거 → **OS 정책 할당은 그대로
+    남아 있고 이 VM만 라벨 제거로 대상에서 빠졌다**(라벨을 가진 인스턴스 0대). 이어서 ops-agent
+    3개 서비스(`google-cloud-ops-agent`, `-opentelemetry-collector`, `-fluent-bit`)를 `mask --now`
+    — 하위 2개는 static 유닛이라 disable이 안 되고, 패키지 재설치·업그레이드 때 설치 스크립트가
+    다시 켜지 못하게 mask를 썼다. 패키지(2.70.0)는 남겨 둠. **되돌리려면**: 라벨 재부착
+    (`gcloud compute instances add-labels self-healing-agent --labels=goog-ops-agent-policy=v2-template-1-7-0`)
+    + `systemctl unmask` 3개 + `systemctl enable --now google-cloud-ops-agent`. 하루 뒤 확인 항목:
+    osconfig 에이전트가 다음 점검 주기에 패키지·서비스를 건드리지 않는지.
+  - **journal 순환 삭제 근거**: 에이전트 journal은 **2026-10-02 15:47 이후 511줄만** 남아 있었다 —
+    ops-agent 소음(하루 약 430MB)으로 journal이 3일 치만 유지돼 2026-09-21~10-01 에이전트 기록이
+    순환 삭제됐다(그 기간 INFO는 로깅 버그로 원래 없음). 보존 시점(2026-10-05 05:43 UTC)에는
+    순환이 더 진행돼 **2026-10-03 00:00 이후 505줄**만 남아 있었고, 그것을
+    `/var/log/self-healing-agent-journal-20261005.txt`(root, 600, 토큰 패턴 0건)로 보존.
+  - **나머지 조치(2026-10-05)**: journald `SystemMaxUse=500M`(`/etc/systemd/journald.conf.d/size.conf`,
+    1.0G→528M — 기록 중인 파일 포함분, 다음 순환 때 500M 이하), syslog만 강제 회전(실제
+    `/etc/logrotate.d/rsyslog` 옵션 블록 그대로 사용, status 백업 `status.bak-20261005`) —
+    `syslog.1` 1.6GB→`syslog.2.gz` 43MB, `/var/log` 3.6G→1.4G, 디스크 82%→75%. rsyslog
+    `/dev/console` 중단·재개 메시지는 ops-agent를 꺼도 시간당 약 1,100회로 거의 그대로(journal과
+    `/var/log/syslog` 양쪽에 기록) — ops-agent와 무관한 별도 원인.
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
