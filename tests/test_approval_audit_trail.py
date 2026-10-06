@@ -84,5 +84,39 @@ class TestApprovalTokenNotLogged(unittest.TestCase):
         self.assertIn(token, kwargs["reason"])
 
 
+class TestEmptyExplanationFallback(unittest.TestCase):
+    """§6 B18: 근거가 비면 텔레그램이 토큰 URL을 "설명"에 대신 보여 줬다(2026-10-07)."""
+
+    def test_executor_fills_empty_explanation_like_escalation(self):
+        from src import autonomy_store
+        from src.schemas import ActionType, AgentResponse, AutonomyLevel
+        autonomy_store.set_level("DB_Connection", AutonomyLevel.APPROVE_THEN_EXECUTE, "tester")
+        d = AgentResponse(error_category="DB_Connection", severity="HIGH",
+                          action_type=ActionType.RESTART_SERVICE, target_process="redis",
+                          reasoning="", resolution_source="L1_CACHE")
+        ex = ActionExecutor()
+        with patch.object(ex, "_await_approval", return_value="rejected") as mock_await:
+            ex.execute(d, original_error_log="redis://u:pw1234@10.0.0.5:6379 refused\nline2")
+        explanation = mock_await.call_args.kwargs["explanation"]
+        self.assertEqual(explanation, "[DB_Connection] redis://<CREDS>@<IP>:6379 refused")
+
+    def test_telegram_never_shows_reason_url(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from src.telegram_bot import TelegramChatOps
+        client = TelegramChatOps.__new__(TelegramChatOps)
+        client.enabled, client.chat_id, client._loop = True, "1", None
+        send = AsyncMock(return_value=None)
+        client.bot = type("B", (), {"send_message": send})()
+        client.send_approval_request("ERR", "restart_service(redis)",
+                                     "🔐 명령어 확인 및 승인: http://x:8000/pending/SECRETTOK", "")
+        text = send.call_args.kwargs["text"]
+        self.assertNotIn("SECRETTOK", text)
+        self.assertIn("(근거 없음)", text)
+        # 버튼(callback_data)에는 토큰이 그대로 있어야 승인이 동작한다.
+        markup = send.call_args.kwargs["reply_markup"]
+        self.assertIn("approve|SECRETTOK", str(markup))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -130,7 +130,8 @@ class TelegramChatOps:
         reason: 승인/거절 토큰 추출용 URL 문자열(_extract_token 참고) — 표시용이 아님.
         explanation: 사람이 읽는 실제 판단 근거(AgentResponse.reasoning + l1_evidence,
             2026-09-11 Explainability 추가) — "설명" 섹션에 이게 있으면 이걸 보여주고,
-            없으면(과거 호환) reason 텍스트를 대신 보여준다.
+            없으면 "(근거 없음)"을 보여준다 — reason(토큰 URL)은 표시하지 않는다(토큰만으로 웹
+            승인이 되므로 채팅 기록에 남기지 않음, §6 B18). 실행기는 빈 근거를 미리 채워 보낸다.
         """
         if not self.enabled:
             logging.warning("[Telegram] TELEGRAM_BOT_TOKEN/CHAT_ID 미설정으로 승인 요청을 건너뜁니다.")
@@ -138,7 +139,7 @@ class TelegramChatOps:
 
         safe_error_log = html.escape((error_log or "").strip())[:300]
         safe_command = html.escape((command or "").strip())
-        safe_explanation = html.escape((explanation or reason or "").strip())[:800]
+        safe_explanation = html.escape((explanation or "").strip() or "(근거 없음)")[:800]
 
         text = (
             "<b>🚨 [Self-Healing Agent] 명령어 실행 승인 요청</b>\n\n"

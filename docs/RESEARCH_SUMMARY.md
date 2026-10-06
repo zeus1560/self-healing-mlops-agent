@@ -1064,18 +1064,28 @@ B1이 B2·B3 판단의 선행 조건이다.
     (`secrets.token_urlsafe(32)`)라 추측은 불가 — 위험은 로그 열람자와 평문 전송 구간.
   - **조치(코드, 다음 배포 때 반영)**: 로그에는 토큰 앞 6자만 남기고 가림(`…(가림)`), ChatOps 승인 버튼에는
     그대로 전달(`tests/test_approval_audit_trail.py::TestApprovalTokenNotLogged`).
-  - **심각도: 중간**(2026-10-07 사용자 판단). 8000 포트 외부 차단 방안을 확인받아 진행 예정.
-    텔레그램 승인 버튼은 `callback_data`(토큰)로 봇 polling을 통해 동작해 8000 포트와 무관하다. 웹 링크는
+  - **심각도: 중간**(2026-10-07 사용자 판단).
+  - **텔레그램 흐름과 8000 포트의 관계**: 텔레그램 승인 버튼은 `callback_data`(토큰)로 봇 polling을 통해 동작해 8000 포트와 무관하다. 웹 링크는
     Slack 버튼(VM은 `SLACK_WEBHOOK_URL` 미설정)과, 승인 근거(explanation)가 빌 때 텔레그램 "설명"에 `reason`
     (토큰 URL)을 대신 보여 주는 대체 경로(`src/telegram_bot.py`)에만 쓰인다 — 포트를 닫으면 그 링크는 죽은
-    링크가 되고, 토큰이 채팅에 남는 문제도 있어 대체 경로에서 URL을 빼는 수정이 필요.
+    링크가 되고, 토큰이 채팅에 남는 문제도 있었다(아래 대체 경로 수정으로 해결).
+  - **8000 포트 외부 차단(2026-10-06 약 17:00 UTC 실행)**: VM에서 네트워크 태그 `approval-server` 제거 →
+    방화벽 규칙 `allow-approval-server`는 남아 있지만 적용 대상 0대. 확인: 변경 전 외부 `/health` 200 →
+    변경 후 외부 응답 없음(타임아웃), VM 내부 `localhost:8000/health` 200, `mlops_approval` healthy,
+    에이전트 active. 텔레그램 승인(봇 polling, VM→텔레그램 방향)은 영향 없음. **되돌리기**:
+    `gcloud compute instances add-tags self-healing-agent --zone us-central1-c --tags=approval-server`.
+  - **후속 과제**: 승인 컨테이너가 여전히 8000을 **0.0.0.0에 바인딩** 중(`docker-compose.yml`
+    `"8000:8000"`) — 방화벽 하나에만 의존한다. 텔레그램만 쓴다면 `127.0.0.1:8000:8000`으로 바꾸는 방안 검토
+    (대시보드 8501, target-app 9000도 같은 구조).
+  - **승인 근거 대체 경로 수정(코드, 다음 배포 때 반영)**: 근거(explanation)가 비면 실행기가 넘기기 경보와
+    같은 규칙(`_escalation_reason`: `[카테고리] + 가린 에러 로그 첫 줄, 120자`)으로 채워 보내고, 텔레그램은
+    어떤 경우에도 `reason`(토큰 URL)을 본문에 쓰지 않는다(비면 "(근거 없음)"). 버튼 `callback_data`의
+    토큰은 그대로(`tests/test_approval_audit_trail.py::TestEmptyExplanationFallback`).
   - **만료 시각 확인(코드, 다음 배포 때 반영)**: `set_decision`이 `status='pending'`에 더해 `expires_at`도
     확인한다 — 에이전트가 대기 중 죽어 `mark_expired`가 안 불린 행에 대한 만료 뒤 승인을 거부
     (`tests/test_approval_expiry.py::TestSetDecisionChecksExpiry`).
-  - **남은 것**: 8000 포트 외부 개방 필요 여부(텔레그램 버튼만 쓰면 웹 승인 서버를 외부에 열
-    이유가 없음 — 방화벽 소스 범위 축소 또는 규칙 제거), 열어 둔다면 TLS와 토큰 외 인증, 이미 남은
-    journal 2줄(해당 요청은 만료됨)과 보존 파일 `/var/log/self-healing-agent-journal-20261005.txt` 안의 토큰
-    URL 여부 확인.
+  - **남은 것**: 이미 남은 journal 토큰 URL 2줄(해당 요청은 만료)과 보존 파일
+    `/var/log/self-healing-agent-journal-20261005.txt` 안의 토큰 URL 여부 확인, 위 127.0.0.1 바인딩 검토.
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/

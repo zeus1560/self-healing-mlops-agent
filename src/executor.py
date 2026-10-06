@@ -243,6 +243,7 @@ def _escalation_reason(decision: AgentResponse, original_error_log: str) -> str:
     """
     ESCALATE_TO_HUMAN 경보의 사유. 플레이북 데이터에 근거가 없어 reasoning이 비면
     (운영 L1 넘기기 83건 중 64건, §6 B14) 카테고리와 에러 로그 첫 줄로 대신 채운다.
+    승인 요청의 "설명"이 빌 때도 같은 규칙으로 채운다(그 전엔 텔레그램이 토큰 URL을 대신 보여 줌, §6 B18).
     첫 줄은 PII 마스킹 후 자른다(자른 뒤 마스킹하면 잘린 토큰이 패턴을 빠져나감).
     """
     if decision.reasoning and decision.reasoning.strip():
@@ -376,7 +377,8 @@ class ActionExecutor:
                                                       ActionType.EXECUTE_RULE_COMMAND)):
                 outcome = self._await_approval(
                     _describe_action(decision), original_error_log,
-                    explanation=_compose_explanation(decision),
+                    explanation=(_compose_explanation(decision)
+                                 or _escalation_reason(decision, original_error_log)),
                 )
                 if outcome != "approved":
                     return self._approval_failure_result(outcome)
@@ -812,7 +814,8 @@ class ActionExecutor:
             # (2026-09-11, 예전엔 reason 파라미터가 승인 링크 URL 전용이라 이 정보가
             # 승인 화면 어디에도 안 보이고 있었음).
             outcome = self._await_approval(
-                command, error_log, explanation=_compose_explanation(decision)
+                command, error_log,
+                explanation=_compose_explanation(decision) or _escalation_reason(decision, error_log),
             )
             if outcome != "approved":
                 return self._approval_failure_result(outcome)
