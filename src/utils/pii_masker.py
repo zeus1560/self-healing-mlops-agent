@@ -10,6 +10,8 @@ pii_masker — PII(개인식별정보) 마스킹 유틸리티.
   - AWS Access Key (AKIA 접두사)
   - GCP OAuth token (ya29.*) / GCP API Key (AIza*)
   - password=, token=, secret=, api_key= 등 key=value 패턴
+  - URL 안의 계정 정보(scheme://user:pass@host의 user:pass)
+  - 텔레그램 봇 토큰(숫자:영숫자), Groq 키(gsk_*), Bearer 헤더 값, JWT
 
 성능:
   _RULES 리스트의 패턴은 모듈 임포트 시 1회만 컴파일돼
@@ -18,6 +20,17 @@ pii_masker — PII(개인식별정보) 마스킹 유틸리티.
 import re
 
 _RULES: list[tuple[re.Pattern, str]] = [
+    # URL 계정 정보 — 이메일·key=value 규칙보다 먼저 적용해야 pass@host가 이메일로 잘못 바뀌지 않음
+    (re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/@:]+:[^\s/]+@"), r"\1<CREDS>@"),
+    # 텔레그램 봇 토큰 — api.telegram.org/bot<토큰> 형태도 잡도록 앞은 숫자만 아니면 됨
+    (re.compile(r"(?<!\d)\d{8,10}:[A-Za-z0-9_-]{30,}"), "<TG_TOKEN>"),
+    # Groq API Key
+    (re.compile(r"\bgsk_[A-Za-z0-9]{20,}"), "<GROQ_KEY>"),
+    # JWT (header.payload.signature, header는 항상 eyJ로 시작)
+    (re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "<JWT>"),
+    # Bearer 헤더 값 — 8자 이상 + 숫자·기호 포함일 때만("Bearer token missing" 같은 문장 보존)
+    (re.compile(r"(?i)\bBearer\s+(?=[A-Za-z0-9._~+/=-]*[0-9._~+/=-])[A-Za-z0-9._~+/=-]{8,}"),
+     "Bearer <REDACTED>"),
     # IPv4
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "<IP>"),
     # IPv6 (간략 패턴)
