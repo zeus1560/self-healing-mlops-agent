@@ -996,6 +996,13 @@ B1이 B2·B3 판단의 선행 조건이다.
     `dashboard/app.py`(헤드라인 제외 목록·아이콘), `experiments/generate_eval_charts.py`. 결과값을
     바꾸면 이전 연구 수치와의 비교 기준이 달라지므로 바꾼 시점을 컷오프로 기록할 것.
 
+- [ ] **B16. VM 저장소 소유권 혼재 (2026-10-07 확인)** — 2026-09-09 이후 VM에서 `git pull`이 root로
+  실행돼(reflog: 10/04·10/05 `pull --ff-only`) `.git` 안 **809개가 root 소유**(zeus3826 소유 573개),
+  `.git/HEAD`·`refs/heads/main`과 작업 트리 일부(README·docs·config 등)도 root 소유다. 그래서
+  zeus3826으로는 pull할 수 없고, 배포는 당분간 **root로 `git pull --ff-only`**(지난 배포와 동일)로 한다.
+  정리(`chown -R zeus3826`)는 서비스가 root로 돌며 `data/` 아래에 파일을 만드는 문제와 함께 따로
+  설계해야 해서 이번 배포에서 하지 않았다(`data/`를 넘기면 서비스 쓰기와 충돌할 수 있음).
+
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
   `50290d30`/`9947e19d`). 멀티에이전트 헤드라인 수치 관련 작업은 이걸로 마무리.

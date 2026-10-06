@@ -100,7 +100,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ---
 
-## 5. §6 백로그 (B1~B15) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
+## 5. §6 백로그 (B1~B16) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
 
 | 항목 | 한 줄 요약 |
 |---|---|
@@ -119,6 +119,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 | B13 | VM 로그 소음 — ops-agent 권한 오류(비활성화로 해결), rsyslog `/dev/console`(N2로 대응 예정) |
 | B14 | 넘기기 경보 사유 공란(83건 중 64건) — 경보 대체 사유 코드 수정(`538bf9b3`), 플레이북 근거 채우기 남음, B12 연관 가능성 |
 | B15 | 넘기기가 IMPOSSIBLE로 기록돼 통계 왜곡(`success`·`result_category` 기준이 반대 방향) — `ESCALATED` 분리 검토 |
+| B16 | VM 저장소 소유권 혼재 — pull이 root로 실행돼 `.git`(809개)·작업 트리 일부가 root 소유. 배포는 root로 pull, `data/` 처리와 함께 별도 정리 필요 |
 
 ---
 
@@ -135,6 +136,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 - 테스트는 VM과 같은 Python 3.10 + chromadb 0.5.0 환경에서 돌린다(로컬 Python 3.14는 numpy 2.x로
   chromadb import 실패 — README "테스트 실행"). VM에서 테스트할 때는 운영 폴더 밖 `/tmp`에
   `git archive`로 풀고, root가 아닌 사용자로, `.env` 없이 실행한다.
+- VM 저장소 git 명령은 **root로** 실행한다(B16: `.git`·작업 트리 일부가 root 소유, zeus3826으로는 pull 불가).
 - VM 명령은 `gcloud compute ssh ... --command 'sudo bash -s' < script.sh` 패턴(SSH 사용자는 VM 저장소
   디렉터리에 직접 들어갈 수 없어 `sudo bash -s` 필요).
 
@@ -171,7 +173,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 ## 9. 새 세션이 처음 읽을 파일
 
 1. `docs/HANDOFF.md` (이 파일)
-2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B15), §3.4 (모드별 대상 일치율)
+2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B16), §3.4 (모드별 대상 일치율)
 3. `README.md` — "L2 LLM 모드", "외부로 나가는 데이터", "보안 아키텍처", "테스트 실행"
 4. Claude 로컬 메모 `project_llm_mode_rollout.md`, `project_gcp_deployment.md` (VM 접속·상태)
 5. 코드: `src/llm_mode.py`, `src/llm_engine.py`(`_is_groq_available`, `_apply_self_reflection`,
