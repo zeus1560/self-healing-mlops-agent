@@ -748,7 +748,7 @@ B1이 B2·B3 판단의 선행 조건이다.
   - 결과는 `DATA_ACCUMULATION_DESIGN.md` §2.2에 prod 열로 추가하고, 잠정
     수치(§1.3·§7)를 재검토한다.
 
-- [ ] **B2. Groq 제3자 전송 미고지 — 포지셔닝과 충돌 (2026-10-04 코드 대응 완료, VM 커밋 2~4 배포·마스킹 남음)**
+- [ ] **B2. Groq 제3자 전송 미고지 — 포지셔닝과 충돌 (2026-10-04 코드 대응 완료, 2026-10-05 VM 배포 완료 — 마스킹(B4) 남음)**
   - **현재 동작**: `GROQ_API_KEY`가 설정돼 있으면 L2 경로에서 에러 로그
     원문 + 전후 최대 10줄 컨텍스트(`src/log_watcher.py`
     `_build_context_window`) + 진단 명령 출력(`free`/`df`/`ps comm`/`ss`,
@@ -806,7 +806,7 @@ B1이 B2·B3 판단의 선행 조건이다.
     (Configuration_Error, Disk_Full, Out_Of_Memory, Path_Not_Found, Permission_Denied,
     Process_Crash)가 2026-09-04부터 auto, `LLM_Inferred`/`Rule_Inferred`는 기본값
     (approve_then_execute)임을 확인.
-  - **남은 것**: VM 커밋 2~4 배포, 클라우드 모드 전송 전 마스킹(B4).
+  - **남은 것**: 클라우드 모드 전송 전 마스킹(B4). VM 배포는 2026-10-05 완료(`39ba2b6f`, `.env`에 `LLM_PROVIDER=groq`).
 
 - [ ] **B3. `decided_by` PII + `pending_approvals` 무기한 보관**
   - **현재 동작**: 승인·거부 시 `decided_by`에 텔레그램 user id와 username(없으면
