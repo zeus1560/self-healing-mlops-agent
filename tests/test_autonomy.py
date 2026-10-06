@@ -135,6 +135,30 @@ class TestActionExecutorAutonomyGate(unittest.TestCase):
         result = self.ex.execute(_decision(ActionType.ESCALATE_TO_HUMAN))
         self.assertEqual(result["error_type"], "EscalatedToHuman")
 
+    def test_escalate_keeps_playbook_reasoning_when_present(self):
+        result = self.ex.execute(_decision(ActionType.ESCALATE_TO_HUMAN), original_error_log="boom")
+        self.assertEqual(result["error_detail"], "test reasoning")
+
+    def test_escalate_fills_empty_reasoning_with_category_and_masked_first_line(self):
+        # §6 B14: 플레이북 근거가 빈 넘기기 경보는 "실패 상세"가 비어 있었다.
+        d = _decision(ActionType.ESCALATE_TO_HUMAN, category="Network_Timeout")
+        d.reasoning = "  "
+        log = "\n  connect to 10.1.2.3:5432 failed token=abcd1234secret " + "x" * 200 + "\nline2"
+        result = self.ex.execute(d, original_error_log=log)
+        detail = result["error_detail"]
+        self.assertTrue(detail.startswith("[Network_Timeout] connect to <IP>:5432 failed"))
+        self.assertNotIn("10.1.2.3", detail)
+        self.assertNotIn("abcd1234secret", detail)
+        self.assertNotIn("line2", detail)
+        self.assertTrue(detail.endswith("…"))
+        self.assertLessEqual(len(detail), len("[Network_Timeout] ") + 120 + 1)
+
+    def test_escalate_empty_reasoning_and_empty_log(self):
+        d = _decision(ActionType.ESCALATE_TO_HUMAN)
+        d.reasoning = ""
+        result = self.ex.execute(d, original_error_log="")
+        self.assertEqual(result["error_detail"], "[Process_Crash] (에러 로그 없음)")
+
     def test_llm_command_at_auto_skips_approval(self):
         autonomy_store.set_level("Process_Crash", AutonomyLevel.AUTO, "tester")
         with patch.object(self.ex, "_await_approval") as mock_await, \

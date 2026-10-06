@@ -37,6 +37,7 @@ from src import approval_store, autonomy_store, server_config
 from src.schemas import ActionType, AgentResponse, AutonomyLevel
 from src.slack_bot import SlackChatOps
 from src.telegram_bot import get_chatops_client
+from src.utils.pii_masker import mask as _mask_pii
 
 # ── 환경 변수 설정 ────────────────────────────────────────────────────────────
 _APPROVAL_POLL_INTERVAL = int(os.getenv("APPROVAL_POLL_INTERVAL_SEC", "5"))
@@ -235,6 +236,24 @@ def _compose_explanation(decision: AgentResponse) -> str:
     return "\n\n".join(parts)
 
 
+_ESCALATION_LOG_LINE_MAX = 120
+
+
+def _escalation_reason(decision: AgentResponse, original_error_log: str) -> str:
+    """
+    ESCALATE_TO_HUMAN 경보의 사유. 플레이북 데이터에 근거가 없어 reasoning이 비면
+    (운영 L1 넘기기 83건 중 64건, §6 B14) 카테고리와 에러 로그 첫 줄로 대신 채운다.
+    첫 줄은 PII 마스킹 후 자른다(자른 뒤 마스킹하면 잘린 토큰이 패턴을 빠져나감).
+    """
+    if decision.reasoning and decision.reasoning.strip():
+        return decision.reasoning
+    first = next((ln.strip() for ln in (original_error_log or "").splitlines() if ln.strip()), "")
+    first = _mask_pii(first)
+    if len(first) > _ESCALATION_LOG_LINE_MAX:
+        first = first[:_ESCALATION_LOG_LINE_MAX] + "…"
+    return f"[{decision.error_category}] {first or '(에러 로그 없음)'}"
+
+
 def _validate_process_name(name: str) -> str | None:
     """
     프로세스/서비스 이름의 안전성을 검증한다.
@@ -375,12 +394,13 @@ class ActionExecutor:
             return _result(ok, "ServiceRestartFailed", err)
 
         elif decision.action_type == ActionType.ESCALATE_TO_HUMAN:
-            self._escalate_to_human(decision.reasoning)
+            reason = _escalation_reason(decision, original_error_log)
+            self._escalate_to_human(reason)
             return {
                 "success":         True,
                 "result_category": "IMPOSSIBLE",
                 "error_type":      "EscalatedToHuman",
-                "error_detail":    decision.reasoning[:300],
+                "error_detail":    reason[:300],
             }
 
         elif decision.action_type == ActionType.KILL_PROCESS:
