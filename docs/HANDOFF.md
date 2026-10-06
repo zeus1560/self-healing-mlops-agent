@@ -100,7 +100,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ---
 
-## 5. §6 백로그 (B1~B16) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
+## 5. §6 백로그 (B1~B18) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
 
 | 항목 | 한 줄 요약 |
 |---|---|
@@ -115,11 +115,13 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 | B9 | 사람 승인 없이 L1에 쌓일 수 있는 경로(온라인학습 + auto/AUTO_APPROVE) — 참고 |
 | B10 | LLM이 에러 로그 대신 호스트 ps에서 대상 선택(llama-server, MainThread 사례) |
 | B11 | 측정·운영 Groq 키 분리, 무료 tier 일일 한도(200k)는 운영 혼자서도 소진 가능 |
-| B12 | 승인 타임아웃 약 28%(69건 중 19건), 실제 대기 5분, 텔레그램 "발송" 로그는 전달 미보장 |
+| B12 | 승인 타임아웃 — 늦은 승인(미실행) 반영 시 9월 이후 **약 82%**(9/51만 시간 안 응답), 낮 14%·밤 23%로 야간 문제 아님 |
 | B13 | VM 로그 소음 — ops-agent 권한 오류(비활성화로 해결), rsyslog `/dev/console`(N2로 대응 예정) |
 | B14 | 넘기기 경보 사유 공란(83건 중 64건) — 경보 대체 사유 코드 수정(`538bf9b3`), 플레이북 근거 채우기 남음, B12 연관 가능성 |
 | B15 | 넘기기가 IMPOSSIBLE로 기록돼 통계 왜곡(`success`·`result_category` 기준이 반대 방향) — `ESCALATED` 분리 검토 |
 | B16 | VM 저장소 소유권 혼재 — pull이 root로 실행돼 `.git`(809개)·작업 트리 일부가 root 소유. 배포는 root로 pull, `data/` 처리와 함께 별도 정리 필요 |
+| B17 | 승인 화면 명령(`restart_service(redis)`)과 실제 동작(`docker restart mlops_target_app`)이 다를 수 있음 — 2회차 결과로 기록 예정 |
+| B18 | 승인 URL 토큰이 journal에 그대로 — 로그 가림 코드 수정(배포 대기), 8000 포트 0.0.0.0/0 개방·토큰 외 인증 없음 |
 
 ---
 
@@ -173,7 +175,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 ## 9. 새 세션이 처음 읽을 파일
 
 1. `docs/HANDOFF.md` (이 파일)
-2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B16), §3.4 (모드별 대상 일치율)
+2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B18), §3.4 (모드별 대상 일치율)
 3. `README.md` — "L2 LLM 모드", "외부로 나가는 데이터", "보안 아키텍처", "테스트 실행"
 4. Claude 로컬 메모 `project_llm_mode_rollout.md`, `project_gcp_deployment.md` (VM 접속·상태)
 5. 코드: `src/llm_mode.py`, `src/llm_engine.py`(`_is_groq_available`, `_apply_self_reflection`,

@@ -61,5 +61,28 @@ class TestApprovalExplanationPersisted(unittest.TestCase):
         self.assertEqual(args[2], "")
 
 
+class TestApprovalTokenNotLogged(unittest.TestCase):
+    """§6 B18: 승인 URL의 토큰이 로그에 그대로 남으면 journal 열람자가 승인할 수 있었다."""
+
+    def test_pending_url_token_masked_in_log_but_sent_to_chatops(self):
+        token = "vlXvLuSECRETPARTabcdefghijklmnopqrstuvwxyz0123"
+        with patch("src.executor.approval_store") as mock_store, \
+             patch("src.executor.get_chatops_client", return_value=None), \
+             patch("src.executor.SlackChatOps") as MockSlack, \
+             patch("sys.stdin") as mock_stdin, \
+             patch("src.executor.time.sleep"), \
+             self.assertLogs(level="DEBUG") as logs:
+            mock_stdin.isatty.return_value = False
+            mock_store.create_request.return_value = token
+            mock_store.get_status.return_value = "approved"
+            ActionExecutor()._await_approval("restart_service(redis)", "redis refused")
+        joined = "\n".join(logs.output)
+        self.assertNotIn("SECRETPART", joined)
+        self.assertIn("/pending/vlXvLu…(가림)", joined)
+        # 승인 버튼(콜백)은 토큰이 있어야 동작하므로 ChatOps로는 그대로 간다.
+        _, kwargs = MockSlack.return_value.send_approval_request.call_args
+        self.assertIn(token, kwargs["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()

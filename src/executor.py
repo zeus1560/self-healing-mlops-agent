@@ -749,9 +749,11 @@ class ActionExecutor:
         token       = approval_store.create_request(description, error_log, explanation)
         base_url    = os.getenv("APPROVAL_BASE_URL", "http://localhost:8080")
         pending_url = f"{base_url}/pending/{token}"
+        # 로그에는 토큰을 가린다 — 토큰만으로 승인되므로 journal을 읽을 수 있는 사람이 유효시간 안에
+        # 승인할 수 있었다(§6 B18). 앞 6자는 DB 행과 대조용으로 남긴다.
         logging.warning(
             f"  [데몬 모드] 승인 대기 중 ({_APPROVAL_TIMEOUT_SEC}s): {description}\n"
-            f"  확인 및 승인: {pending_url}"
+            f"  확인 및 승인: {base_url}/pending/{token[:6]}…(가림)"
         )
         try:
             chatops = get_chatops_client() or SlackChatOps()
