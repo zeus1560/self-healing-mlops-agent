@@ -823,7 +823,14 @@ B1이 B2·B3 판단의 선행 조건이다.
     행은 expired 유지, target-app RestartCount 4 유지(조치 없음)** — 만료 후 승인 거부를 운영에서 확인.
     이 경로(콜백)는 journal에 로그를 남기지 않아 확인 근거는 사용자 화면과 DB다. 남은 틈: `set_decision`은
     `status='pending'`만 보고 `expires_at`은 보지 않아, 에이전트가 대기 중 비정상 종료돼 `mark_expired`가
-    불리지 않으면 만료 뒤 승인이 받아들여질 수 있다(운영 미검증).
+    불리지 않으면 만료 뒤 승인이 받아들여질 수 있다(운영 미검증 → 코드로 막음, B18 항목 참고).
+  - **장애 주입 2회차(2026-10-06 16:46 UTC, `db_connection`, 사용자 승인)**: L1_CACHE(거리 0.5312, 5/5) →
+    승인 요청 `restart_service(redis)` → 사용자가 텔레그램에서 약 55초 뒤 승인(`decided_by=telegram:…`) →
+    실행기가 4초 뒤 감지 → **`docker restart mlops_target_app`** 실행 → 컨테이너 Running 확인 → `metrics`에
+    `L1_CACHE/RESTART_SERVICE/DB_Connection/success=1/SUCCESS`(64.3초) 1행, 실패 경보 없음. target-app은
+    16:47:03 재시작 후 healthy, 증거 로그(`data/realtime_system.log`) bind mount 유지. 수동 `docker restart`는
+    RestartCount를 0으로 초기화한다(재시작 확인은 StartedAt 기준). **승인 → 실행 → 기록 경로를 운영에서 확인.**
+    단, 실행된 동작은 승인 화면과 달랐다(B17).
 
 - [ ] **B3. `decided_by` PII + `pending_approvals` 무기한 보관**
   - **현재 동작**: 승인·거부 시 `decided_by`에 텔레그램 user id와 username(없으면
@@ -938,9 +945,12 @@ B1이 B2·B3 판단의 선행 조건이다.
     `ApprovalTimeout` 40건).
   - **시간대 분리(09/01~, 생성 시각 KST)**: 낮(09~23시) **4/29(14%)**, 밤(23~09시) **5/22(23%)** — 밤이
     더 나쁘지 않다. 카오스 크론 시각(KST 03·09·15·21시)별로는 03시 0/10, 09시 1/6, 15시 2/7, 21시 1/9, 그 밖의
-    수동 주입(00·01·16·20시)이 5/19. 운영자 1명 환경에서 문제는 야간이 아니라 **사람이 6시간마다 오는
-    경보를 5분 안에 보는 것 자체**로 보인다(건수가 적어 경향 수준). 대기 시간·재알림·자동 거절 후 다음
-    발생 시 재요청 등 B12의 검토 항목은 이 수치를 기준으로 판단할 것.
+    수동 주입(00·01·16·20시)이 5/19. **해석: 야간 영향은 보이지 않음. 운영자 1명이 6시간마다 오는 경보에
+    5분 안에 반응하기 어려운 것이 주원인으로 보임(표본 적음).**
+  - **대응 방향(미결정)**: (1) **대기 시간 조정** — 실행기 대기(300초)를 운영자 응답 패턴에 맞게 늘리거나
+    토큰 유효시간(10분)과 맞춘다. (2) **늦은 승인 시 재확인 후 실행** — 대기가 끝난 뒤 들어온 승인도 버리지
+    않고, 그 시점에 장애가 아직 계속되는지(같은 증상 재확인) 확인한 뒤 계속되면 실행한다. 지금은 늦은
+    승인이 거부(1회차 확인)되거나, 10/05 이전엔 기록만 되고 실행되지 않았다.
 
 - [ ] **B13. VM 로그 소음 — ops-agent 권한 오류가 journal·syslog 대부분 차지 (2026-10-05 확인)** —
   VM journal 1.3GB가 3일 치뿐이었고(하루 약 430MB), 24시간 55만 줄 중 **86%(47만 줄)가
@@ -1030,6 +1040,18 @@ B1이 B2·B3 판단의 선행 조건이다.
   정리(`chown -R zeus3826`)는 서비스가 root로 돌며 `data/` 아래에 파일을 만드는 문제와 함께 따로
   설계해야 해서 이번 배포에서 하지 않았다(`data/`를 넘기면 서비스 쓰기와 충돌할 수 있음).
 
+- [ ] **B17. 승인 화면의 명령과 실제 실행 동작이 다름 (2026-10-07, 장애 주입 2회차로 확인)** — 사람이 승인한
+  것은 `restart_service(redis)`였지만 실제로는 **`docker restart mlops_target_app`**이 실행됐다. VM에 `redis`
+  systemd 유닛이 없어(`LoadState=not-found`) `_restart_service`가 서버 설정의 `docker_target_app`으로 넘어가기
+  때문이다(`src/executor.py` `_restart_service` → `_restart_container_docker`, `config/servers.yaml`
+  `gcp-primary`). 결과는 SUCCESS로 기록됐지만 원래 문제(redis 없음)는 해결되지 않는다 — 데모 환경 특유의
+  불일치이면서, **사람이 승인한 것과 다른 동작이 실행되는** 구조적 문제다(승인의 의미가 무너짐). 같은 계열:
+  B15(기록값이 실제 의미와 다름).
+  - **대응 방향**: 승인 요청 **전에** 실제 실행될 동작을 확정(유닛 존재 확인·docker 폴백 결정·대상 이름
+    확정)하고 승인 화면에 그대로 표시한다(예: "`docker restart mlops_target_app` — redis 유닛 없음, 대상
+    앱 컨테이너로 대체"). 승인 후에는 확정된 동작만 실행하고, 그 사이 상황이 바뀌어 동작이 달라지면 실행하지
+    않고 다시 승인을 받는다. 폴백 자체가 맞는지(redis 장애에 앱 컨테이너 재시작)도 함께 검토.
+
 - [ ] **B18. 승인 URL 토큰이 에이전트 로그에 그대로 남음 (2026-10-07 확인)** — 승인 대기 로그(WARNING)에
   `확인 및 승인: http://<VM 공인 IP>:8000/pending/<토큰>`이 그대로 남았다. 웹 승인 서버는 **토큰 외 인증이
   없어**(`src/approval_server.py`: `GET /pending/{token}` 확인 페이지 → `POST /approve/{token}`) journal을
@@ -1042,7 +1064,15 @@ B1이 B2·B3 판단의 선행 조건이다.
     (`secrets.token_urlsafe(32)`)라 추측은 불가 — 위험은 로그 열람자와 평문 전송 구간.
   - **조치(코드, 다음 배포 때 반영)**: 로그에는 토큰 앞 6자만 남기고 가림(`…(가림)`), ChatOps 승인 버튼에는
     그대로 전달(`tests/test_approval_audit_trail.py::TestApprovalTokenNotLogged`).
-  - **남은 것(심각도 판단 후)**: 8000 포트 외부 개방 필요 여부(텔레그램 버튼만 쓰면 웹 승인 서버를 외부에 열
+  - **심각도: 중간**(2026-10-07 사용자 판단). 8000 포트 외부 차단 방안을 확인받아 진행 예정.
+    텔레그램 승인 버튼은 `callback_data`(토큰)로 봇 polling을 통해 동작해 8000 포트와 무관하다. 웹 링크는
+    Slack 버튼(VM은 `SLACK_WEBHOOK_URL` 미설정)과, 승인 근거(explanation)가 빌 때 텔레그램 "설명"에 `reason`
+    (토큰 URL)을 대신 보여 주는 대체 경로(`src/telegram_bot.py`)에만 쓰인다 — 포트를 닫으면 그 링크는 죽은
+    링크가 되고, 토큰이 채팅에 남는 문제도 있어 대체 경로에서 URL을 빼는 수정이 필요.
+  - **만료 시각 확인(코드, 다음 배포 때 반영)**: `set_decision`이 `status='pending'`에 더해 `expires_at`도
+    확인한다 — 에이전트가 대기 중 죽어 `mark_expired`가 안 불린 행에 대한 만료 뒤 승인을 거부
+    (`tests/test_approval_expiry.py::TestSetDecisionChecksExpiry`).
+  - **남은 것**: 8000 포트 외부 개방 필요 여부(텔레그램 버튼만 쓰면 웹 승인 서버를 외부에 열
     이유가 없음 — 방화벽 소스 범위 축소 또는 규칙 제거), 열어 둔다면 TLS와 토큰 외 인증, 이미 남은
     journal 2줄(해당 요청은 만료됨)과 보존 파일 `/var/log/self-healing-agent-journal-20261005.txt` 안의 토큰
     URL 여부 확인.

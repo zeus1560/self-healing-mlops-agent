@@ -88,5 +88,41 @@ class TestMarkExpired(unittest.TestCase):
         self.assertIsNotNone(approval_store.get_request(t))
 
 
+class TestSetDecisionChecksExpiry(unittest.TestCase):
+    """에이전트가 대기 중 죽어 mark_expired()가 안 불린 채 pending으로 남은 행(2026-10-07)."""
+
+    def setUp(self):
+        approval_store.init_table()
+
+    def _force_expires_at(self, token, value):
+        conn = approval_store._conn()
+        try:
+            conn.execute("UPDATE pending_approvals SET expires_at = ? WHERE token = ?", (value, token))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_pending_but_past_expiry_is_refused(self):
+        t = approval_store.create_request("cmd", "log", "r")
+        self._force_expires_at(t, "2026-01-01T00:00:00+00:00")
+        self.assertFalse(approval_store.set_decision(t, "approved", "telegram:1"))
+        row = approval_store.get_request(t)
+        self.assertEqual(row["status"], "pending")  # 상태는 바꾸지 않음(표시는 mark_expired 몫)
+        self.assertIsNone(row["decided_by"])
+
+    def test_naive_legacy_expiry_treated_as_utc(self):
+        t = approval_store.create_request("cmd", "log", "r")
+        self._force_expires_at(t, "2026-01-01T00:00:00")
+        self.assertFalse(approval_store.set_decision(t, "rejected", "web:1"))
+
+    def test_within_expiry_still_accepted(self):
+        t = approval_store.create_request("cmd", "log", "r")
+        self.assertTrue(approval_store.set_decision(t, "approved", "telegram:1"))
+        self.assertEqual(approval_store.get_request(t)["status"], "approved")
+
+    def test_unknown_token(self):
+        self.assertFalse(approval_store.set_decision("no-such-token", "approved"))
+
+
 if __name__ == "__main__":
     unittest.main()

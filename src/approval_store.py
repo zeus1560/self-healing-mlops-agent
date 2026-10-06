@@ -98,18 +98,24 @@ def get_status(token: str) -> str | None:
     if row is None:
         return None
 
-    if row["status"] == "pending" and row["expires_at"]:
-        try:
-            exp = datetime.fromisoformat(row["expires_at"])
-            # 타임존 없는 구형 레코드 방어 — UTC로 간주
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) > exp:
-                return "expired"
-        except ValueError:
-            pass
+    if row["status"] == "pending" and _is_past(row["expires_at"]):
+        return "expired"
 
     return row["status"]
+
+
+def _is_past(expires_at: str | None) -> bool:
+    """만료 시각이 지났는지. 비었거나 형식이 깨진 값은 만료되지 않은 것으로 본다(기존 get_status 동작)."""
+    if not expires_at:
+        return False
+    try:
+        exp = datetime.fromisoformat(expires_at)
+    except ValueError:
+        return False
+    # 타임존 없는 구형 레코드 방어 — UTC로 간주
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) > exp
 
 
 def get_request(token: str) -> dict | None:
@@ -132,12 +138,19 @@ def set_decision(token: str, decision: str, decided_by: str | None = None) -> bo
     decision: 'approved' 또는 'rejected'.
     decided_by: 승인/거절한 주체 식별자(예: "telegram:12345(alice)", "web:203.0.113.5") —
         생략 시 None으로 남는다(하위호환 — 기존 2-인자 호출부를 깨지 않는다).
-    상태가 'pending'일 때만 업데이트하며 성공 여부를 반환한다.
+    상태가 'pending'이고 만료 시각 전일 때만 업데이트하며 성공 여부를 반환한다.
+    만료 시각 확인(2026-10-07 추가): 에이전트가 승인 대기 중 비정상 종료돼 mark_expired()가
+    불리지 않으면 행이 pending으로 남아, 만료 뒤 클릭도 받아들여졌다.
     """
     now = datetime.now(timezone.utc).isoformat()
     with _lock:
         conn = _conn()
         try:
+            row = conn.execute(
+                "SELECT expires_at FROM pending_approvals WHERE token = ?", (token,)
+            ).fetchone()
+            if row is None or _is_past(row["expires_at"]):
+                return False
             cur = conn.execute(
                 "UPDATE pending_approvals SET status = ?, decided_at = ?, decided_by = ? "
                 "WHERE token = ? AND status = 'pending'",

@@ -85,10 +85,8 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ## 4. 남은 작업
 
-1. **장애 주입 검증**(사용자 결정: `db_connection` 2회, 사용자가 텔레그램을 볼 수 있을 때) — 1회차는
-   무응답으로 5분 뒤 expired 표시 확인, 2회차는 사용자가 텔레그램에서 승인해 실제 실행·결과 기록 확인.
-   주입 전 명령·예상 결과(승인 요청 내용, 실행될 조치) 제시, 회차마다 `pending_approvals` 상태 변화·
-   `metrics` 기록·텔레그램 발송 로그 보고. 진단-라우팅 검토·fail-closed는 일부러 일으키지 않음(운영 미검증으로 문서화).
+1. ~~장애 주입 검증~~ **완료(2026-10-06 UTC)** — 1회차 무응답 → expired·만료 후 승인 거부, 2회차 승인 → 실행·SUCCESS 기록
+   (§6 B2). 진단-라우팅 검토·fail-closed는 운영 미검증으로 남김. 다음 배포 때 `f34d3da8` 이후 코드(토큰 가림·만료 확인) 반영.
 2. **Groq 클라우드 모드 재측정** — 사용자가 **다른 계정(조직)의 측정 전용 키**를 준비하면 진행.
    키는 채팅에 붙여넣지 않고 측정 PC의 `~/.config/groq-measure.env`(권한 600)에 두고
    `set -a; . ~/.config/groq-measure.env; set +a`로만 로드. 측정 전 남은 TPD 확인(작은 요청으로 TPD 429
@@ -120,8 +118,8 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 | B14 | 넘기기 경보 사유 공란(83건 중 64건) — 경보 대체 사유 코드 수정(`538bf9b3`), 플레이북 근거 채우기 남음, B12 연관 가능성 |
 | B15 | 넘기기가 IMPOSSIBLE로 기록돼 통계 왜곡(`success`·`result_category` 기준이 반대 방향) — `ESCALATED` 분리 검토 |
 | B16 | VM 저장소 소유권 혼재 — pull이 root로 실행돼 `.git`(809개)·작업 트리 일부가 root 소유. 배포는 root로 pull, `data/` 처리와 함께 별도 정리 필요 |
-| B17 | 승인 화면 명령(`restart_service(redis)`)과 실제 동작(`docker restart mlops_target_app`)이 다를 수 있음 — 2회차 결과로 기록 예정 |
-| B18 | 승인 URL 토큰이 journal에 그대로 — 로그 가림 코드 수정(배포 대기), 8000 포트 0.0.0.0/0 개방·토큰 외 인증 없음 |
+| B17 | 승인 화면 `restart_service(redis)` ≠ 실제 `docker restart mlops_target_app`(redis 유닛 없음 → docker 폴백) — 승인 전 실제 동작 확정·표시 필요 |
+| B18 | 승인 URL 토큰이 journal에 그대로(심각도 중간) — 로그 가림·`set_decision` 만료 확인 코드 수정(배포 대기), 8000 포트 0.0.0.0/0 차단 방안 확인 대기 |
 
 ---
 
