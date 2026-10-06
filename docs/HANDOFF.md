@@ -14,9 +14,9 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 
 | 위치 | 커밋 | 내용 |
 |---|---|---|
-| origin/main | 이 HANDOFF 커밋(아래 `afae588f` 바로 뒤) | — |
-| origin/main 코드 기준 | `afae588f` | 텔레그램 ChatOps 상태 한 줄 로그(로깅 설정 후) |
-| **VM** | **`39ba2b6f`** | origin/main보다 뒤 — 차이는 `afae588f`(텔레그램 상태 로그)와 문서뿐 |
+| origin/main | 문서 커밋(`538bf9b3` 바로 뒤) | §6 B14·B15, 운영 차단 사례·미검증 경로 |
+| origin/main 코드 기준 | `538bf9b3` | 넘기기 경보 사유 공란을 카테고리·에러 로그 첫 줄로 채움(B14) |
+| **VM** | **`39ba2b6f`** | origin/main보다 뒤 — 코드 차이는 `afae588f`(텔레그램 상태 로그)·`538bf9b3`(경보 사유) |
 
 이번 세션 커밋(오래된 순): `2a5f98f3` 화이트리스트 강화 → `6e2104ed` LLM_PROVIDER(로컬/클라우드
 모드) → `e6352294` 진단-라우팅 검토 + auto·검토 NO→승인 → `d0e3cc9c` 검토 실패 fail-closed →
@@ -55,7 +55,8 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
   memory_leak 1을 주입. L1 5건은 플레이북 조치가 원래 `ESCALATE_TO_HUMAN`이라 텔레그램 경보만
   (결과 IMPOSSIBLE). 일별 처리 건수는 배포 전과 같은 수준(하루 3~5건).
 - **L2 `kill -9` 두 겹 차단**: Groq 진단이 PID를 대상으로 골라 구조화 라우팅 안 함 → 생성 단계가
-  `kill -9 128130` → **검토(Groq) NO**("not a soft signal") → **화이트리스트가 `-9` 차단**. 실행 없음.
+  `kill -9 128130` → **검토(Groq) NO**("not a soft signal") → **화이트리스트가 `-9` 차단**. 실행 없음. §6 B2에
+  "운영 중 실제 차단 사례"로 기록.
 - **승인 요청 0건**(배포 전 7일은 redis 재시작 6건) — 실행형 조치가 나오는 장애가 이번 기간에 안 들어옴.
 - 429·검토 실패·진단-라우팅 0건. 로깅 정상(INFO 기록, 토큰 노출 0).
 - **경보 사유 공란**: L1 `ESCALATE_TO_HUMAN` 이벤트 83건 중 **64건**이 reasoning 빈 문자열 → 경보의
@@ -66,12 +67,12 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 
 ---
 
-## 3. 다음 배포 계획 (사용자 확인 대기 — 실행 전 확인 필수)
+## 3. 다음 배포 계획 (2026-10-07 사용자 결정: N1·N2 진행 — 단계마다 실행 전 확인 필수)
 
 | 단계 | 내용 | 예상 결과 |
 |---|---|---|
-| N1 | VM을 `39ba2b6f` → `afae588f`로 pull(`--ff-only`) 후 `self-healing-agent` 재시작 | journal에 `[Telegram] 상태: 활성 \| 봇 토큰 설정: 예 \| 승인 알림 대상(chat) 설정: 예 \| polling: 예`(값 미노출) |
-| N2 | rsyslog 수정안 1: `/etc/rsyslog.d/90-google.conf` 백업 → **6번 줄 `daemon,kern.* /dev/console` 주석 처리** → `rsyslogd -N1` 설정 검사 → `systemctl restart rsyslog` | 1시간 동안 `suspended` 0회, `/var/log/syslog` 기록 계속 |
+| N1 | VM을 `39ba2b6f` → origin/main 최신(`538bf9b3` 포함)으로 pull(`--ff-only`) 후 `self-healing-agent` 재시작 | journal에 `[Telegram] 상태: 활성 \| 봇 토큰 설정: 예 \| 승인 알림 대상(chat) 설정: 예 \| polling: 예`(값 미노출). 이후 넘기기 경보의 "실패 상세"가 비지 않음 |
+| N2 | rsyslog 수정안 1: `/etc/rsyslog.d/90-google.conf` 백업 → **6번 줄 `daemon,kern.* /dev/console` 주석 처리(수정 이유를 파일 안 주석으로 남김)** → `rsyslogd -N1` 설정 검사 → `systemctl restart rsyslog` | 1시간 동안 `suspended` 0회, `/var/log/syslog` 기록 계속 |
 | N3 | 24시간 뒤 journal 증가량 재계산 | 하루 약 20MB, 500M 기준 약 25일 예상 |
 
 N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/dev/console`은 `root:tty 0620`이라
@@ -84,8 +85,10 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ## 4. 남은 작업
 
-1. **장애 주입 검증**(사용자 결정: `db_connection` 2회) — 실행형 조치(redis 재시작)가 나와 승인 요청이
-   생기게 해서, 운영 미검증 경로를 확인한다. 5분 무응답 시 expired로 표시되는지 포함.
+1. **장애 주입 검증**(사용자 결정: `db_connection` 2회, 사용자가 텔레그램을 볼 수 있을 때) — 1회차는
+   무응답으로 5분 뒤 expired 표시 확인, 2회차는 사용자가 텔레그램에서 승인해 실제 실행·결과 기록 확인.
+   주입 전 명령·예상 결과(승인 요청 내용, 실행될 조치) 제시, 회차마다 `pending_approvals` 상태 변화·
+   `metrics` 기록·텔레그램 발송 로그 보고. 진단-라우팅 검토·fail-closed는 일부러 일으키지 않음(운영 미검증으로 문서화).
 2. **Groq 클라우드 모드 재측정** — 사용자가 **다른 계정(조직)의 측정 전용 키**를 준비하면 진행.
    키는 채팅에 붙여넣지 않고 측정 PC의 `~/.config/groq-measure.env`(권한 600)에 두고
    `set -a; . ~/.config/groq-measure.env; set +a`로만 로드. 측정 전 남은 TPD 확인(작은 요청으로 TPD 429
@@ -97,7 +100,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ---
 
-## 5. §6 백로그 (B1~B13) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
+## 5. §6 백로그 (B1~B15) — 상세는 `docs/RESEARCH_SUMMARY.md` §6
 
 | 항목 | 한 줄 요약 |
 |---|---|
@@ -114,6 +117,8 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 | B11 | 측정·운영 Groq 키 분리, 무료 tier 일일 한도(200k)는 운영 혼자서도 소진 가능 |
 | B12 | 승인 타임아웃 약 28%(69건 중 19건), 실제 대기 5분, 텔레그램 "발송" 로그는 전달 미보장 |
 | B13 | VM 로그 소음 — ops-agent 권한 오류(비활성화로 해결), rsyslog `/dev/console`(N2로 대응 예정) |
+| B14 | 넘기기 경보 사유 공란(83건 중 64건) — 경보 대체 사유 코드 수정(`538bf9b3`), 플레이북 근거 채우기 남음, B12 연관 가능성 |
+| B15 | 넘기기가 IMPOSSIBLE로 기록돼 통계 왜곡(`success`·`result_category` 기준이 반대 방향) — `ESCALATED` 분리 검토 |
 
 ---
 
@@ -157,8 +162,8 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 
 ## 8. 다음 할 일 (순서)
 
-1. 사용자에게 N1~N3 진행 여부와 N2 포함 여부, 장애 주입 검증(`db_connection` 2회) 실행 여부 확인.
-2. 확인되면 N1 → (N2) → 장애 주입 검증 → N3 순으로 단계별 실행·보고.
+1. (2026-10-07 결정) 사유 공란 수정 커밋 → push → N1·N2 배포 → 확인 → 약속한 시간에 장애 주입 검증 2회 →
+   N3(24시간 뒤 journal 재계산). 단계마다 명령·예상 결과를 보여 주고 확인 후 실행.
 3. 측정 전용 키가 준비되면 Groq 재측정 → 분류 → 문서의 클라우드 칸 채우기.
 
 ---
@@ -166,7 +171,7 @@ N2 근거: rsyslog는 `$PrivDropToUser syslog`로 권한을 낮춰 도는데 `/d
 ## 9. 새 세션이 처음 읽을 파일
 
 1. `docs/HANDOFF.md` (이 파일)
-2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B13), §3.4 (모드별 대상 일치율)
+2. `docs/RESEARCH_SUMMARY.md` §6 (B1~B15), §3.4 (모드별 대상 일치율)
 3. `README.md` — "L2 LLM 모드", "외부로 나가는 데이터", "보안 아키텍처", "테스트 실행"
 4. Claude 로컬 메모 `project_llm_mode_rollout.md`, `project_gcp_deployment.md` (VM 접속·상태)
 5. 코드: `src/llm_mode.py`, `src/llm_engine.py`(`_is_groq_available`, `_apply_self_reflection`,

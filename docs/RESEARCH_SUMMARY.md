@@ -807,6 +807,15 @@ B1이 B2·B3 판단의 선행 조건이다.
     Process_Crash)가 2026-09-04부터 auto, `LLM_Inferred`/`Rule_Inferred`는 기본값
     (approve_then_execute)임을 확인.
   - **남은 것**: 클라우드 모드 전송 전 마스킹(B4). VM 배포는 2026-10-05 완료(`39ba2b6f`, `.env`에 `LLM_PROVIDER=groq`).
+  - **운영 중 실제 차단 사례(2026-10-05~06, 배포 후 34시간 확인)**: Groq 진단이 PID를 대상으로
+    골라 구조화 라우팅을 하지 않았고(숫자 대상 폴백, `ee53a196`), 생성 단계가 `kill -9 128130`을
+    만들었다 → **검토(Groq) NO**("not a soft signal") → **화이트리스트가 `-9` 차단**. 실행 없음.
+    검토와 화이트리스트가 서로 독립적으로 같은 위험 명령을 막은, 두 겹 방어가 운영에서 실제로
+    작동한 첫 사례다(테스트가 아닌 카오스 크론 주입 장애에서 발생).
+  - **운영 미검증 경로(2026-10-07 기준)**: 아래는 테스트로는 고정돼 있지만 운영에서 아직 한 번도
+    일어나지 않았다. 진단-라우팅 검토(`e6352294`), 검토 실패 시 fail-closed(`d0e3cc9c`, auto +
+    검토 NO·실패 → 사람 승인). 2026-10-07 장애 주입 검증(`db_connection` 2회)은 승인 요청·
+    expired 표시·승인 후 실행 경로만 대상으로 하고, 위 두 경로는 일부러 일으키지 않기로 했다.
 
 - [ ] **B3. `decided_by` PII + `pending_approvals` 무기한 보관**
   - **현재 동작**: 승인·거부 시 `decided_by`에 텔레그램 user id와 username(없으면
@@ -949,6 +958,43 @@ B1이 B2·B3 판단의 선행 조건이다.
     `syslog.1` 1.6GB→`syslog.2.gz` 43MB, `/var/log` 3.6G→1.4G, 디스크 82%→75%. rsyslog
     `/dev/console` 중단·재개 메시지는 ops-agent를 꺼도 시간당 약 1,100회로 거의 그대로(journal과
     `/var/log/syslog` 양쪽에 기록) — ops-agent와 무관한 별도 원인.
+
+- [ ] **B14. 넘기기 경보 사유 공란 (2026-10-06 확인)** — VM의 L1 `ESCALATE_TO_HUMAN` 이벤트
+  **83건 중 64건**이 `reasoning` 빈 문자열이라 텔레그램 경보의 "실패 상세"가 "없음"으로 나갔다.
+  원인은 코드가 아니라 **플레이북 데이터에 근거가 비어 있는 것**이다 — L1이 매칭한 ChromaDB
+  문서의 조치는 `ESCALATE_TO_HUMAN`인데 그 판단 근거 텍스트가 없다. 받는 사람은 경보만 보고는
+  무엇이 왜 넘어왔는지 알 수 없고 원본 로그를 직접 찾아야 한다(2026-10-02 인터뷰의 "Slack 원본
+  로그 해석 고통"과 같은 문제).
+  - **조치(코드, `538bf9b3`)**: reasoning이 비면 `[카테고리] 에러 로그 첫 줄`로 대신 채운다
+    (`src/executor.py::_escalation_reason`, 첫 줄은 `pii_masker`로 가린 뒤 120자로 자름,
+    `tests/test_autonomy.py`). 경보·에이전트 로그·`metrics.error_detail`에 반영되고,
+    `metrics.reasoning`은 원래 값(빈 문자열)으로 두어 데이터 공란 통계는 그대로 남는다.
+  - **남은 것(데이터)**: 플레이북 문서에 근거를 채우는 것 — 근본 대응. 어떤 카테고리·문서에서
+    빈 근거가 나오는지 집계 후 결정.
+  - **B12와의 연관 가능성(미검증)**: 승인 요청 메시지의 "설명"도 같은 reasoning(+`l1_evidence`)으로
+    만든다(`_compose_explanation`). 근거가 빈 승인 요청은 운영자가 판단할 정보가 적어 응답이
+    늦어지거나 미뤄질 수 있고, 이것이 승인 타임아웃 약 28%(B12)의 한 원인일 수 있다. 확인 방법:
+    `pending_approvals`의 만료 건과 결정 건을 대응하는 `metrics` 행의 reasoning 공란 여부로 나눠
+    비율을 비교(건수가 적어 경향 확인 수준).
+
+- [ ] **B15. 사람에게 넘긴 건이 IMPOSSIBLE로 기록돼 통계에서 실패처럼 보임** —
+  `ESCALATE_TO_HUMAN`은 설계상 의도된 결과(플레이북이 "사람에게 넘겨라"라고 정한 것)인데
+  `result_category=IMPOSSIBLE`, `error_type=EscalatedToHuman`, `success=True`로 기록된다.
+  `IMPOSSIBLE`은 승인 타임아웃(`ApprovalTimeout`), `PermissionError`, `MemoryError`, 알 수 없는
+  액션 같은 진짜 수행 불가에도 쓰여 두 의미가 섞인다.
+  - **연구 수치에 미치는 영향**: 집계 방식에 따라 반대 방향으로 왜곡된다. (1) `result_category`
+    기준(`experiments/generate_eval_charts.py`의 카테고리별 성공률·결과 분포, 성능 리포트의
+    3분류)에서는 넘기기가 **실패 쪽**으로 잡혀 성공률이 낮아진다. (2) `success` 컬럼 기준
+    (대시보드 헤드라인 성공률, 성능 리포트 "전체 조치 성공률")에서는 넘기기가 **성공**으로 잡혀
+    아무 조치도 하지 않은 건이 자가 치유 성공률을 올린다. 2026-10-05~06 운영 6건 중 5건이
+    넘기기였을 만큼 비중이 커서, 90일 분석의 성공률·MTTR이 어느 기준이냐에 따라 크게 달라진다.
+    경보 제목도 "조치 실패/위험 감지 [IMPOSSIBLE]"로 나간다.
+  - **대응 방안(미결정)**: `ESCALATED` 결과값을 따로 두고, 성공률 분모에서 빼거나 별도 줄로
+    보고(`OBSERVED_ONLY`·`PROPOSED_ONLY`를 대시보드 헤드라인에서 뺀 것과 같은 방식). 기존 행은
+    `error_type='EscalatedToHuman'`으로 구분할 수 있어 스키마 변경 없이 소급 재분류가 가능하다.
+    바꿀 곳: `src/executor.py` ESCALATE 분기, `src/observability.py`(리포트·경보 제목),
+    `dashboard/app.py`(헤드라인 제외 목록·아이콘), `experiments/generate_eval_charts.py`. 결과값을
+    바꾸면 이전 연구 수치와의 비교 기준이 달라지므로 바꾼 시점을 컷오프로 기록할 것.
 
 - ✅ **완료(2026-09-21) — `run_l2_production_path_check.py` 계측 버그 수정
   + 공식 재측정 + README/SRE_PRACTICES/이 문서 전부 34%로 갱신**(`6d769e3b`/
