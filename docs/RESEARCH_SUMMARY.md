@@ -1069,7 +1069,7 @@ B1이 B2·B3 판단의 선행 조건이다.
     Slack 버튼(VM은 `SLACK_WEBHOOK_URL` 미설정)과, 승인 근거(explanation)가 빌 때 텔레그램 "설명"에 `reason`
     (토큰 URL)을 대신 보여 주는 대체 경로(`src/telegram_bot.py`)에만 쓰인다 — 포트를 닫으면 그 링크는 죽은
     링크가 되고, 토큰이 채팅에 남는 문제도 있었다(아래 대체 경로 수정으로 해결).
-  - **8000 포트 외부 차단(2026-10-06 약 17:00 UTC 실행)**: VM에서 네트워크 태그 `approval-server` 제거 →
+  - **8000 포트 외부 차단(2026-10-06 약 16:50 UTC 실행)**: VM에서 네트워크 태그 `approval-server` 제거 →
     방화벽 규칙 `allow-approval-server`는 남아 있지만 적용 대상 0대. 확인: 변경 전 외부 `/health` 200 →
     변경 후 외부 응답 없음(타임아웃), VM 내부 `localhost:8000/health` 200, `mlops_approval` healthy,
     에이전트 active. 텔레그램 승인(봇 polling, VM→텔레그램 방향)은 영향 없음. **되돌리기**:
