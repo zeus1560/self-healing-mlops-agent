@@ -8,17 +8,19 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 
 ---
 
-## 0. 10/08 실제 상태 (2026-10-07 17:5x UTC = KST 10/08 02:5x 확인)
+## 0. 10/08 실제 상태 (최종 갱신 2026-10-08 06:55 UTC = KST 15:55)
 
 | 항목 | 상태 | 근거 |
 |---|---|---|
-| 배포 `f34d3da8`(승인 URL 토큰 로그 가림) | **완료(D1, 10/07 18:10)** · 운영 동작은 통제 주입으로 확인 예정 | VM HEAD `4505c043`(reflog 마지막 pull 10/06 16:26), 에이전트 10/06 16:26부터 계속 실행 |
-| 배포 `5486d6f7`(`set_decision` 만료 시각 확인) | **완료(D1)** · VM 격리 테스트 10/10 통과 | 위와 같음 |
-| 배포 `3edc2c83`(승인 근거 대체·텔레그램 토큰 URL 미표시) | **완료(D1)** | 위와 같음 |
-| N3(journal 24시간 증가량 재계산) | **완료(기록만, 미적용)** | 측정 기록 없음 — 아래 §2 "N3 측정"에 이번에 기록 |
-| rsyslog 1시간·24시간 효과 확인 | **완료 — 효과 있음(닫음)** | 10/06에 걸어 둔 백그라운드 확인이 세션 종료로 실행되지 않음(결과 파일 없음) — §2 판정 기준으로 이번에 측정 |
+| 배포 `f34d3da8`(승인 URL 토큰 로그 가림) | **완료·운영 확인** | D1(10/07 18:10:30, VM HEAD `6e58a0d7`) · 통제 주입에서 가림 줄 1·원문 토큰 URL 0 |
+| 배포 `5486d6f7`(`set_decision` 만료 시각 확인) | **완료** · 새 경로(비정상 종료 뒤 pending 행)는 운영 미검증 | VM 격리 테스트 10/10 · 통제 주입의 만료 후 클릭 거부는 기존 경로(status=expired)로 확인 |
+| 배포 `3edc2c83`(승인 근거 대체·텔레그램 토큰 URL 미표시) | **완료** · 본문 URL 0(입력값 기준) | 통제 주입 rowid 73의 본문 입력값 3개에서 `http`·`/pending/` 0 — 사용자 육안 확인은 못 함 |
+| N3(journal 24시간 증가량) | **완료(기록만, 미적용)** | §2 "N3 측정" — 사후 24h 약 25~45MB, 보관 약 11~20일 |
+| rsyslog 1시간·24시간 효과 | **완료 — 효과 있음(닫음)** | §2 "rsyslog 결과" — 사후 suspended 0 |
+| 완화책 A(B19: Process_Crash auto → 승인) | **적용** · 컷오프 2026-10-08 06:36:16.970 UTC | `autonomy_state` 재조회 approve_then_execute, `shadow_events` id 7 demoted |
+| 통제 주입(10/08 D1 검증) | **완료 — 예상대로** | 아래 "통제 주입(10/08 D1 검증)" |
 
-**D1 배포(2026-10-07 18:10:30 UTC)** — 위 표의 "근거" 칸은 확인 당시(배포 전) 기록으로 남겨 둔다.
+**D1 배포(2026-10-07 18:10:30 UTC)** — §0 표는 2026-10-08 06:55 UTC 기준으로 다시 썼다(배포 전 판은 git 이력 `8d40d9b5` 이전).
 - 사전 확인: HEAD `4505c043`, 추적 파일 변경 0, pending 0 → root로 `git pull --ff-only` → HEAD **`6e58a0d7`** →
   `systemctl restart self-healing-agent` → 120초 뒤 active·NRestarts 0, 텔레그램 상태 줄 1, Traceback 0·ERROR 0·
   `api.telegram.org/bot` 0·토큰 패턴 0 → 롤백 조건 해당 없음. 원본: scratchpad `d1_deploy_20261007.txt`.
@@ -31,6 +33,29 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
   VM Python 3.10.12 → `tests/test_approval_expiry.py` **10 passed**(신규 `TestSetDecisionChecksExpiry` 4개 포함).
   `/tmp` 폴더 삭제. 원본: scratchpad `d1_expiry_test_vm_20261007.txt`.
 - 남은 확인: 통제 주입 1회(토큰 가림·만료 후 승인 거부의 운영 동작) — 사용자 확인 후 실행.
+
+**통제 주입(10/08 D1 검증) — 2026-10-08 06:45:00 UTC (KST 15:45)** · **통계 제외 대상**
+- 식별: `pending_approvals` **rowid 73**(토큰 앞 6자 `Yzezm1`, `restart_service(redis)`), `metrics` **id 1889**
+  (`L1_CACHE/DB_Connection/RESTART_SERVICE/IMPOSSIBLE/ApprovalTimeout`), 서킷브레이커 서명 **`677b153c`**.
+  → 승인 무응답 통계(B12)와 IMPOSSIBLE 집계(B15)에서 이 행들을 뺄 것. 10/06 1·2회차 주입(승인 행 16:32·16:46 생성분,
+  metrics 16:37·16:47 행)도 같은 성격의 통제 주입이다.
+- 방식: 스크립트 전문을 먼저 `~/ops-records/20261008/d1verify_20261008T0645.sh`(sha `a1cf05528e83`)에 저장 → VM
+  `/root/ops-records/`에 같은 파일 업로드 → `setsid nohup`으로 실행(원격 PID·PGID 635745, `/run/d1verify.pid`),
+  출력은 VM `/root/ops-records/d1verify-20261008T0645.log`. 종료 후 pidfile 삭제·프로세스 0 확인.
+- 사전 확인(06:44:00): HEAD `6e58a0d7`, active, NRestarts 0, pending 0, 서킷브레이커 CLOSED 아닌 행 0, Process_Crash
+  approve_then_execute, DB_Connection 기본값(approve_then_execute), target-app StartedAt 기준값 06:00:03 → 통과.
+- 결과: 06:45:05 승인 요청 생성(텔레그램 수신은 사용자 확인) → 06:50:05 **expired**(`system:timeout`) → 실패 경보 발송
+  로그 1. 확인 4항목: **가림 줄 1**(`/pending/Yzezm1…(가림)`), **원문 토큰 URL 0**(DB `reason`에도 `/pending/` 0),
+  **5분 뒤 expired**, **만료 뒤 승인 클릭 거부**(사용자 화면 "이미 처리되었거나 만료되었습니다"·버튼 제거, rowid 73
+  status·decided_at·decided_by 불변, metrics 1889 뒤 0행, target-app StartedAt 06:00:03 불변). 클릭 처리는 journal에
+  기록을 남기지 않는다(06:50:40 이후 0줄 — 콜백 경로에 로그 없음). 서킷브레이커 `677b153c`: T+40초 행 없음
+  (결과가 나와야 기록) → 타임아웃 후 CLOSED·1.
+- **승인 요청 본문의 URL 여부**: 사용자 육안 확인은 못 함. 대신 (1) `6e58a0d7`의 `send_approval_request` 코드 —
+  본문은 `감지된 에러`(error_log 앞 300자)·`실행 예정 명령어`·`설명`(explanation 앞 800자, 비면 "(근거 없음)")이고
+  `reason`(토큰 URL)은 본문에 쓰지 않으며, 버튼은 URL이 아닌 `callback_data`(`approve|<토큰>`)다. (2) 발송 로그에는
+  본문이 남지 않으므로 rowid 73에 저장된 같은 입력값(`error_log`·`command`·`reason`=explanation)에서 `http`·`/pending/`
+  개수를 셈 → 셋 다 0. 즉 "코드와 입력값 기준 URL 없음"이고 실제 수신 화면은 확인되지 않았다.
+- 원본: `~/ops-records/20261008/`(`d1verify_*`, `post_click_check.txt`), VM `/root/ops-records/d1verify-20261008T0645.log`.
 
 **2026-10-08 06:36 UTC — 완화책 A 적용(B19): Process_Crash auto → approve_then_execute**
 - 적용 전 확인: 9/4 auto는 **수동** 승급(zeus3826 shell 기록에 `sudo .venv/bin/python -m scripts.set_autonomy_level
@@ -224,15 +249,20 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 
 ## 4. 남은 작업
 
-1. **다음 배포 D1 → N3 → R24**(§3).
-2. **운영 미검증 경로**(모두 테스트로는 고정): 진단-라우팅 검토(`e6352294`), 검토 실패 fail-closed
-   (`d0e3cc9c`, auto + 검토 NO·실패 → 사람 승인), **비정상 종료 후 만료 승인 거부**(`5486d6f7`, 배포 전).
+1. **운영 미검증 경로**(모두 테스트로는 고정): 진단-라우팅 검토(`e6352294`), 검토 실패 fail-closed(`d0e3cc9c`, auto +
+   검토 NO·실패 → 사람 승인), **비정상 종료 후 만료 승인 거부**(`5486d6f7` 새 경로 — 배포·VM 테스트는 했지만 운영에서
+   그 상황이 일어난 적 없음), 웹 승인 경로의 만료 확인(`mlops_approval` 컨테이너는 옛 코드, 8000 외부 차단 상태).
    일부러 일으키지 않기로 함 — 실제로 발생하면 기록.
-3. **Groq 클라우드 모드 재측정** — 다른 계정(조직)의 측정 전용 키가 준비되면. 키는 측정 PC의
+2. **Groq 클라우드 모드 재측정** — 다른 계정(조직)의 측정 전용 키가 준비되면. 키는 측정 PC의
    `~/.config/groq-measure.env`(600)에 두고 `set -a; . file; set +a`로만 로드. 남은 TPD 확인, 로컬 Ollama 끈
    상태, `--interval 9 --max-429 5`, 3회 → 분류 → README·RESEARCH_SUMMARY §3.4 클라우드 칸.
-4. §6 백로그 중 결정 대기: B15(`ESCALATED` 분리), B17(승인 전 실제 동작 확정), B12 대응(대기 시간·늦은 승인
-   재확인 후 실행), B18 후속(0.0.0.0 → 127.0.0.1 바인딩, 보존 파일 토큰 확인), B16(소유권 정리).
+3. **B19 근본 대응**: 플레이북 대상 수정(`scripts/add_chaos_injector_signatures.py` `ACTION_MAP`과 ChromaDB 문서 —
+   Process_Crash→rsyslog, DB_Connection→redis, Network_Timeout→postgres_pool) 또는 auto 실행 전 대상 일치 확인(완화책 C).
+   Disk_Full(호스트 journal vacuum)·OOM(에이전트 내부 gc)도 대상 불일치 — 이번엔 바꾸지 않음. 완화책 A는 근본 대응 뒤 재검토.
+4. **B20**: 서킷브레이커 서명 정규화(타임스탬프·PID·숫자 제거) — 지금은 반복 실패 차단이 사실상 동작하지 않음.
+5. §6 결정 대기: B15(`ESCALATED` 분리 — 통제 주입 행 제외 규칙 포함), B17(승인 전 실제 동작 확정), B12 대응(대기 시간·
+   늦은 승인 재확인 후 실행), B18 후속(0.0.0.0 → 127.0.0.1 바인딩, `mlops_approval` 재빌드, 보존 파일 토큰 확인),
+   B16(소유권 정리).
 
 ---
 
@@ -258,7 +288,7 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 | B16 | VM 저장소 소유권 혼재 — git은 root로, `data/` 처리와 함께 별도 정리 |
 | B17 | 승인 화면 `restart_service(redis)` ≠ 실제 `docker restart mlops_target_app` — 승인 전 실제 동작 확정·표시 |
 | B18 | 승인 URL 토큰 로그 노출(중간) — 로그 가림·만료 확인·근거 대체 코드(배포 대기), 8000 외부 차단 완료, 127.0.0.1 바인딩 검토 |
-| B19 | auto 레벨에서 장애 대상과 무관한 서비스(rsyslog)를 승인 없이 재시작하고 SUCCESS로 기록(10/08 06:00 process_crash) — 원인 분석 중 |
+| B19 | auto 조치 대상 ≠ 장애 대상 — 원인 `ACTION_MAP` 카테고리 단위 매핑(`5d767518`), Process_Crash 문서 104/133 대상 rsyslog, auto 조치 33건 중 target-app 작용 0건(모두 SUCCESS). 완화책 A 적용(06:36:16), 근본 대응 남음 |
 | B20 | 서킷브레이커 서명에 타임스탬프가 들어가 카운터가 쌓이지 않음 — 설계상 반복 실패 차단이 동작하지 않음 |
 
 ---
@@ -310,10 +340,11 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 
 ## 8. 다음 할 일 (순서)
 
-1. **D1 배포**(§3) — 사전 확인·명령·예상 결과를 보여 주고 확인 후 실행.
-2. **N3**: 2026-10-07 16:30 UTC(KST 10/08 01:30) 이후 journal 24시간 증가량 재계산.
-3. **R24**: rsyslog 수정 24시간 효과(`suspended` 건수, journal 중 rsyslog 비율).
-4. 이후 §4의 결정 대기 항목을 사용자와 정리. 측정 전용 키가 준비되면 Groq 재측정.
+1. 12:00 UTC 등 다음 카오스에서 Process_Crash가 승인 요청으로 가는지(완화책 A) 읽기 전용으로 확인 — 첫 사례 기록.
+2. B19 근본 대응 설계(§4-3) → 사용자 결정 → 코드·데이터 수정은 단계마다 확인 후.
+3. B20 서명 정규화 설계·테스트.
+4. 측정 전용 키가 준비되면 Groq 재측정(§4-2).
+5. 운영 미검증 항목(§4-1)은 실제 발생 시 기록. §4-5 결정 대기 항목을 사용자와 정리.
 
 ---
 

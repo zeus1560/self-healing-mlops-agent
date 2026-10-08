@@ -1023,8 +1023,10 @@ B1이 B2·B3 판단의 선행 조건이다.
     기준(`experiments/generate_eval_charts.py`의 카테고리별 성공률·결과 분포, 성능 리포트의
     3분류)에서는 넘기기가 **실패 쪽**으로 잡혀 성공률이 낮아진다. (2) `success` 컬럼 기준
     (대시보드 헤드라인 성공률, 성능 리포트 "전체 조치 성공률")에서는 넘기기가 **성공**으로 잡혀
-    아무 조치도 하지 않은 건이 자가 치유 성공률을 올린다. 2026-10-05~06 운영 6건 중 5건이
-    넘기기였을 만큼 비중이 커서, 90일 분석의 성공률·MTTR이 어느 기준이냐에 따라 크게 달라진다.
+    아무 조치도 하지 않은 건이 자가 치유 성공률을 올린다. [B19 표시: 이 "성공" 중 auto 조치(Process_Crash·Disk_Full·Out_Of_Memory)는 실행 대상이 장애 대상과 달라
+    복구 근거가 아님(B19)] 2026-10-05~06 운영 6건 중 5건이
+    넘기기였을 만큼 비중이 커서, 90일 분석의 성공률·MTTR이 어느 기준이냐에 따라 크게 달라진다. [B19 표시: 90일 분석의 성공률·MTTR에
+    포함될 auto SUCCESS 33건(09/07~10/08)은 실행 대상이 장애 대상과 달라 복구 근거가 아님(B19)]
     경보 제목도 "조치 실패/위험 감지 [IMPOSSIBLE]"로 나간다.
   - **대응 방안(미결정)**: `ESCALATED` 결과값을 따로 두고, 성공률 분모에서 빼거나 별도 줄로
     보고(`OBSERVED_ONLY`·`PROPOSED_ONLY`를 대시보드 헤드라인에서 뺀 것과 같은 방식). 기존 행은
@@ -1092,6 +1094,23 @@ B1이 B2·B3 판단의 선행 조건이다.
   auto라 승인 없이 `systemctl restart rsyslog`가 실행돼 SUCCESS로 기록됐다(metrics id 1888). target-app은 컨테이너
   재시작 정책으로 자체 복구. B17(승인 화면 ≠ 실제 동작)과 같은 계열이지만 사람 확인 단계도 없었다. 원인 분석·완화책은
   `docs/HANDOFF.md`(2026-10-08 항목).
+  - **원인**: `scripts/add_chaos_injector_signatures.py`의 `ACTION_MAP`이 **카테고리 단위로** 조치 대상을 정한다
+    (`"Process_Crash": ("restart_service", "rsyslog")`, 커밋 `5d767518`, 2026-09-07) — 원래 syslog 학습 데이터용 매핑을
+    target-app 카오스 시그니처에 그대로 붙였다. **같은 원인으로 B17**(`DB_Connection→redis`, `Network_Timeout→postgres_pool`)이
+    생겼다. ChromaDB Process_Crash 문서 **104/133건**의 `target_process`가 rsyslog(augment v2 71·v1 30·카오스 시그니처 3,
+    나머지 29건은 `pod`). L1 투표는 이긴 액션의 최근접 문서 메타 `target_process`를 그대로 쓰고(`_ensemble_vote`),
+    L1 구조화 `RESTART_SERVICE`는 자가 반성을 설계상 생략하며(`_reflect_on_l1_hit`), 보호 목록은 rsyslog를 의도적으로
+    뺐다("재시작이 정상 조치") — 대상이 에러 로그와 맞는지 확인하는 단계가 없다.
+  - **운영 영향(VM metrics 09/07~10/08, auto 전환 이후 auto 카테고리)**: 실행형 auto 조치 **33건 중 target-app에 작용한
+    것은 0건, 33건 모두 SUCCESS**로 기록 — Process_Crash `restart_service` 10건(대상 rsyslog 8건, 추정 불가 2건; 대상은
+    L1 근거의 선택 문서를 현재 ChromaDB 메타와 대조해 추정, journal로 직접 확인된 것은 10/08 1건), **Disk_Full**
+    `journalctl --vacuum-size 1G` 13건(장애는 target-app tmpfs `/fill`인데 **호스트 journal**을 정리), **Out_Of_Memory**
+    `CLEAR_MEMORY` 10건(장애는 target-app인데 **에이전트 자기 프로세스** `gc.collect()`·GPU 캐시 정리). Disk_Full·OOM은
+    해가 적어(vacuum 500M 하한, 에이전트 내부 gc) **이번엔 바꾸지 않고 기록만** 한다. target-app 실제 복구는 컨테이너
+    재시작 정책이 했다. → 이 33건의 SUCCESS는 **복구 근거가 아니다.**
+  - **완화책 A(2026-10-08 06:36:16.970 UTC 적용)**: Process_Crash를 auto → approve_then_execute(기존 CLI, 재시작 불필요).
+    9/4 auto는 수동 승급이었고 자동 승급 경로는 없음. 이 시각을 Process_Crash 결과 집계의 컷오프로 쓴다.
+  - **남은 것**: 근본 대응(플레이북 대상 수정 또는 auto 실행 전 대상 일치 확인), Disk_Full·OOM 조치 재설계 검토.
 
 - [ ] **B20. 서킷브레이커 서명에 타임스탬프가 들어가 반복 실패 차단이 동작하지 않음 (2026-10-08 확인)** — 서명은
   에러 로그 첫 줄 앞 100자의 MD5인데(`src/circuit_breaker.py::_sig`), 첫 줄이 마이크로초 타임스탬프로 시작해
