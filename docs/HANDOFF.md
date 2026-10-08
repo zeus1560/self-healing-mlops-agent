@@ -32,6 +32,20 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
   `/tmp` 폴더 삭제. 원본: scratchpad `d1_expiry_test_vm_20261007.txt`.
 - 남은 확인: 통제 주입 1회(토큰 가림·만료 후 승인 거부의 운영 동작) — 사용자 확인 후 실행.
 
+**2026-10-08 06:36 UTC — 완화책 A 적용(B19): Process_Crash auto → approve_then_execute**
+- 적용 전 확인: 9/4 auto는 **수동** 승급(zeus3826 shell 기록에 `sudo .venv/bin/python -m scripts.set_autonomy_level
+  <카테고리> auto --note "9/4 게이트 배포, 기존 카오스 검증 이력 근거로 유지"` 6건, `shadow_events` promoted 6건
+  08:45:22~51). 자동 승급 코드 경로 없음(`set_level`/`start_shadow` 호출은 `scripts/set_autonomy_level.py`뿐,
+  `src/autonomy_store.py` 설계 주석 "승급/강등은 코드에서 자동으로 일어나지 않는다") → 다시 auto로 올라가지 않음.
+- 명령(VM, root, 저장소 폴더): `.venv/bin/python -m scripts.set_autonomy_level Process_Crash approve_then_execute
+  --note "B19: 플레이북 대상 rsyslog 불일치, 10/08"` → `'Process_Crash' → approve_then_execute 로 변경 완료 (변경자: root)`.
+- 결과: `autonomy_state` Process_Crash = `approve_then_execute`(updated_at `2026-10-08T06:36:16.970424+00:00`,
+  root), `shadow_events` id 7 `auto → approve_then_execute demoted`. 다른 5개 카테고리는 auto 유지. 레벨은 이벤트마다
+  DB에서 읽어(`get_level`) 서비스 재시작 없이 즉시 반영.
+- **컷오프: 2026-10-08 06:36:16.970 UTC** — 이후 Process_Crash는 승인 요청(`restart_service(rsyslog)`)으로 가고
+  응답이 없으면 IMPOSSIBLE/ApprovalTimeout으로 기록된다. 이전 SUCCESS와 직접 비교하지 말 것.
+- 되돌리기: 같은 명령을 `auto`로. 원본: `~/ops-records/20261008/mitigation_A_apply.txt`, `autonomy_precheck_*.txt`.
+
 **2026-10-08 05:55~06:05 UTC — 통제 주입 준비 중 확인·취소 기록**
 - **18:00 자연 요청의 원문 토큰 URL 1줄**: 10/07 18:00 카오스(network_timeout)가 승인 요청(`pending_approvals`
   rowid 72, `restart_service(postgres_pool)`)을 만들었고 18:05에 expired(`system:timeout`, metrics id 1886
