@@ -142,7 +142,7 @@ src/
 | `proactive_monitor_signature` | 3건 | ProactiveMonitor 실측 문구 큐레이션 |
 
 **ETL 전략**: Extract(GitHub 공식 이슈) → 에러 스니펫 regex 추출 → 전처리(노이즈 제거·길이 제한·액션 검증) → Load(ChromaDB 직접 upsert)  
-`train_set`/`github_v2`/큐레이션 시그니처(총 381건)는 실제 오픈소스 이슈·실측 문구에서 수집된 원본이고, `syslog_augment_v1`/`v2`(937건)는 실제 Linux/Cloud 서비스 로그 형식을 본떠 직접 작성한 데이터다 — 완전한 합성(fabricated) 데이터는 아니지만 스크래핑 원본도 아니므로 이 둘을 구분해서 인용할 것.
+`train_set`/`github_v2`/큐레이션 시그니처(총 381건)는 실제 오픈소스 이슈·실측 문구에서 수집된 원본이다. `syslog_augment_v1`/`v2`(937건: v1 300, v2 637)는 모두 실제 Linux/Cloud 서비스의 오류 메시지 형식을 본떠 새로 작성한 합성 로그이며, 작성에 생성형 언어모델(Claude Code)을 보조 도구로 활용했다. 실제 로그에서 가져온 문장은 없다(2026-10-10 출처 조사). 이 중 279건은 테스트셋(`data/test_set.json`)에 포함되어 있다. 두 데이터는 구분해서 인용할 것.
 
 **데이터 전처리 파이프라인**:
 - 노이즈 필터링: URL·티켓 링크·30자 미만·에러 키워드 없는 텍스트 제거 (-286건)
