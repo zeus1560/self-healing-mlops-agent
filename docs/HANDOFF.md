@@ -23,7 +23,7 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 | pending 승인 / 10/08 원격 프로세스 | 0 / `/run/d1verify.pid` 없음·d1verify·`sleep 1008`·고아 `bash -s` 0 |
 | 완화책 A | 유지 — Process_Crash `approve_then_execute`(10/08 06:36:16), 이후 `shadow_events` 변경 없음(id 7이 마지막) |
 | rowid 73 | expired · 06:50:05.386756 · system:timeout — 10/08 보고값과 같음 |
-| 카오스 크론 | 6시간마다 계속 동작(`CHAOS_ENABLED=true`) — 정지 예정(§10) |
+| 카오스 크론 | 6시간마다 계속 동작(`CHAOS_ENABLED=true`) — 정지 예정(§10). **(10/27 갱신)** `CHAOS_ENABLED=false`, VM 정지(2026-10-26 18:12:59 UTC) |
 | journal | 477.5M / `SystemMaxUse=500M` — 한도에서 순환 중(약 25MB/일, 약 18일 보관). agent 로그는 10/08 16:54 이후만 남음 |
 | 서킷브레이커 | 127행, CLOSED 아닌 행 0, 연속 실패 최대 1 |
 
@@ -72,6 +72,7 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 | N3(journal 24시간 증가량) | **완료(기록만, 미적용)** | §2 "N3 측정" — 사후 24h 약 25~45MB, 보관 약 11~20일 |
 | rsyslog 1시간·24시간 효과 | **완료 — 효과 있음(닫음)** | §2 "rsyslog 결과" — 사후 suspended 0 |
 | 완화책 A(B19: Process_Crash auto → 승인) | **적용** · 컷오프 2026-10-08 06:36:16.970 UTC | `autonomy_state` 재조회 approve_then_execute, `shadow_events` id 7 demoted |
+| **VM 정지 (10/27 갱신)** | **정지** — TERMINATED 확인 2026-10-26 18:12:59 UTC(KST 10/27 03:12:59) | `CHAOS_ENABLED=false`(`.env.bak-20261027` 보존), 서비스 18:11:38 stop·enabled 유지, 추가 백업 3개. 상세 §10 |
 | 통제 주입(10/08 D1 검증) | **완료 — 예상대로** | 아래 "통제 주입(10/08 D1 검증)" |
 
 **D1 배포(2026-10-07 18:10:30 UTC)** — §0 표는 2026-10-08 06:55 UTC 기준으로 다시 썼다(배포 전 판은 git 이력 `8d40d9b5` 이전).
@@ -447,13 +448,25 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 | B16 | VM 저장소 소유권 정리 |
 | 운영 미검증 경로 | §4-1 — 실제 발생 시 기록 |
 | 신규: metrics 보존 | `RETENTION_DAYS = 30` — 연구 기록용 보존 기간 또는 주기적 내보내기 검토 |
-| GCP | 체험 크레딧 만료 2026-11-25. 정지 중에도 디스크(30GB pd-balanced) 비용은 발생 |
+| GCP | 체험 크레딧 만료 2026-11-25. 정지 중에도 디스크(30GB pd-balanced) 비용은 발생. **11/25 전에 유료 전환 또는 재가동 여부 결정 필요** |
 
 ### VM 정지 (예정)
 
 정지 직전 확인(읽기 전용): pending 승인 0 · 직전 카오스 정각(00/06/12/18 UTC)에서 10분 이상 지남 · 로컬 백업
 `FILES_size_sha256.tsv` 재검증 일치. 순서: (1) `.env` 백업 후 `CHAOS_ENABLED=false` → (2) `systemctl stop
 self-healing-agent` → (3) `gcloud compute instances stop`. 인스턴스 삭제는 하지 않는다. 정지 시각과 결과는 이 절에 추가한다.
+
+**정지 결과 (10/27 갱신)** — 원본: 로컬 `~/ops-records/20261027/stop_*_out.txt`
+- 정지 직전 확인(18:11:14 UTC): pending 0 · 최근 10분 승인 대기 0 · 직전 카오스 18:00:17(cpu)에서 11분 경과 · 로컬 백업
+  sha256 재검증 일치(`vm-backup` 15개, `exports` 3개). 마지막 metrics id 1965(18:00:17 CPU_Overload).
+- (1) `.env` → `.env.bak-20261027`(600) 복사 후 **`CHAOS_ENABLED=false`** — 나머지 줄 동일 확인.
+- (2) `systemctl stop self-healing-agent` 18:11:38 → inactive, **enabled 유지**(부팅 시 자동 시작), 정상 종료 로그·Traceback 0,
+  pending 0. 종료 직전 ETL 스케줄러 자동 동기화(308건 → ChromaDB) 로그 1줄 — 백업(17:2x) 이후 ChromaDB 갱신 가능성 있음.
+- (3) `gcloud compute instances stop` 18:11:54 → **TERMINATED 확인 2026-10-26 18:12:59 UTC (KST 10/27 03:12:59)**.
+- 추가 백업 3개(`vm-backup/`에 추가, `FILES_size_sha256.tsv`에 줄 추가): `data/target_app.log`(실행 중 파일이라 사본 크기만큼
+  앞부분으로 원본 대조), `var-log/self-healing-agent-journal-20261005.txt`, `var-backups/90-google.conf.bak-20261007` —
+  VM 원본·로컬 사본 sha256 일치.
+- **결정 필요: 2026-11-25 GCP 체험 크레딧 만료 전에 유료 전환 또는 재가동 여부를 정한다.** 정지 중에도 디스크 비용이 든다.
 
 ### 재가동 절차
 
@@ -462,6 +475,7 @@ self-healing-agent` → (3) `gcloud compute instances stop`. 인스턴스 삭제
    옛 IP를 가리키지만 8000은 외부 차단 상태이고 로그에는 가린 URL만 남으므로 웹 승인이 필요할 때만 고친다.
 3. 서비스 확인: `self-healing-agent`·docker·k3s·cron은 부팅 시 자동 시작(enabled), 컨테이너 3개는 `unless-stopped`.
    `systemctl is-active self-healing-agent`, `NRestarts`, `docker ps`, journal의 텔레그램 상태 줄·Traceback 수를 본다.
-4. 카오스 재개는 선택: 재개하려면 `.env.bak-<정지일>`의 `CHAOS_ENABLED=true`로 되돌린다(크론은 남아 있고 `.env`만 읽음).
+4. 카오스 재개는 선택: 재개하려면 `.env`의 `CHAOS_ENABLED=false`를 `true`로 되돌린다(정지 전 원본은 `.env.bak-20261027`,
+   크론은 남아 있고 `.env`만 읽음).
    재개하지 않으면 그대로 둔다.
 5. 자율성 레벨(Process_Crash approve_then_execute 등)은 DB에 있어 재가동 뒤에도 유지된다.
