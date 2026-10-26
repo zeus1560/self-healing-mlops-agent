@@ -1,10 +1,64 @@
-# 인계 메모 (2026-10-07 기준, 2차 갱신)
+# 인계 메모 (2026-10-27 기준 — 운영 마무리, 10/27 갱신)
+
+> 이전 제목: "인계 메모 (2026-10-07 기준, 2차 갱신)". 아래 §0~§9는 10/08까지의 기록을 그대로 두고, 바뀐 값은
+> "(10/27 갱신)" 표시와 함께 덧붙였다. 현재 상태는 바로 아래 "10/27 현재 상태", 후속 과제와 VM 정지·재가동은 §10.
 
 L2 LLM 모드 전환(§6 B2)과 운영 검증 세션(2026-10-04~07)의 인계 메모다. 새 세션은 이 파일을 먼저 읽고
 아래 "처음 읽을 파일"을 확인한 뒤 "다음 할 일"부터 이어간다.
 
 VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로)는 이 저장소에 두지 않는다 — Claude
 로컬 메모(`project_gcp_deployment.md`, `project_llm_mode_rollout.md`)에 있다. 시각은 따로 적지 않으면 UTC.
+
+---
+
+## 10/27 현재 상태와 10/08~10/26 운영 요약 (10/27 갱신)
+
+확인 시각 2026-10-26 17:21 UTC(KST 10/27 02:21), 모두 읽기 전용. 원본: 로컬 `~/ops-records/20261027/`
+(`readonly_status_20261027T1721.txt`, `readonly_followup_20261027T1723.txt`).
+
+| 항목 | 상태 |
+|---|---|
+| VM HEAD | `6e58a0d7`(D1, 10/07 18:10) — origin/main `fe1ffe44`보다 문서 커밋만 뒤(코드 차이 0). pull하지 않기로 함 |
+| 서비스 | active, NRestarts 0, 10/07 18:10:33부터 계속 실행 |
+| pending 승인 / 10/08 원격 프로세스 | 0 / `/run/d1verify.pid` 없음·d1verify·`sleep 1008`·고아 `bash -s` 0 |
+| 완화책 A | 유지 — Process_Crash `approve_then_execute`(10/08 06:36:16), 이후 `shadow_events` 변경 없음(id 7이 마지막) |
+| rowid 73 | expired · 06:50:05.386756 · system:timeout — 10/08 보고값과 같음 |
+| 카오스 크론 | 6시간마다 계속 동작(`CHAOS_ENABLED=true`) — 정지 예정(§10) |
+| journal | 477.5M / `SystemMaxUse=500M` — 한도에서 순환 중(약 25MB/일, 약 18일 보관). agent 로그는 10/08 16:54 이후만 남음 |
+| 서킷브레이커 | 127행, CLOSED 아닌 행 0, 연속 실패 최대 1 |
+
+**운영 요약(10/08 06:50 ~ 10/26 17:21 UTC)** — 10/08 통제 주입 행(metrics 1889, 승인 rowid 73)은 제외.
+- 카오스 주입 73회(모두 OK), metrics 75건 = 카오스 73 + 실제 호스트 메모리 경보 2건(10/08 21:28 90.8%, 10/17 14:53
+  85.5%, Out_Of_Memory). 카테고리: Auth_Error 10, Disk_Full 9, DB_Connection 7, Out_Of_Memory 7, Network_Timeout 7,
+  Permission_Denied 6, L2(LLM_Inferred) 6, Path_Not_Found 5, DB_Deadlock 5, Configuration_Error 5, Process_Crash 4,
+  CPU_Overload 4.
+- **완화책 A 첫 사례**: 2026-10-14 18:00 UTC 승인 rowid 80 `restart_service(rsyslog)` → 응답 없음 → expired. Process_Crash
+  L1 4건 모두 승인 요청 → ApprovalTimeout(rsyslog 대상). process_crash 주입 나머지 2건은 L2가 `restart_service(target-app)`
+  승인 요청(10/23 18:00, 10/24 06:00 — 역시 expired).
+- **rsyslog 재시작 0회** — ActiveEnterTimestamp 10/08 06:00:02 그대로, NRestarts 0, journal의 rsyslog 시작 줄·agent
+  `[조치]` 재시작 줄 0. `suspended` 0.
+- **승인 요청 20건(rowid 74~93) 전부 expired**(approved 0·rejected 0). 대상 redis 7·postgres_pool 7·rsyslog 4·target-app 2.
+  → B12(시간 안 응답 없음)가 그대로 이어짐.
+- **토큰 가림**: journal 가림 줄 19, 원문 토큰 URL 0(journal 범위 밖인 rowid 74 제외), 승인 `reason` 20건 중 원문 토큰 0.
+- **auto 실행 16건, 모두 SUCCESS, target-app 대상 0건**: `CLEAR_MEMORY` 7(에이전트 내부 gc), Disk_Full
+  `journalctl --vacuum-size 1G` 9(호스트 journal — 사용량 477M라 사실상 무동작). B19의 "대상 불일치"가 auto 경로에 남아
+  있음을 보여 준다.
+- **L2 명령 4건 모두 실행 전 차단**(SecurityBlock): `kill -9 <PID>` 3(memory_leak), `pg_isready` 1(network_timeout).
+- Traceback 69줄 중 48줄은 텔레그램 폴링 일시 네트워크 오류(Bad Gateway·ReadError), 나머지는 분류하지 않음.
+
+**발견: metrics 30일 자동 삭제** — `src/maintenance.py`의 `RETENTION_DAYS = 30`으로 하루 1회 `metrics`와 CLOSED
+`circuit_breaker` 행 중 30일 지난 것을 지운다(서킷브레이커 188행 → 127행의 원인). 10/26 기준 VM `metrics`는 id 1838
+(09-26) 이후 127행뿐이다. 이 문서와 RESEARCH_SUMMARY가 인용한 행 중 9/26 이전 것은 VM에서 이미 지워졌고, 10/08
+근거 행(1886~1889)은 11/07 전후로 지워진다. agent journal도 10/08 16:54 이전분은 순환으로 사라졌다. 통계를 다시 낼 때는 아래 백업을 쓴다.
+
+**백업 (2026-10-27, 로컬 전용 — git에 넣지 않음, `decided_by`에 개인 식별값 포함)**
+- `~/ops-records/20261027/vm-backup/` — VM SQLite DB(`.backup` 사본, 무결성 ok), ChromaDB 디렉터리, VM `/root/ops-records/`,
+  `chaos_injector.log`, `realtime_system.log`, `agent_metrics.db.bak-20261005`. `.env`·키 파일 제외. 12개 파일, 크기·sha256은
+  `FILES_size_sha256.tsv`. VM 사본과 sha256 일치 확인.
+- `~/ops-records/20261027/exports/` — agent journal 전체(가림 유지), `metrics` 전체·승인 테이블 전체 CSV(토큰 앞 6자,
+  사람 `decided_by` 가림).
+- 포함하지 않은 VM 파일: `data/target_app.log`(162MB), `/var/log/self-healing-agent-journal-20261005.txt`,
+  `/var/backups/90-google.conf.bak-20261007`.
 
 ---
 
@@ -118,6 +172,7 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 | origin/main | 이 HANDOFF 커밋(`3edc2c83` 바로 뒤) | — |
 | **VM** | **`4505c043`** (2026-10-06 16:26 배포) | 경보 사유 대체(`538bf9b3`)·가림 규칙 보강(`69d92109`)까지 반영 |
 | **다음 배포 대상(코드)** | `f34d3da8` → `5486d6f7` → `3edc2c83` | 아래 §3 |
+| **VM (10/27 갱신)** | **`6e58a0d7`** (2026-10-07 18:10:30 D1 배포) | 위 세 커밋 반영 완료. origin/main `fe1ffe44`와 차이는 문서뿐 — pull하지 않음 |
 
 이번 세션(10/07) 커밋(오래된 순): `538bf9b3` 넘기기 경보 사유 대체 → `ef62ade0` §6 B14·B15 문서 →
 `69d92109` pii_masker 보강(봇 토큰·gsk_·Bearer·JWT·URL 계정) → `4505c043` B16 문서(직전 커밋 메시지의
@@ -131,6 +186,8 @@ VM 접속 정보(GCP 프로젝트·인스턴스·SSH 사용자·저장소 경로
 - 자율성 레벨: auto 6개(Configuration_Error, Disk_Full, Out_Of_Memory, Path_Not_Found, Permission_Denied,
   Process_Crash). 그 외(DB_Connection 포함)는 approve_then_execute.
 - 승인 테이블: approved 49 / expired 20 / rejected 2(10/06 주입 검증 2건 포함).
+  **(10/27 갱신)** approved 49 / expired 42 / rejected 2. 자율성 레벨: Process_Crash는 10/08 06:36부터
+  approve_then_execute(완화책 A) — auto는 나머지 5개.
 - journald `SystemMaxUse=500M`. ops-agent 라벨 제거 + 3개 서비스 mask(되돌리기는 §6 B13).
 - **rsyslog(N2, 10/06 16:27)**: `/etc/rsyslog.d/90-google.conf` 6번 줄 `daemon,kern.* /dev/console`
   주석 처리(이유는 파일 안 주석). 백업 `/var/backups/90-google.conf.bak-20261007`. 되돌리기: 백업 복원 후
@@ -238,6 +295,9 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 
 ## 3. 다음 배포 (2026-10-07 예정 — 단계마다 명령·예상 결과를 보여 주고 확인 후 실행)
 
+> **(10/27 갱신)** 아래 계획은 모두 끝났다 — D1 10/07 18:10:30(VM `6e58a0d7`), N3·R24 10/07 측정(§2). 남은 배포 계획
+> 없음. 아래 표는 이전 계획 기록으로 남긴다.
+
 | 순서 | 내용 | 예상 결과 |
 |---|---|---|
 | D1 | VM `4505c043` → origin/main 최신(root로 `git pull --ff-only`, 사전 확인: HEAD `4505c043`·추적 파일 변경 0) → `self-healing-agent` 재시작 | 텔레그램 상태 줄 정상, Traceback·ERROR 0, `api.telegram.org/bot` 0줄 |
@@ -282,7 +342,7 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 | B10 | LLM이 에러 로그 대신 호스트 ps에서 대상 선택(llama-server, MainThread 사례) |
 | B11 | 측정·운영 Groq 키 분리, 무료 tier 일일 한도(200k)는 운영 혼자서도 소진 가능 |
 | B12 | 승인 타임아웃 — 늦은 승인 반영 시 9월 이후 **약 82%**, 야간 영향 없음. 대응: 대기 시간 조정 / 늦은 승인 시 재확인 후 실행 |
-| B13 | VM 로그 소음 — ops-agent(비활성화), rsyslog `/dev/console`(N2로 수정, 24시간 효과 확인 대기) |
+| B13 | VM 로그 소음 — ops-agent(비활성화), rsyslog `/dev/console`(N2로 수정, 24시간 효과 확인 대기). **(10/27 갱신)** 1h·24h 효과 있음(10/07 판정), 10/08 이후 `suspended` 0 — 닫음 |
 | B14 | 넘기기 경보 사유 공란(83건 중 64건) — 대체 사유 코드(`538bf9b3`, 배포됨), 플레이북 근거 채우기 남음 |
 | B15 | 넘기기가 IMPOSSIBLE로 기록돼 통계 왜곡 — `ESCALATED` 분리 검토 |
 | B16 | VM 저장소 소유권 혼재 — git은 root로, `data/` 처리와 함께 별도 정리 |
@@ -341,6 +401,8 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 ## 8. 다음 할 일 (순서)
 
 1. 12:00 UTC 등 다음 카오스에서 Process_Crash가 승인 요청으로 가는지(완화책 A) 읽기 전용으로 확인 — 첫 사례 기록.
+   **(10/27 갱신) 완료** — 첫 사례 2026-10-14 18:00 UTC 승인 rowid 80 `restart_service(rsyslog)` → expired. 이후
+   Process_Crash L1 4건 모두 승인 요청, rsyslog 재시작 0회. 2~5는 §10 후속 과제로 넘김.
 2. B19 근본 대응 설계(§4-3) → 사용자 결정 → 코드·데이터 수정은 단계마다 확인 후.
 3. B20 서명 정규화 설계·테스트.
 4. 측정 전용 키가 준비되면 Groq 재측정(§4-2).
@@ -357,3 +419,49 @@ journal이 남아 있는 동안(약 8일) 언제 재도 같은 값이 나온다.
 5. 코드: `src/executor.py`(`_escalation_reason`, `_compose_explanation`, `_await_approval`, `_restart_service`),
    `src/approval_store.py`(`set_decision`, `_is_past`, `mark_expired`), `src/telegram_bot.py`
    (`send_approval_request`, `_handle_callback`), `src/utils/pii_masker.py`, `src/llm_engine.py`, `src/log_watcher.py`
+
+---
+
+## 10. 후속 과제와 VM 정지·재가동 (10/27 갱신)
+
+2026-10-27 마무리 방향: 기록 보존 → 문서 정리 → 카오스 중단과 VM 정지. VM pull(`fe1ffe44`)과 e2-micro 전환은
+하지 않는다. 아래 과제는 이번 범위에 넣지 않고 기록만 남긴다(상세는 §4·§5와 `docs/RESEARCH_SUMMARY.md` §6).
+
+### 후속 과제
+
+| 항목 | 남은 일 |
+|---|---|
+| B12 | 승인 타임아웃 — 10/08~10/26 승인 20건 전부 expired. 대기 시간 조정 / 늦은 승인 시 재확인 후 실행 |
+| B18 후속 | `0.0.0.0` → `127.0.0.1` 바인딩, `mlops_approval` 재빌드(옛 코드 — 웹 경로 만료 확인 없음), 보존 파일 토큰 확인 |
+| B19 | 근본 대응 — 플레이북 대상 수정 또는 auto 실행 전 대상 일치 확인(완화책 C). 그 뒤 완화책 A 재검토. auto 16건 중 target-app 대상 0건(Disk_Full·OOM 대상 불일치 포함) |
+| B20 | 서킷브레이커 서명 정규화(타임스탬프·PID·숫자 제거) |
+| B1 | prod DB PII·민감값 스캔(미실행) |
+| B3 | `decided_by` 개인 식별값·승인 테이블 보관 기간 |
+| B4 | 클라우드 모드 전송 전 마스킹 |
+| B5·B6·B10 | 로컬 프롬프트 placeholder, 로컬 모드 L2 기본 끄기 검토, LLM이 호스트 ps에서 대상 선택 |
+| B7·B8 | systemctl 서비스 허용 목록(서버별), "too many open files" 실제 조치 |
+| B9 | 사람 승인 없이 L1에 쌓이는 경로(참고) |
+| B11 | 측정·운영 Groq 키 분리(Groq 재측정 §4-2 포함) |
+| B14 | 넘기기 경보의 플레이북 근거 채우기 |
+| B15·B17 | `ESCALATED` 분리(통제 주입 행 제외 규칙 포함), 승인 전 실제 동작 확정·표시 |
+| B16 | VM 저장소 소유권 정리 |
+| 운영 미검증 경로 | §4-1 — 실제 발생 시 기록 |
+| 신규: metrics 보존 | `RETENTION_DAYS = 30` — 연구 기록용 보존 기간 또는 주기적 내보내기 검토 |
+| GCP | 체험 크레딧 만료 2026-11-25. 정지 중에도 디스크(30GB pd-balanced) 비용은 발생 |
+
+### VM 정지 (예정)
+
+정지 직전 확인(읽기 전용): pending 승인 0 · 직전 카오스 정각(00/06/12/18 UTC)에서 10분 이상 지남 · 로컬 백업
+`FILES_size_sha256.tsv` 재검증 일치. 순서: (1) `.env` 백업 후 `CHAOS_ENABLED=false` → (2) `systemctl stop
+self-healing-agent` → (3) `gcloud compute instances stop`. 인스턴스 삭제는 하지 않는다. 정지 시각과 결과는 이 절에 추가한다.
+
+### 재가동 절차
+
+1. `gcloud compute instances start self-healing-agent --zone us-central1-c` → 상태 RUNNING.
+2. 외부 IP는 고정이 아니라 바뀐다(정적 주소 없음). `gcloud compute ssh`는 그대로 동작. `.env`의 `APPROVAL_BASE_URL`은
+   옛 IP를 가리키지만 8000은 외부 차단 상태이고 로그에는 가린 URL만 남으므로 웹 승인이 필요할 때만 고친다.
+3. 서비스 확인: `self-healing-agent`·docker·k3s·cron은 부팅 시 자동 시작(enabled), 컨테이너 3개는 `unless-stopped`.
+   `systemctl is-active self-healing-agent`, `NRestarts`, `docker ps`, journal의 텔레그램 상태 줄·Traceback 수를 본다.
+4. 카오스 재개는 선택: 재개하려면 `.env.bak-<정지일>`의 `CHAOS_ENABLED=true`로 되돌린다(크론은 남아 있고 `.env`만 읽음).
+   재개하지 않으면 그대로 둔다.
+5. 자율성 레벨(Process_Crash approve_then_execute 등)은 DB에 있어 재가동 뒤에도 유지된다.
